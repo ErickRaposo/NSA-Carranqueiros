@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildExplainMusicPt,
+  computeAudioBandsFromBins,
   deriveMusicalParameters,
   getTargetBounds,
   sampleSoundscapeStats,
@@ -61,5 +62,23 @@ describe('NASA Soundscape 1:1 Engine', () => {
     expect(explanation).toContain('Ritmo');
     expect(explanation).toContain('Baixo');
     expect(explanation).toContain('Efeitos');
+  });
+
+  it('computes normalized audio-reactive RMS and frequency bands from FFT bins', () => {
+    const silent = computeAudioBandsFromBins(new Uint8Array(64));
+    expect(silent.rms).toBe(0);
+    expect(silent.bars).toEqual([0, 0, 0, 0, 0]);
+
+    const energetic = new Uint8Array(64);
+    energetic.fill(200, 0, 4); // sub-bass
+    energetic.fill(140, 4, 14); // low-mid
+    energetic.fill(90, 14, 36); // high
+
+    const bands = computeAudioBandsFromBins(energetic);
+    expect(bands.subBass).toBeCloseTo(200 / 255, 2);
+    expect(bands.lowMid).toBeCloseTo(140 / 255, 2);
+    expect(bands.highFreq).toBeCloseTo(90 / 255, 2);
+    expect(bands.rms).toBeGreaterThan(0.5);
+    expect(bands.bars).toHaveLength(5);
   });
 });

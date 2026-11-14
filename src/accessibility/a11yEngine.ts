@@ -257,3 +257,119 @@ export function playSonificationTone(intensity01: number): void {
     // ignore audio restrictions
   }
 }
+
+/**
+ * Plays a recognizable, musical Web Audio motif for any of the 5 NASA frequencies
+ * ("Ouvir Amostra" in Frequency Discovery Cards & Dormant Stem Previews).
+ * Distinct from real collective unlock — pure sensory preview.
+ */
+export function playStemPreviewSample(
+  stemId: 'melody' | 'harmony' | 'rhythm' | 'bass' | 'fx'
+): void {
+  if (typeof window === 'undefined') return;
+  const AudioCtor =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioCtor) return;
+
+  try {
+    if (!audioCtx) audioCtx = new AudioCtor();
+    if (audioCtx.state === 'suspended') {
+      void audioCtx.resume().catch(() => {});
+    }
+    const ctx = audioCtx;
+    const now = ctx.currentTime;
+
+    if (stemId === 'melody') {
+      // Crystalline pentatonic lightning chimes (D5 -> F#5 -> A5)
+      const notes = [587.33, 739.99, 880.0];
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + i * 0.11);
+        g.gain.setValueAtTime(0.001, now + i * 0.11);
+        g.gain.exponentialRampToValueAtTime(0.085, now + i * 0.11 + 0.018);
+        g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.11 + 0.34);
+        osc.connect(g);
+        g.connect(ctx.destination);
+        osc.start(now + i * 0.11);
+        osc.stop(now + i * 0.11 + 0.36);
+      });
+    } else if (stemId === 'harmony') {
+      // Warm atmospheric chord pad (D4 + F#4 + A4 + C#5)
+      const chord = [293.66, 369.99, 440.0, 554.37];
+      chord.forEach((freq) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
+        g.gain.setValueAtTime(0.001, now);
+        g.gain.exponentialRampToValueAtTime(0.042, now + 0.09);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+        osc.connect(g);
+        g.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.68);
+      });
+    } else if (stemId === 'rhythm') {
+      // Thermal double heartbeat pulse
+      [0, 0.22].forEach((offset, idx) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(idx === 0 ? 148 : 118, now + offset);
+        osc.frequency.exponentialRampToValueAtTime(52, now + offset + 0.14);
+        g.gain.setValueAtTime(0.001, now + offset);
+        g.gain.exponentialRampToValueAtTime(0.12, now + offset + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.16);
+        osc.connect(g);
+        g.connect(ctx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.18);
+      });
+    } else if (stemId === 'bass') {
+      // Deep urban sub-harmonic groove (D2 -> A2)
+      [73.42, 110.0].forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const filter = ctx.createBiquadFilter();
+        const g = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.24);
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(280, now + idx * 0.24);
+        g.gain.setValueAtTime(0.001, now + idx * 0.24);
+        g.gain.exponentialRampToValueAtTime(0.085, now + idx * 0.24 + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.24 + 0.26);
+        osc.connect(filter);
+        filter.connect(g);
+        g.connect(ctx.destination);
+        osc.start(now + idx * 0.24);
+        osc.stop(now + idx * 0.24 + 0.28);
+      });
+    } else {
+      // Planetary wind shimmer sweep
+      const osc = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'sine';
+      osc2.type = 'triangle';
+      osc.frequency.setValueAtTime(392.0, now);
+      osc.frequency.exponentialRampToValueAtTime(587.33, now + 0.58);
+      osc2.frequency.setValueAtTime(587.33, now);
+      osc2.frequency.exponentialRampToValueAtTime(783.99, now + 0.58);
+      g.gain.setValueAtTime(0.001, now);
+      g.gain.exponentialRampToValueAtTime(0.05, now + 0.14);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.62);
+      osc.connect(g);
+      osc2.connect(g);
+      g.connect(ctx.destination);
+      osc.start(now);
+      osc2.start(now);
+      osc.stop(now + 0.64);
+      osc2.stop(now + 0.64);
+    }
+  } catch {
+    // ignore audio restrictions
+  }
+}

@@ -556,9 +556,56 @@ export function buildExplainMusicPt(
   );
 }
 
+export interface AudioReactiveFrame {
+  rms: number;
+  subBass: number;
+  lowMid: number;
+  highFreq: number;
+  bars: [number, number, number, number, number];
+}
+
+export const EMPTY_AUDIO_FRAME: AudioReactiveFrame = {
+  rms: 0,
+  subBass: 0,
+  lowMid: 0,
+  highFreq: 0,
+  bars: [0, 0, 0, 0, 0],
+};
+
+function avgBins(bins: ArrayLike<number>, start: number, end: number): number {
+  const s = Math.max(0, start);
+  const e = Math.min(bins.length, end);
+  if (e <= s) return 0;
+  let sum = 0;
+  for (let i = s; i < e; i++) {
+    sum += bins[i];
+  }
+  return Math.min(1, sum / ((e - s) * 255));
+}
+
+export function computeAudioBandsFromBins(bins: ArrayLike<number>): AudioReactiveFrame {
+  if (!bins || bins.length === 0) return EMPTY_AUDIO_FRAME;
+  const subBass = avgBins(bins, 0, 4);
+  const lowMid = avgBins(bins, 4, 14);
+  const highFreq = avgBins(bins, 14, 36);
+  const b0 = avgBins(bins, 0, 3);
+  const b1 = avgBins(bins, 3, 7);
+  const b2 = avgBins(bins, 7, 13);
+  const b3 = avgBins(bins, 13, 22);
+  const b4 = avgBins(bins, 22, 36);
+  const rms = Math.min(1, subBass * 0.42 + lowMid * 0.38 + highFreq * 0.25);
+  return {
+    rms,
+    subBass,
+    lowMid,
+    highFreq,
+    bars: [b0, b1, b2, b3, b4],
+  };
+}
+
 /**
  * Real-time Web Audio 5-Stem Ambient/Downtempo Synthesizer with independent Stem buses,
- * stereo panning, Chorus/Ping-Pong Delay/Reverb FX bus, and step scheduler.
+ * stereo panning, Chorus/Ping-Pong Delay/Reverb FX bus, AnalyserNode, and step scheduler.
  */
 export class SoundscapeSynthPlayer {
   private ctx: AudioContext | null = null;
@@ -566,6 +613,10 @@ export class SoundscapeSynthPlayer {
   private fxDelayL: DelayNode | null = null;
   private fxDelayR: DelayNode | null = null;
   private fxWetGain: GainNode | null = null;
+  private masterGain: GainNode | null = null;
+  private analyser: AnalyserNode | null = null;
+  private freqData: Uint8Array<ArrayBuffer> | null = null;
+  private masterVolume = 0.72;
   private padOscs: OscillatorNode[] = [];
   private padGain: GainNode | null = null;
   private noiseBuffer: AudioBuffer | null = null;
@@ -585,10 +636,20 @@ export class SoundscapeSynthPlayer {
       comp.threshold.value = -16;
       comp.ratio.value = 3.5;
 
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 128;
+      analyser.smoothingTimeConstant = 0.78;
+
       const master = ctx.createGain();
-      master.gain.value = 0.72;
-      comp.connect(master);
+      master.gain.value = this.masterVolume;
+
+      comp.connect(analyser);
+      analyser.connect(master);
       master.connect(ctx.destination);
+
+      this.analyser = analyser;
+      this.masterGain = master;
+      this.freqData = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
 
       const stemIds: StemId[] = ['melody', 'harmony', 'rhythm', 'bass', 'fx'];
       for (const id of stemIds) {
@@ -858,6 +919,26 @@ export class SoundscapeSynthPlayer {
     this.padGain = null;
   }
 
+  public setMasterVolume(vol01: number): void {
+    const clamped = Math.max(0, Math.min(1, vol01));
+    this.masterVolume = clamped;
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setTargetAtTime(clamped, this.ctx.currentTime, 0.03);
+    }
+  }
+
+  public getMasterVolume(): number {
+    return this.masterVolume;
+  }
+
+  public getAudioReactiveBands(): AudioReactiveFrame {
+    if (!this.analyser || !this.freqData || !this.ctx || this.ctx.state !== 'running') {
+      return EMPTY_AUDIO_FRAME;
+    }
+    this.analyser.getByteFrequencyData(this.freqData);
+    return computeAudioBandsFromBins(this.freqData);
+  }
+
   public stop(): void {
     this.stopPad();
   }
@@ -868,5 +949,8 @@ export class SoundscapeSynthPlayer {
       void this.ctx.close().catch(() => {});
       this.ctx = null;
     }
+    this.masterGain = null;
+    this.analyser = null;
+    this.freqData = null;
   }
 }

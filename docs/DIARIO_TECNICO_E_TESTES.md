@@ -237,6 +237,68 @@ Executado em Google Chrome real (`1440×900`, WebGL ativo via ANGLE/SwiftShader)
    - **Build de produção (`npm run build`):** `tsc -b && vite build` concluído sem erros (`1617` módulos; `dist/assets/index-B9gYzSxR.js` `4,460.74 kB`, `dist/assets/index-BVSgIr0_.css` `47.87 kB`).
    - **Chrome E2E Headless (`verify_jukebox_e2e.mjs`):** `STEP_1_LOGIN_JURY_BTN` a `STEP_4_RADIUS_MODE` aprovados com zero sobreposições (`overlapTopAndCard: false`) e `RUNTIME_EXCEPTIONS: []`, validados visualmente em `shot_jukebox_4_radius_mode.png`.
 
+### 4.6 Transformação Planetária Sensorial, Gamificação & Audio-Reatividade (Etapas 1–5)
+
+1. **Portal de Entrada Cinematográfico & HUD Full-Bleed (`src/components/EntryPortal.tsx`, `src/App.tsx`, `src/components/HudOverlay.tsx`):**
+   - Criado `EntryPortal.tsx` com campo estrelado, anéis orbitais, mascote `Mineiro3D`, *"O planeta está esperando para ser ouvido."*, CTA **"EXPLORAR A TERRA"** (entrada imediata como Explorador sem barreira de cadastro), prévia sonora opcional em acorde `F#m9` (`Ouvir prévia sonora`), acesso **Modo Júri** e entrada de conta opcional (**"Entrar / Conta"**).
+   - O globo 3D/2D (`EarthCanvas.tsx`) passou a ocupar `100vw × 100vh` em tela cheia por trás de uma barra lateral rápida colorida (`launchpad-floating-dock` de `68 px` com as 5 frequências e expansor *Camadas Vivas*), pílula de progresso coletivo + XP no topo e `Planeta Vivo` retrátil automaticamente quando um dossiê regional está aberto.
+
+2. **Gamificação Orgânica Antiespam & 5 Missões NASA (`src/game/progressionStore.ts`, `src/components/AstronautCopilot.tsx`):**
+   - Implementada progressão com XP concedido **uma única vez por região distinta** (`exploredRegionKeys`, bloqueando farm por cliques repetidos), patentes (*Ouvinte Orbital*, *Cartógrafo Sonoro*, *Maestro Atmosférico*, *Guardião da Sinfonia*), conquistas e 5 missões baseadas em limiares reais da NASA (*Caçador de Raios*, *Mestre dos Ventos*, *Pulso Térmico*, *Ecos Invisíveis* e *Guardião Planetário*).
+   - Regra coletiva preservada integralmente: 1 stem por conta por região e 5 vozes para sinfonia completa.
+
+3. **Motor Áudio-Reativo WebGL & Acessibilidade Sensorial (`src/audio/soundscapeEngine.ts`, `src/components/EarthCanvas.tsx`, `src/components/PlayerBar.tsx`):**
+   - Inserido `AnalyserNode` e controle de volume master (`setMasterVolume`, `getAudioReactiveBands`, `computeAudioBandsFromBins`) conduzindo o sistema de partículas atmosféricas GPU (`THREE.Points` com as 5 cores das camadas NASA), aura orbital e barras de espectro vivas no `PlayerBar`.
+   - Adicionados controle deslizante de volume, legenda sonora visual em tempo real (`Legenda sonora`), botão **"Pausar Movimento"** (respeitando também `prefers-reduced-motion`), alvos táteis `>= 44×44 px`, e suporte a `@media (prefers-contrast: more)` e `prefers-color-scheme`.
+
+4. **Testes Unitários, Build & E2E Finais:**
+   - **Vitest (`npm test`):** **9 arquivos de teste, 31/31 testes aprovados** (incluindo `progressionStore.test.ts` e banda FFT em `soundscapeEngine.test.ts`).
+   - **Build de produção (`npm run build`):** `tsc -b && vite build` concluído sem erros (`1620` módulos; `dist/assets/index-Fw_ydiDk.js` `4,490.58 kB`, `dist/assets/index-dNEAgOTx.css` `72.19 kB`).
+   - **Chrome E2E Headless (`verify_jukebox_e2e.mjs` e `verify_mobile_e2e.mjs`):** Portal de entrada (`shot_e2e_1_portal.png`), HUD *full-bleed* + Missões (`shot_e2e_2_fullbleed_missions.png`), Brasil `5/5` ao vivo + `Legenda sonora` + Volume (`shot_e2e_3_brazil_playing.png`), Raio + Alto Contraste `C` + Pausar Movimento (`shot_e2e_4_high_contrast_radius.png`) e Mobile `390×844` validados sem exceções de runtime (`RUNTIME_EXCEPTIONS: []`).
+
+### 4.7 Evolução do Gameplay, Frequências Adormecidas & Redesign Terra Noturna Bioluminescente
+
+1. **Reestruturação Regional, Frequências Adormecidas & Regra Real/Demo (`src/components/CountryDetailCard.tsx`, `src/components/JukeboxPanel.tsx`, `src/community/unlockStore.ts`, `src/game/progressionStore.ts`):**
+   - Evoluído o painel regional em quatro blocos claros (*Identidade regional*, *Progresso da sinfonia*, *Frequências e descobertas*, *Próxima missão*) e gaveta retrátil secundária *Informações científicas* (`data-testid="scientific-info-details"`).
+   - Separadas explicitamente a contagem real coletiva (`realUnlockedCount` / `realUnlockedStems`) da prévia demonstrativa do Modo Júri (`juryUnlockAll`) e das demonstrações individuais (*Prévia* identificada como demonstração audiovisual sem concessão de XP/desbloqueio).
+   - Adicionados histórico local de contribuições (`contributionHistory` com deduplicação antiespam por `regionKey + stemId`) e contrato de sincronização (`ProgressionSyncAdapter`, `localProgressionAdapter`, `PROGRESSION_SYNC_NOTICE_PT`).
+
+2. **Terra Noturna Bioluminescente & Enquadramento Orbital (`src/components/EarthCanvas.tsx`, `src/datasets/nasaDatasets.ts`):**
+   - Shader `EARTH_FRAGMENT_SHADER` atualizado com *grading* noturno (`uHighContrast < 0.5`) que transforma continentes cinzentos desaturados dos mapas-base SVS em superfície índigo-obsidiana preservando integralmente plumas cromáticas da NASA, bordas ciano suaves (`#7dd3fc`) e atmosfera Fresnel.
+   - Distância orbital inicial ajustada para `2.98` (`navRef` e `QUICK_PRESETS[0]`) mantendo ambos os polos visíveis no enquadramento inicial.
+
+3. **Instrumento Espacial Flutuante, Cápsula Musical & Modo Zen (`src/components/HudOverlay.tsx`, `src/components/AstronautCopilot.tsx`, `src/components/PlayerBar.tsx`, `src/index.css`):**
+   - `Planeta Vivo` passa a iniciar recolhido como pílula compacta no canto superior direito (`compactByDefault={true}`), mantendo controles de acessibilidade visíveis inclusive em telas `<= 900px`, corrigindo a grade de 3 abas (`planet-tabs-three`), removendo o quadrado cortado `44×44` e enviando `liveAnnouncement` exclusivamente para `sr-only`.
+   - Top bar simplificada (ocultando `Sair` contraditório para sessão visitante, mantendo `Entrar` e adicionando **Modo Zen (`Z`)** via `zen-mode-btn` / `zen-exit-btn`); dock esquerdo reduzido às 5 áreas do Launchpad com micro-pips coloridos em *Freq.*.
+   - `PlayerBar` condensado em cápsula flutuante centralizada com espectro de 5 vozes em linha única e popover *Ajustes de reprodução*; `impeccable detect --json src` zerado (`[]`) e animações de barra convertidas para `transform: scaleX(...)` GPU-composited.
+
+4. **Testes & Validação Final Executada:**
+   - **Vitest (`npm test`):** **9 arquivos de teste, 31/31 testes aprovados**.
+   - **Build de produção (`npm run build`):** `tsc -b && vite build` sem erros (`1620` módulos; `dist/assets/index-BkY2XyDD.css` `83.43 kB`, `dist/assets/index-DEkbSd9d.js` `4,513.78 kB`).
+   - **`impeccable detect --json src`:** `[]` (0 alertas).
+   - **Chrome E2E Headless (`verify_final_e2e.mjs`):** verificados `PLANET_VIVO` (`sameRow: true`, `hasLogoutForGuest: false`), `CARD_BEFORE`, `AFTER_CONTRIB` (`Progresso da Sinfonia: 2/5 vozes reais`), `JURY_DEMO`, `COLECAO`, `FRANCE_5OF5`, Modo Zen e capturas visuais desktop `1440×900` e mobile `390×844`.
+
+### 4.8 Execução das 4 Entregas da Auditoria de UX, Game Design & Exploração Planetária
+
+1. **Entrega 1 — Planeta Vivo e Descoberta Imediata (`src/datasets/nasaDatasets.ts`, `src/components/EarthCanvas.tsx`, `src/components/EarthExplorerView.tsx`, `src/components/Mineiro3D.tsx`):**
+   - Mix atmosférico inicial expandido em `DEFAULT_LAYER_STACK` (`svs5148` Ventos + `svs5153` CO + `svs5011` Raios ISS) e reprodução automática no carregamento inicial (`isPlaying = true`, respeitando `prefers-reduced-motion` e `motionPaused`).
+   - Adicionados **Faróis Coletivos 3D** projetados no hemisfério visível do globo (`earth-fx-overlay`) com anel segmentado nas 5 cores musicais e crachá coroado (`1/5 vozes` até `5/5 ★ Sinfonia`), além de onda radial celebratória (`unlockPulseNonce`) ao despertar uma nova voz.
+   - Reconectados o sensor orbital de cursor em tempo real (**Olho Orbital**, `hoverInfo` + `hoverReadings` + `approxAltKm`) e o botão **Guia** (`onReopenTour`).
+
+2. **Entrega 2 — Arquitetura de Navegação Unificada & Companheiro `Mineiro3D` (`src/components/AstronautCopilot.tsx`, `src/components/HudOverlay.tsx`):**
+   - Eliminada a duplicação entre esquerda e direita: o Launchpad esquerdo concentra a jornada pessoal do explorador em 4 áreas não sobrepostas (*Explorar*, *Frequências*, *Missões*, *Coleção*), enquanto a direita permanece dedicada ao **Planeta Vivo** (comunidade global, termômetro `unlockedVoicesCount/totalVoicesTarget`, Chamado Coletivo em destaque e lista de regiões).
+   - Restaurado o avatar WebGL `Mineiro3D` com preset nativo `size="avatar"` (`62×62 px`, sem recorte CSS) no `Planeta Vivo`, com recolhimento contextual automático ao abrir um país (`compactByDefault={Boolean(soundscapeTarget)}`) e em viewports mobile (`<= 860px`), preservando os 4 controles globais de acessibilidade sempre visíveis.
+
+3. **Entrega 3 — Frequências como Descobertas Sensoriais & Player 5-Vozes Interativo (`src/components/HudOverlay.tsx`, `src/components/PlayerBar.tsx`, `src/accessibility/a11yEngine.ts`):**
+   - Adicionado `playStemPreviewSample(stemId)` com 5 motivos musicais Web Audio distintos (arpejo pentatônico, acorde atmosférico, pulso duplo térmico, sub-grave filtrado e brisa espacial).
+   - Cartões de *Frequências* reestruturados como descobertas sensoriais com história do fenômeno, botão **Amostra**, contagem comunitária real, `colorbarUrl` oficial visível quando ativa e controles técnicos recolhidos em `<details>` (*Ajustes de Compositor & SVS*).
+   - Convertidos os 5 indicadores `.spectrum-pill` do `PlayerBar` em `<button>` interativos acessíveis (`aria-pressed`, alternando *mute* de instrumento na região ou visibilidade da camada no globo livre).
+
+4. **Entrega 4 — Experiência Regional Cinematográfica, Missões Acionáveis & Fluxo Contínuo (`src/components/JukeboxPanel.tsx`, `src/components/EarthCanvas.tsx`, `src/index.css`):**
+   - Ajustado o enquadramento orbital ao selecionar países (`viewOffsetX = 0.115`, distância `idealDistance * 1.12`) preservando os fenômenos atmosféricos ao redor.
+   - Adicionados botões de teleporte direto (*Investigar em ...*) nos cartões de *Missões*, botão de continuidade (*Despertar / Viajar para próxima região incompleta*) após contribuir na região atual, e realocação discreta dos controles de apresentação (*Prévia 5/5 (Júri)* e *+1 Coletivo*) para o rodapé secundário `.jury-tools-strip`.
+   - Validado integralmente com `npm test` (`9/9` arquivos, `31/31` testes), `npm run build` (exit 0), `impeccable detect --json src` (`[]`) e E2E visual em Chrome headless (`e2e_1_living_globe.png` a `e2e_5_mobile_390x844.png`).
+
 ---
 
 ## 5. Limitações Conhecidas e Próximos Passos Possíveis

@@ -33,10 +33,12 @@ import {
   buildCountryRegionKey,
   buildRadiusRegionKey,
   contributeRegionStem,
+  getGlobalEcosystemSummary,
   getRegionUnlockSummary,
   localUnlockAdapter,
 } from '../community/unlockStore';
 import {
+  EMPTY_AUDIO_FRAME,
   SoundscapeRadiusTarget,
   SoundscapeSynthPlayer,
   SoundscapeTarget,
@@ -46,11 +48,21 @@ import {
   getTargetBounds,
   sampleSoundscapeStats,
 } from '../audio/soundscapeEngine';
+import {
+  DiscoveryEvent,
+  ProgressionState,
+  loadProgressionState,
+  recordCollectiveContribution,
+  recordRegionDiscovery,
+  saveProgressionState,
+} from '../game/progressionStore';
 
 interface EarthExplorerViewProps {
   userName: string;
   userId?: string;
   isJuryQuickEntry?: boolean;
+  isGuestSession?: boolean;
+  onOpenAuth?: () => void;
   highContrast: boolean;
   onToggleHighContrast: () => void;
   fontScale: number;
@@ -63,10 +75,13 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
   userName,
   userId = userName.toLowerCase(),
   isJuryQuickEntry = false,
+  isGuestSession = false,
+  onOpenAuth,
   highContrast,
   onToggleHighContrast,
   fontScale,
   onCycleFontScale,
+  onReopenTour,
   onLogout,
 }) => {
   const { countries, allRings } = useMemo(() => loadWorldCountries(), []);
@@ -94,6 +109,10 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
   const [unlockState, setUnlockState] = useState<CommunityUnlockState>(() =>
     localUnlockAdapter.load(countries)
   );
+  const [progression, setProgression] = useState<ProgressionState>(() =>
+    loadProgressionState(userId)
+  );
+  const [discoveryToast, setDiscoveryToast] = useState<DiscoveryEvent | null>(null);
   const [unlockFeedback, setUnlockFeedback] = useState<string | null>(null);
   const [jukeboxPlaying, setJukeboxPlaying] = useState(false);
   const [stemUserMuted, setStemUserMuted] = useState<Record<StemId, boolean>>({
@@ -110,13 +129,19 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
 
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [sonifyEnabled, setSonifyEnabled] = useState(false);
+  const [masterVolume, setMasterVolume] = useState(0.72);
+  const [motionPaused, setMotionPaused] = useState(() =>
+    typeof window !== 'undefined' &&
+    Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+  );
   const [liveAnnouncement, setLiveAnnouncement] = useState(
     'Explorador carregado. Use Tab para navegar ou setas para mover o globo.'
   );
 
   const [selectedCountry, setSelectedCountry] = useState<CountryEntry | null>(null);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
-  const [cameraDistance, setCameraDistance] = useState(2.55);
+  const [cameraDistance, setCameraDistance] = useState(2.98);
+  const [unlockPulseNonce, setUnlockPulseNonce] = useState(0);
   const cameraCenterRef = useRef({ lon: -35, lat: -5 });
 
   const [flyTarget, setFlyTarget] = useState<CameraViewTarget | null>(null);
@@ -128,13 +153,19 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
   } | null>(null);
   const nonceRef = useRef(1);
 
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(() =>
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      ? false
+      : true
+  );
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(NASA_DATASETS.svs5148.durationHintSeconds);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isLoop, setIsLoop] = useState(true);
 
   const [sampleTick, setSampleTick] = useState(0);
+  const approxAltKm = Math.max(380, Math.round((cameraDistance - 1) * 6371));
 
   const enabledDatasetIds = useMemo(
     () => layers.filter((l) => l.enabled).map((l) => l.id),
@@ -163,6 +194,20 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
   useEffect(() => {
     localUnlockAdapter.save(unlockState);
   }, [unlockState]);
+
+  useEffect(() => {
+    saveProgressionState(userId, progression);
+  }, [progression, userId]);
+
+  useEffect(() => {
+    if (!discoveryToast) return;
+    const timer = window.setTimeout(() => setDiscoveryToast(null), 4600);
+    return () => window.clearTimeout(timer);
+  }, [discoveryToast]);
+
+  useEffect(() => {
+    synthRef.current?.setMasterVolume(masterVolume);
+  }, [masterVolume]);
 
   const announce = useCallback(
     (msg: string, forceSpeak = false) => {
@@ -218,6 +263,23 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
       return next;
     });
   }, []);
+
+  const handleMixAllLayers = useCallback(() => {
+    setLayers((prev) => {
+      const allActive = prev.every((l) => l.enabled);
+      if (allActive) {
+        return DEFAULT_LAYER_STACK.map((l) => ({ ...l }));
+      }
+      return [
+        { id: 'svs5148', enabled: true, opacity: 0.85, blendMode: 'normal' },
+        { id: 'svs5147', enabled: true, opacity: 0.55, blendMode: 'overlay' },
+        { id: 'svs5153', enabled: true, opacity: 0.72, blendMode: 'screen' },
+        { id: 'svs5154', enabled: true, opacity: 0.75, blendMode: 'screen' },
+        { id: 'svs5011', enabled: true, opacity: 0.92, blendMode: 'add' },
+      ];
+    });
+    announce('Alternando mistura visual das 5 cores musicais no planeta.');
+  }, [announce]);
 
   const getActiveVideos = useCallback((): HTMLVideoElement[] => {
     const list: HTMLVideoElement[] = [];
@@ -354,7 +416,7 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
       setFlyTarget({
         lon: country.lon,
         lat: country.lat,
-        distance: country.idealDistance,
+        distance: Math.min(2.38, country.idealDistance * 1.12),
         nonce: nonceRef.current,
       });
       announce(buildCountryAudioSummary(country));
@@ -372,7 +434,7 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
       setFlyTarget({
         lon: brazil.lon,
         lat: brazil.lat,
-        distance: brazil.idealDistance,
+        distance: Math.min(2.38, brazil.idealDistance * 1.12),
         nonce: nonceRef.current,
       });
       setLiveAnnouncement(
@@ -403,6 +465,35 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
     }
     return getRegionUnlockSummary(unlockState, activeRegionKey, userId);
   }, [activeRegionKey, unlockState, userId]);
+
+  const ecosystemSummary = useMemo(
+    () => getGlobalEcosystemSummary(unlockState, countries),
+    [countries, unlockState]
+  );
+
+  const nextIncompleteRegion = useMemo(() => {
+    const candidate = ecosystemSummary.regions.find(
+      (r) => !r.isComplete && r.country && r.country.id !== selectedCountry?.id
+    );
+    if (candidate && candidate.country) {
+      return {
+        label: candidate.regionLabel,
+        unlockedCount: candidate.unlockedCount,
+        country: candidate.country,
+      };
+    }
+    const fallback = countries.find(
+      (c) => c.id !== selectedCountry?.id && !unlockState.regions[buildCountryRegionKey(c)]
+    );
+    if (fallback) {
+      return {
+        label: fallback.namePt,
+        unlockedCount: 0,
+        country: fallback,
+      };
+    }
+    return null;
+  }, [countries, ecosystemSummary.regions, selectedCountry?.id, unlockState.regions]);
 
   const audibleStems = useMemo<Record<StemId, boolean>>(
     () => ({
@@ -474,6 +565,22 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
       setUnlockState(res.nextState);
       setUnlockFeedback(res.reasonPt);
       announce(res.reasonPt);
+      if (res.ok) {
+        setUnlockPulseNonce((n) => n + 1);
+        const nextSummary = getRegionUnlockSummary(res.nextState, activeRegionKey, userId);
+        setProgression((prev) => {
+          const progRes = recordCollectiveContribution(prev, {
+            regionKey: activeRegionKey,
+            regionLabel: soundscapeTarget.label,
+            stemId,
+            isRegionComplete5of5: nextSummary.unlockedCount >= 5,
+          });
+          if (progRes.xpGained > 0 && progRes.nextState.lastDiscovery) {
+            setDiscoveryToast(progRes.nextState.lastDiscovery);
+          }
+          return progRes.nextState;
+        });
+      }
     },
     [activeRegionKey, announce, soundscapeTarget, unlockState, userId, userName]
   );
@@ -494,6 +601,7 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
       bypassSingleLimit: true,
     });
     setUnlockState(res.nextState);
+    if (res.ok) setUnlockPulseNonce((n) => n + 1);
     setUnlockFeedback(res.reasonPt);
     announce(res.reasonPt);
   }, [activeRegionKey, announce, soundscapeTarget, unlockState, unlockSummary.record?.contributions]);
@@ -526,6 +634,20 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
     );
     setSoundscapeTelemetry(initialTel);
 
+    if (activeRegionKey) {
+      setProgression((prev) => {
+        const res = recordRegionDiscovery(prev, {
+          regionKey: activeRegionKey,
+          regionLabel: soundscapeTarget.label,
+          telemetry: initialTel,
+        });
+        if (res.xpGained > 0 && res.nextState.lastDiscovery) {
+          setDiscoveryToast(res.nextState.lastDiscovery);
+        }
+        return res.nextState;
+      });
+    }
+
     if (!jukeboxPlaying) {
       synthRef.current?.stop();
       return;
@@ -534,6 +656,7 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
     if (!synthRef.current) {
       synthRef.current = new SoundscapeSynthPlayer();
     }
+    synthRef.current.setMasterVolume(masterVolume);
 
     // Also start NASA videos gently if paused so pixels evolve live with music
     if (!isPlaying) {
@@ -800,7 +923,7 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
   return (
     <main
       id="main-earth-region"
-      className={`app-shell ${highContrast ? 'high-contrast' : ''}`}
+      className={`app-shell ${highContrast ? 'high-contrast' : ''} ${motionPaused ? 'motion-paused' : ''}`}
       style={{ fontSize: `${Math.round(fontScale * 100)}%` }}
     >
       <div className="sr-only" aria-live="polite" aria-atomic="true" data-testid="a11y-live-region">
@@ -827,7 +950,13 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
                 setDuration(vid.duration);
               }
             }}
-            onCanPlay={() => setReadyMap((prev) => ({ ...prev, [id]: true }))}
+            onCanPlay={() => {
+              setReadyMap((prev) => ({ ...prev, [id]: true }));
+              const vid = videoRefs.current[id];
+              if (vid && isActive && isPlaying && !motionPaused) {
+                void vid.play().catch(() => {});
+              }
+            }}
             style={{ display: 'none' }}
           />
         );
@@ -853,6 +982,12 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
         soundscapeTelemetry={soundscapeTelemetry}
         jukeboxPlaying={jukeboxPlaying}
         audibleStems={audibleStems}
+        getAudioReactiveBands={() =>
+          synthRef.current?.getAudioReactiveBands() ?? EMPTY_AUDIO_FRAME
+        }
+        motionPaused={motionPaused}
+        isCelebrating5of5={Boolean(unlockSummary?.isCompleteReal)}
+        unlockPulseNonce={unlockPulseNonce}
         flyTarget={flyTarget}
         zoomCommand={zoomCommand}
         panCommand={panCommand}
@@ -873,6 +1008,7 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
         layers={layers}
         onToggleLayer={handleToggleLayer}
         onSoloLayer={handleSoloLayer}
+        onMixAllLayers={handleMixAllLayers}
         onChangeLayerOpacity={handleChangeLayerOpacity}
         onChangeLayerBlendMode={handleChangeLayerBlendMode}
         onReorderLayer={handleReorderLayer}
@@ -909,16 +1045,34 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
         onSelectAndFlyCountry={handleSelectCountry}
         onFlyPreset={handleFlyPreset}
         onZoomStep={handleZoomStep}
+        onReopenTour={onReopenTour}
+        hoverInfo={hoverInfo}
+        hoverReadings={hoverReadings}
+        approxAltKm={approxAltKm}
         onLogout={() => {
           stopSpeech();
           onLogout();
         }}
+        isGuestSession={isGuestSession}
+        onOpenAuth={onOpenAuth}
+        ecosystemSummary={ecosystemSummary}
+        explorerXp={progression.xp}
+        progression={progression}
+        activeRegionLabel={soundscapeTarget?.label ?? null}
+        activeRegionUnlockCount={unlockSummary?.unlockedCount ?? 0}
+        discoveryToast={discoveryToast}
+        onDismissDiscovery={() => setDiscoveryToast(null)}
         copilotWidget={
           <AstronautCopilot
             selectedCountry={selectedCountry}
             userName={userName}
-            approxAltKm={Math.max(400, Math.round((cameraDistance - 1) * 6371))}
-            hoverInfo={hoverInfo}
+            ecosystemSummary={ecosystemSummary}
+            progression={progression}
+            jukeboxPlaying={jukeboxPlaying}
+            motionPaused={motionPaused}
+            compactByDefault={Boolean(soundscapeTarget)}
+            isGuestSession={isGuestSession}
+            onSelectCountry={handleSelectCountry}
             voiceEnabled={voiceEnabled}
             sonifyEnabled={sonifyEnabled}
             highContrast={highContrast}
@@ -943,6 +1097,7 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
               country={selectedCountry}
               radiusTarget={radiusTarget}
               liveReadings={selectedCountryReadings}
+              telemetry={soundscapeTelemetry}
               jukeboxSlot={
                 <JukeboxPanel
                   regionLabel={soundscapeTarget.label}
@@ -993,6 +1148,15 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
                   onToggleStemMute={handleToggleStemMute}
                   onSoloStem={handleSoloStem}
                   unlockFeedback={unlockFeedback}
+                  nextIncompleteRegion={
+                    nextIncompleteRegion
+                      ? {
+                          label: nextIncompleteRegion.label,
+                          unlockedCount: nextIncompleteRegion.unlockedCount,
+                          onFly: () => handleSelectCountry(nextIncompleteRegion.country),
+                        }
+                      : null
+                  }
                 />
               }
               onClose={() => {
@@ -1037,6 +1201,33 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
             onChangeRate={setPlaybackRate}
             onToggleLoop={() => setIsLoop((v) => !v)}
             onRestart={handleRestart}
+            jukeboxPlaying={jukeboxPlaying}
+            activeRegionLabel={soundscapeTarget?.label ?? null}
+            soundscapeTelemetry={soundscapeTelemetry}
+            audibleStems={audibleStems}
+            onToggleStemMute={handleToggleStemMute}
+            onToggleLayer={handleToggleLayer}
+            masterVolume={masterVolume}
+            onChangeMasterVolume={(vol) => {
+              setMasterVolume(vol);
+              synthRef.current?.setMasterVolume(vol);
+            }}
+            motionPaused={motionPaused}
+            isCelebrating5of5={Boolean(unlockSummary?.isCompleteReal)}
+            onToggleMotionPaused={() => {
+              setMotionPaused((prev) => {
+                const next = !prev;
+                if (next) {
+                  getActiveVideos().forEach((v) => v.pause());
+                  setIsPlaying(false);
+                }
+                announce(next ? 'Movimento orbital e animações pausados.' : 'Movimento orbital retomado.');
+                return next;
+              });
+            }}
+            getAudioReactiveBands={() =>
+              synthRef.current?.getAudioReactiveBands() ?? EMPTY_AUDIO_FRAME
+            }
           />
         }
       />

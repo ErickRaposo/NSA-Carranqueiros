@@ -14,19 +14,25 @@ import {
 } from './auth/authStorage';
 import { AuthLayout } from './components/AuthLayout';
 import { EarthExplorerView } from './components/EarthExplorerView';
+import { EntryPortal } from './components/EntryPortal';
 import { IntroOnboarding } from './components/IntroOnboarding';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 
-type AuthView = 'login' | 'register';
+type AuthView = 'portal' | 'login' | 'register';
+
+function getInitialHighContrast(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(prefers-contrast: more)').matches;
+}
 
 export function App(): React.ReactElement {
-  const [authView, setAuthView] = useState<AuthView>('login');
+  const [authView, setAuthView] = useState<AuthView>('portal');
   const [users, setUsers] = useState<UserAccount[]>(() => loadStoredUsers());
   const [session, setSession] = useState<AuthSession>(() => loadStoredSession());
 
-  // Shared visual accessibility preferences across Login -> Onboarding -> Map Explorer
-  const [highContrast, setHighContrast] = useState(false);
+  // Shared visual accessibility preferences across Portal -> Login -> Onboarding -> Map Explorer
+  const [highContrast, setHighContrast] = useState<boolean>(getInitialHighContrast);
   const [fontScale, setFontScale] = useState(1);
 
   useEffect(() => {
@@ -49,14 +55,14 @@ export function App(): React.ReactElement {
     (identifier: string, password: string): boolean => {
       const matched = authenticateUser(users, identifier, password);
       if (!matched) return false;
-      setSession({ user: matched, onboardingDone: false });
+      setSession({ user: matched, onboardingDone: true });
       return true;
     },
     [users]
   );
 
   const handleEnterAsGuest = useCallback(() => {
-    setSession({ user: GUEST_USER, onboardingDone: false });
+    setSession({ user: GUEST_USER, onboardingDone: true });
   }, []);
 
   const handleEnterJuryMode = useCallback(() => {
@@ -65,7 +71,7 @@ export function App(): React.ReactElement {
 
   const handleRegisterSuccess = useCallback((newUser: UserAccount) => {
     setUsers((prev) => [...prev, newUser]);
-    setSession({ user: newUser, onboardingDone: false });
+    setSession({ user: newUser, onboardingDone: true });
   }, []);
 
   const handleFinishOnboarding = useCallback(() => {
@@ -80,10 +86,32 @@ export function App(): React.ReactElement {
     stopSpeech();
     clearStoredSession();
     setSession({ user: null, onboardingDone: false });
+    setAuthView('portal');
+  }, []);
+
+  const handleOpenAccountAuth = useCallback(() => {
+    stopSpeech();
+    clearStoredSession();
+    setSession({ user: null, onboardingDone: false });
     setAuthView('login');
   }, []);
 
-  // Stage 1: Login / Cadastro (Sober Dark Navy + Official Astronaut Banner)
+  // Stage 1A: Cinematic Entry Portal ("O planeta está esperando para ser ouvido.")
+  if (!session.user && authView === 'portal') {
+    return (
+      <EntryPortal
+        highContrast={highContrast}
+        onToggleHighContrast={handleToggleHighContrast}
+        fontScale={fontScale}
+        onCycleFontScale={handleCycleFontScale}
+        onExploreEarth={handleEnterAsGuest}
+        onEnterJuryMode={handleEnterJuryMode}
+        onOpenAuth={() => setAuthView('login')}
+      />
+    );
+  }
+
+  // Stage 1B: Login / Cadastro (accessible from Portal or HUD "Entrar / Conta")
   if (!session.user) {
     return (
       <AuthLayout
@@ -94,11 +122,20 @@ export function App(): React.ReactElement {
         onSpeakScreen={() =>
           speakTextPt(
             authView === 'login'
-              ? 'Tela de entrada do EARTHSONG. Preencha seu e-mail ou usuário e senha, ou selecione Entrar como Visitante para demonstração.'
-              : 'Tela de cadastro do EARTHSONG. Preencha nome, e-mail, usuário e senha de pelo menos 5 caracteres.'
+              ? 'Tela de entrada do MINEIRØ. Preencha seu e-mail ou usuário e senha, ou clique em Explorar sem login.'
+              : 'Tela de cadastro do MINEIRØ. Preencha nome, e-mail, usuário e senha de pelo menos 5 caracteres.'
           )
         }
       >
+        <button
+          type="button"
+          onClick={() => setAuthView('portal')}
+          className="mb-3 inline-flex min-h-[36px] cursor-pointer items-center gap-1.5 text-xs font-semibold text-slate-300 underline-offset-4 hover:text-white hover:underline"
+          data-testid="back-to-portal-btn"
+        >
+          ← Voltar ao Portal
+        </button>
+
         {authView === 'login' ? (
           <LoginPage
             highContrast={highContrast}
@@ -118,7 +155,7 @@ export function App(): React.ReactElement {
     );
   }
 
-  // Stage 2: Interactive 3D Astronaut Onboarding (can skip straight to Map)
+  // Stage 2: Optional guided 3D MINEIRØ tour when requested from HUD
   if (!session.onboardingDone) {
     return (
       <IntroOnboarding
@@ -132,17 +169,19 @@ export function App(): React.ReactElement {
     );
   }
 
-  // Stage 3: Main Screen — EARTHSONG Accessible 3D Globe / 2D Map Explorer + Jukebox
+  // Stage 3: Full-Bleed Planetary Explorer + Gamified Collective Jukebox
   return (
     <EarthExplorerView
       userName={session.user.name}
       userId={session.user.username}
+      isGuestSession={Boolean(session.user.isGuest)}
       isJuryQuickEntry={session.user.username === 'juri'}
       highContrast={highContrast}
       onToggleHighContrast={handleToggleHighContrast}
       fontScale={fontScale}
       onCycleFontScale={handleCycleFontScale}
       onReopenTour={handleReopenTour}
+      onOpenAuth={handleOpenAccountAuth}
       onLogout={handleLogout}
     />
   );

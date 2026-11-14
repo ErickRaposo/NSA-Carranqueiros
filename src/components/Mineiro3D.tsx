@@ -7,7 +7,7 @@ interface Mineiro3DProps {
   /** Whether MINEIRØ is actively speaking / explaining */
   isExplaining: boolean;
   /** Layout size preset for onboarding vs floating HUD copilot */
-  size?: 'full' | 'compact';
+  size?: 'full' | 'compact' | 'avatar';
 }
 
 export const Mineiro3D: React.FC<Mineiro3DProps> = ({
@@ -37,7 +37,7 @@ export const Mineiro3D: React.FC<Mineiro3DProps> = ({
     const scene = new THREE.Scene();
 
     const camera = new THREE.PerspectiveCamera(36, width / height, 0.1, 100);
-    camera.position.set(0, 0.1, 4.9);
+    camera.position.set(0, size === 'avatar' ? 0.14 : 0.1, size === 'avatar' ? 4.35 : 4.9);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
@@ -311,9 +311,11 @@ export const Mineiro3D: React.FC<Mineiro3DProps> = ({
     <div
       ref={mountRef}
       className={
-        size === 'compact'
-          ? 'h-[148px] w-[132px]'
-          : 'h-[320px] w-full max-w-[360px] sm:h-[380px]'
+        size === 'avatar'
+          ? 'h-[62px] w-[62px]'
+          : size === 'compact'
+            ? 'h-[148px] w-[132px]'
+            : 'h-[320px] w-full max-w-[360px] sm:h-[380px]'
       }
       aria-label="Mascote 3D flutuando e gesticulando enquanto explica o sistema"
     />

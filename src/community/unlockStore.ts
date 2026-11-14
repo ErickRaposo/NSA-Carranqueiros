@@ -17,6 +17,14 @@ export interface StemMeta {
 
 export const STEM_ORDER: StemId[] = ['melody', 'harmony', 'rhythm', 'bass', 'fx'];
 
+export const DATASET_TO_STEM: Record<DatasetId, StemId> = {
+  svs5011: 'melody',
+  svs5153: 'harmony',
+  svs5147: 'rhythm',
+  svs5154: 'bass',
+  svs5148: 'fx',
+};
+
 export const STEM_METAS: Record<StemId, StemMeta> = {
   melody: {
     id: 'melody',
@@ -252,9 +260,12 @@ export const localUnlockAdapter: UnlockSyncAdapter = {
 
 export interface RegionUnlockSummary {
   unlockedCount: number;
+  realUnlockedCount: number;
   totalCount: number;
   progress01: number;
   unlockedStems: Record<StemId, boolean>;
+  realUnlockedStems: Record<StemId, boolean>;
+  isCompleteReal: boolean;
   userAlreadyContributedStem: StemId | null;
   record: RegionUnlockRecord | null;
 }
@@ -267,12 +278,20 @@ export function getRegionUnlockSummary(
   const record = state.regions[regionKey] ?? null;
   const contributions = record?.contributions ?? {};
 
+  const realUnlockedStems: Record<StemId, boolean> = {
+    melody: Boolean(contributions.melody),
+    harmony: Boolean(contributions.harmony),
+    rhythm: Boolean(contributions.rhythm),
+    bass: Boolean(contributions.bass),
+    fx: Boolean(contributions.fx),
+  };
+
   const unlockedStems: Record<StemId, boolean> = {
-    melody: state.juryUnlockAll || Boolean(contributions.melody),
-    harmony: state.juryUnlockAll || Boolean(contributions.harmony),
-    rhythm: state.juryUnlockAll || Boolean(contributions.rhythm),
-    bass: state.juryUnlockAll || Boolean(contributions.bass),
-    fx: state.juryUnlockAll || Boolean(contributions.fx),
+    melody: state.juryUnlockAll || realUnlockedStems.melody,
+    harmony: state.juryUnlockAll || realUnlockedStems.harmony,
+    rhythm: state.juryUnlockAll || realUnlockedStems.rhythm,
+    bass: state.juryUnlockAll || realUnlockedStems.bass,
+    fx: state.juryUnlockAll || realUnlockedStems.fx,
   };
 
   let rawUnlockedCount = 0;
@@ -290,9 +309,12 @@ export function getRegionUnlockSummary(
   const effectiveCount = state.juryUnlockAll ? 5 : rawUnlockedCount;
   return {
     unlockedCount: effectiveCount,
+    realUnlockedCount: rawUnlockedCount,
     totalCount: 5,
     progress01: effectiveCount / 5,
     unlockedStems,
+    realUnlockedStems,
+    isCompleteReal: rawUnlockedCount >= 5,
     userAlreadyContributedStem: userContributed,
     record,
   };
@@ -378,5 +400,105 @@ export function contributeRegionStem(
       count >= 5
         ? `Comunidade completou 5/5 camadas em ${params.regionLabel}! O mapa se iluminou por completo.`
         : `${params.contributorName} liberou "${STEM_METAS[params.stemId].labelPt}" em ${params.regionLabel} (${count}/5 coletivo).`,
+  };
+}
+
+export interface EcosystemRegionItem {
+  regionKey: string;
+  regionLabel: string;
+  country: CountryEntry | null;
+  unlockedCount: number;
+  isComplete: boolean;
+  unlockedStems: Record<StemId, boolean>;
+  contributors: {
+    stemId: StemId;
+    contributorName: string;
+    initial: string;
+    accentHex: string;
+  }[];
+}
+
+export interface GlobalEcosystemSummary {
+  litRegionsCount: number;
+  completedRegionsCount: number;
+  unlockedVoicesCount: number;
+  totalVoicesTarget: number;
+  spotlightRegion: EcosystemRegionItem | null;
+  regions: EcosystemRegionItem[];
+}
+
+/**
+ * Computes planet-wide collective unlock statistics so the explorer right rail
+ * and progress bar surface active collaborative missions immediately on load.
+ */
+export function getGlobalEcosystemSummary(
+  state: CommunityUnlockState,
+  countries: CountryEntry[]
+): GlobalEcosystemSummary {
+  const byKey = new Map<string, CountryEntry>();
+  for (const c of countries) {
+    byKey.set(buildCountryRegionKey(c), c);
+  }
+
+  const regions: EcosystemRegionItem[] = [];
+  let unlockedVoicesCount = 0;
+  let completedRegionsCount = 0;
+
+  for (const rec of Object.values(state.regions)) {
+    const unlockedStems: Record<StemId, boolean> = {
+      melody: state.juryUnlockAll || Boolean(rec.contributions.melody),
+      harmony: state.juryUnlockAll || Boolean(rec.contributions.harmony),
+      rhythm: state.juryUnlockAll || Boolean(rec.contributions.rhythm),
+      bass: state.juryUnlockAll || Boolean(rec.contributions.bass),
+      fx: state.juryUnlockAll || Boolean(rec.contributions.fx),
+    };
+    const contributors = STEM_ORDER.flatMap((stemId) => {
+      const c = rec.contributions[stemId];
+      if (!c) return [];
+      const trimmed = c.contributorName.trim();
+      return [
+        {
+          stemId,
+          contributorName: trimmed,
+          initial: (trimmed[0] ?? '?').toUpperCase(),
+          accentHex: STEM_METAS[stemId].accentHex,
+        },
+      ];
+    });
+    const rawCount = contributors.length;
+    const unlockedCount = state.juryUnlockAll ? 5 : rawCount;
+    if (unlockedCount === 0) continue;
+
+    unlockedVoicesCount += unlockedCount;
+    if (unlockedCount >= 5) completedRegionsCount += 1;
+
+    regions.push({
+      regionKey: rec.regionKey,
+      regionLabel: rec.regionLabel,
+      country: byKey.get(rec.regionKey) ?? null,
+      unlockedCount,
+      isComplete: unlockedCount >= 5,
+      unlockedStems,
+      contributors,
+    });
+  }
+
+  // Prioritize incomplete regions closest to 5/5 first so collaboration feels urgent & rewarding
+  regions.sort((a, b) => {
+    if (a.isComplete !== b.isComplete) return a.isComplete ? 1 : -1;
+    if (b.unlockedCount !== a.unlockedCount) return b.unlockedCount - a.unlockedCount;
+    return a.regionLabel.localeCompare(b.regionLabel, 'pt-BR');
+  });
+
+  const spotlightRegion = regions.find((r) => !r.isComplete) ?? regions[0] ?? null;
+  const targetRegions = Math.max(5, regions.length + (completedRegionsCount === regions.length ? 1 : 0));
+
+  return {
+    litRegionsCount: regions.length,
+    completedRegionsCount,
+    unlockedVoicesCount,
+    totalVoicesTarget: targetRegions * 5,
+    spotlightRegion,
+    regions,
   };
 }

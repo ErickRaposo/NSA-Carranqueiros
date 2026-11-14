@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DATASET_TO_STEM,
   buildCountryRegionKey,
   contributeRegionStem,
   createSeededUnlockState,
+  getGlobalEcosystemSummary,
   getRegionUnlockSummary,
 } from '../community/unlockStore';
 import { loadWorldCountries } from '../geo/countries';
@@ -62,7 +64,7 @@ describe('Collective Unlock Store & Illumination Progress', () => {
     expect(summary.userAlreadyContributedStem).toBe('bass');
   });
 
-  it('exposes all 5 stems immediately when juryUnlockAll is enabled', () => {
+  it('exposes all 5 stems immediately when juryUnlockAll is enabled without overwriting real collective counts', () => {
     const state = {
       ...createSeededUnlockState(countries),
       juryUnlockAll: true,
@@ -70,5 +72,22 @@ describe('Collective Unlock Store & Illumination Progress', () => {
     const brSummary = getRegionUnlockSummary(state, buildCountryRegionKey(brazil), 'juri');
     expect(brSummary.unlockedCount).toBe(5);
     expect(Object.values(brSummary.unlockedStems).every(Boolean)).toBe(true);
+    expect(brSummary.realUnlockedCount).toBe(1);
+    expect(brSummary.realUnlockedStems.melody).toBe(true);
+    expect(brSummary.realUnlockedStems.harmony).toBe(false);
+    expect(brSummary.isCompleteReal).toBe(false);
+  });
+
+  it('computes planet-wide ecosystem summary prioritizing incomplete regions for collaboration', () => {
+    const state = createSeededUnlockState(countries);
+    const eco = getGlobalEcosystemSummary(state, countries);
+
+    expect(eco.litRegionsCount).toBe(4);
+    expect(eco.completedRegionsCount).toBe(1);
+    expect(eco.unlockedVoicesCount).toBe(10);
+    expect(eco.spotlightRegion).not.toBeNull();
+    expect(eco.spotlightRegion?.isComplete).toBe(false);
+    expect(DATASET_TO_STEM.svs5011).toBe('melody');
+    expect(DATASET_TO_STEM.svs5148).toBe('fx');
   });
 });

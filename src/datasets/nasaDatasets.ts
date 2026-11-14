@@ -18,11 +18,11 @@ export const BLEND_MODE_OPTIONS: { value: BlendMode; labelPt: string }[] = [
 ];
 
 export const DEFAULT_LAYER_STACK: LayerConfig[] = [
-  { id: 'svs5148', enabled: true, opacity: 1.0, blendMode: 'normal' },
-  { id: 'svs5147', enabled: false, opacity: 0.75, blendMode: 'overlay' },
-  { id: 'svs5153', enabled: false, opacity: 0.75, blendMode: 'screen' },
+  { id: 'svs5148', enabled: true, opacity: 0.94, blendMode: 'normal' },
+  { id: 'svs5147', enabled: false, opacity: 0.72, blendMode: 'overlay' },
+  { id: 'svs5153', enabled: true, opacity: 0.56, blendMode: 'screen' },
   { id: 'svs5154', enabled: false, opacity: 0.75, blendMode: 'screen' },
-  { id: 'svs5011', enabled: false, opacity: 0.85, blendMode: 'add' },
+  { id: 'svs5011', enabled: true, opacity: 0.92, blendMode: 'add' },
 ];
 
 export interface NasaDatasetMeta {
@@ -168,10 +168,10 @@ export interface QuickPreset {
 }
 
 export const QUICK_PRESETS: QuickPreset[] = [
-  { id: 'global', label: 'Globo Completo', lon: -20, lat: 10, distance: 2.65 },
-  { id: 'brazil', label: 'Brasil', lon: -51.9, lat: -14.2, distance: 1.72 },
-  { id: 'amazon', label: 'Amazônia', lon: -62.5, lat: -3.5, distance: 1.42 },
-  { id: 'usa', label: 'EUA', lon: -98.5, lat: 39.5, distance: 1.78 },
-  { id: 'europe', label: 'Europa', lon: 10.0, lat: 49.0, distance: 1.55 },
-  { id: 'eastasia', label: 'Ásia Oriental', lon: 114.0, lat: 32.0, distance: 1.65 },
+  { id: 'global', label: 'Globo Completo', lon: -20, lat: 8, distance: 2.98 },
+  { id: 'brazil', label: 'Brasil', lon: -51.9, lat: -14.2, distance: 1.78 },
+  { id: 'amazon', label: 'Amazônia', lon: -62.5, lat: -3.5, distance: 1.48 },
+  { id: 'usa', label: 'EUA', lon: -98.5, lat: 39.5, distance: 1.82 },
+  { id: 'europe', label: 'Europa', lon: 10.0, lat: 49.0, distance: 1.62 },
+  { id: 'eastasia', label: 'Ásia Oriental', lon: 114.0, lat: 32.0, distance: 1.72 },
 ];

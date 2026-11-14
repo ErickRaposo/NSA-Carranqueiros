@@ -229,3 +229,25 @@ export const GraticuleIcon: React.FC<IconProps> = ({ size = 14, className }) => 
     <path d="M4.5 7.5h15M4.5 16.5h15" />
   </svg>
 );
+
+export type StemIconCategory = 'melody' | 'harmony' | 'rhythm' | 'bass' | 'fx';
+
+/** Shared authored glyph for each musical Earth layer across Launchpad, Jukebox & Live Bar */
+export const StemLayerIcon: React.FC<{
+  stem: StemIconCategory;
+  size?: number;
+  className?: string;
+}> = ({ stem, size = 15, className }) => {
+  switch (stem) {
+    case 'melody':
+      return <LightningBoltIcon size={size} className={className} />;
+    case 'harmony':
+      return <SpectralBandIcon size={size} className={className} />;
+    case 'rhythm':
+      return <IsothermIcon size={size} className={className} />;
+    case 'bass':
+      return <No2MoleculeIcon size={size} className={className} />;
+    case 'fx':
+      return <WindBarbIcon size={size} className={className} />;
+  }
+};
