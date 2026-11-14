@@ -213,6 +213,30 @@ Executado em Google Chrome real (`1440×900`, WebGL ativo via ANGLE/SwiftShader)
    - **Build de produção (`npm run build`):** `tsc -b && vite build` concluído sem erros em `37.38s` (`1612` módulos; `dist/index.html` `0.88 kB`, `dist/assets/index-Cx8c-jYP.css` `42.76 kB`, `dist/assets/index-DzJ0X1zi.js` `4,421.84 kB`).
    - **Chrome E2E Headless + Inspeção Visual (`verify_unified.mjs`):** Todos os 5 estágios aprovados (`STEP_1_LOGIN` a `STEP_5_LOGOUT_AND_GUEST`), zero sobreposições (`overlapTopAndCard: false`, `overlapCopilotAndSide: false`), `RUNTIME_EXCEPTIONS: []` e captura visual (`shot_unified_3_map_copilot.png`) confirmando cabeçalho do Mixer em linha única, atalhos sem cortes e barra inferior unificada.
 
+### 4.5 Earth Information Jukebox 1:1, Motor Musical 5-Stems, Desbloqueio Coletivo & Mascote MINEIRØ
+
+1. **Integração com `origin/main` (Mascote 3D `MINEIRØ` + Voz PT-BR Masculina Natural):**
+   - Incorporados via merge os commits `af35cf6` (`add mineiro`) e `5f8471b` (`add mascote em todas as pgs`), adicionando `Mineiro3D.tsx`, `MineiroOrbIcon`, `symboll.png`, `mineiro-logo.png`, seleção aprimorada de voz PT-BR em `a11yEngine.ts` e o guia `MINEIRØ // Guia` em `HudOverlay.tsx`, `AstronautCopilot.tsx` e `IntroOnboarding.tsx`.
+
+2. **Motor Musical Determinístico 5-Stems & Amostrador Geográfico (`src/audio/soundscapeEngine.ts`):**
+   - Implementada análise geoespacial determinística por **País** ou **Raio geográfico (`300–2500 km`)** (`sampleSoundscapeStats`, `deriveMusicalParameters`, `getTargetBounds`), derivando em tempo real as 5 camadas do pipeline NASA:
+     - **Melodia (Raios ISS · SVS 5011):** notas pentatônicas em `Y` com *pan* estéreo em `X` (L/R real).
+     - **Harmonia (Monóxido CO · SVS 5153):** seleção de modo (Lídio, Jônio, Dórico, Eólio) e extensões `7ª/9ª`.
+     - **Ritmo (Temperatura · SVS 5147):** pulso de `68 a 108 BPM` sincronizado ao índice térmico.
+     - **Baixo (Óxidos de Nitrogênio NO₂ · SVS 5154):** *Sub-Drone*, *Pulsante* ou *Urbano* com frequência de corte em `Hz`.
+     - **Efeitos (Ventos · SVS 5148):** sopro harmônico afinado, *Chorus*, *Ping-Pong Delay* e *Hall Reverb* (`Wet %`).
+   - Síntese Web Audio aditiva real (`SoundscapeSynthPlayer`) + narração explicativa completa (`buildExplainMusicPt`, tecla `E`).
+
+3. **Mapa de Iluminação Coletiva & Sobreposição Visual 1:1 (`src/community/unlockStore.ts`, `src/geo/unlockMapTexture.ts`, `src/components/EarthCanvas.tsx`):**
+   - Regra coletiva preservada: **1 conta desbloqueia 1 stem por região**; 5 contribuições distintas acendem os 5 stems e iluminam progressivamente os países na textura equiretangular `2048×1024` do globo/mapa (`0/5` apagado -> `1/5–4/5` ciano -> `5/5` dourado).
+   - Camada 2D projetada em `60fps` sobre o globo 3D e mapa 2D (`earth-fx-overlay`): miras douradas nos clarões + nota, isolinhas âmbar de CO + acorde, anéis térmicos solares pulsando ao BPM, contorno esmeralda de NO₂ + frequência `Hz`, corredores celestes de vento + `Wet %`, e arco geodésico tracejado no modo Raio.
+   - Acesso rápido de demonstração: botão **Modo Júri — Jukebox Coletiva (Sem Login)** no login entrando direto em **Brasil (`1/5`)**, além de **"+1 Coletivo"** e **"Liberar Tudo (Júri)"** em `JukeboxPanel.tsx`.
+
+4. **Testes Unitários, Build & E2E Pós-Merge:**
+   - **Vitest (`npm test`):** **8 arquivos de teste, 26/26 testes aprovados** (incluindo `soundscapeEngine.test.ts` e `unlockStore.test.ts`).
+   - **Build de produção (`npm run build`):** `tsc -b && vite build` concluído sem erros (`1617` módulos; `dist/assets/index-B9gYzSxR.js` `4,460.74 kB`, `dist/assets/index-BVSgIr0_.css` `47.87 kB`).
+   - **Chrome E2E Headless (`verify_jukebox_e2e.mjs`):** `STEP_1_LOGIN_JURY_BTN` a `STEP_4_RADIUS_MODE` aprovados com zero sobreposições (`overlapTopAndCard: false`) e `RUNTIME_EXCEPTIONS: []`, validados visualmente em `shot_jukebox_4_radius_mode.png`.
+
 ---
 
 ## 5. Limitações Conhecidas e Próximos Passos Possíveis

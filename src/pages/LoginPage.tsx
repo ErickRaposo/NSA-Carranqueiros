@@ -1,10 +1,11 @@
 import React, { useRef, useState } from 'react';
-import { Eye, EyeOff, Sparkles } from 'lucide-react';
+import { Disc3, Eye, EyeOff, Sparkles } from 'lucide-react';
 
 interface LoginPageProps {
   highContrast: boolean;
   onValidateLogin: (identifier: string, password: string) => boolean;
   onEnterAsGuest: () => void;
+  onEnterJuryMode: () => void;
   onGoToRegister: () => void;
 }
 
@@ -12,6 +13,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   highContrast,
   onValidateLogin,
   onEnterAsGuest,
+  onEnterJuryMode,
   onGoToRegister,
 }) => {
   const [identifier, setIdentifier] = useState('');
@@ -171,7 +173,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           }`}
         >
           <Sparkles className="h-4 w-4" aria-hidden="true" />
-          <span>Entrar como Visitante (Demonstração)</span>
+          <span>Entrar como Visitante (Tour Guiado)</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onEnterJuryMode}
+          data-testid="jury-quick-btn"
+          className={`flex w-full min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-full border py-2.5 text-sm font-semibold transition ${
+            highContrast
+              ? 'border-2 border-white bg-black text-white hover:bg-[#1a1a1a]'
+              : 'border-amber-400/50 bg-[#171204]/90 text-amber-300 hover:border-amber-300 hover:bg-[#261d06]'
+          }`}
+        >
+          <Disc3 className="h-4 w-4" aria-hidden="true" />
+          <span>Modo Júri — Jukebox Coletiva (Sem Login)</span>
         </button>
       </form>
 

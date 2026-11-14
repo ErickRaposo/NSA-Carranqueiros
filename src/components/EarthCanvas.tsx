@@ -14,7 +14,10 @@ import {
 } from '../geo/projection';
 import { CountryEntry, findCountryAtLonLat } from '../geo/countries';
 import { createCountryMaskTexture } from '../geo/countryMask';
+import { createUnlockIlluminationTexture } from '../geo/unlockMapTexture';
 import { BlendMode, DatasetId, LayerConfig } from '../datasets/nasaDatasets';
+import { CommunityUnlockState, StemId } from '../community/unlockStore';
+import { SoundscapeVisualTelemetry } from '../audio/soundscapeEngine';
 
 export interface CameraViewTarget {
   lon: number;
@@ -29,6 +32,12 @@ export interface HoverInfo {
   country: CountryEntry | null;
 }
 
+export interface RadiusTargetConfig {
+  centerLon: number;
+  centerLat: number;
+  radiusKm: number;
+}
+
 interface EarthCanvasProps {
   videoElements: Partial<Record<DatasetId, HTMLVideoElement | null>>;
   layers: LayerConfig[];
@@ -41,6 +50,14 @@ interface EarthCanvasProps {
   countries: CountryEntry[];
   allRings: number[][][];
   selectedCountry: CountryEntry | null;
+  selectionMode?: 'country' | 'radius';
+  radiusTarget?: RadiusTargetConfig | null;
+  onPickRadiusCenter?: (lon: number, lat: number) => void;
+  showUnlockMap?: boolean;
+  unlockState?: CommunityUnlockState;
+  soundscapeTelemetry?: SoundscapeVisualTelemetry | null;
+  jukeboxPlaying?: boolean;
+  audibleStems?: Record<StemId, boolean>;
   flyTarget: CameraViewTarget | null;
   zoomCommand?: { delta: number; nonce: number } | null;
   panCommand?: { dLon: number; dLat: number; nonce: number } | null;
@@ -120,6 +137,9 @@ const EARTH_FRAGMENT_SHADER = /* glsl */ `
   uniform sampler2D uMaskTex;
   uniform float uHasMask;
   uniform float uMaskDim;
+  uniform sampler2D uUnlockTex;
+  uniform float uHasUnlockTex;
+  uniform float uShowUnlockMap;
   uniform float uFlatMix;
 
   varying vec2 vUv;
@@ -237,6 +257,16 @@ const EARTH_FRAGMENT_SHADER = /* glsl */ `
       color *= factor;
     }
 
+    // Collective Unlock / Illumination Map layer: lights up 1/5 -> 5/5 unlocked regions
+    if (uShowUnlockMap > 0.5 && uHasUnlockTex > 0.5) {
+      vec4 unlockCol = texture2D(uUnlockTex, vUv);
+      if (unlockCol.a > 0.02) {
+        color = mix(color, color * 0.55 + unlockCol.rgb * 1.15, clamp(unlockCol.a * 1.35, 0.0, 0.78));
+      } else if (uHasMask < 0.5) {
+        color *= 0.45;
+      }
+    }
+
     // Subtle atmospheric Fresnel rim in 3D globe mode
     if (uFlatMix < 0.99) {
       vec3 viewDir = normalize(cameraPosition - vWorldPos);
@@ -308,6 +338,14 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   countries,
   allRings,
   selectedCountry,
+  selectionMode = 'country',
+  radiusTarget = null,
+  onPickRadiusCenter,
+  showUnlockMap = true,
+  unlockState,
+  soundscapeTelemetry = null,
+  jukeboxPlaying = false,
+  audibleStems,
   flyTarget,
   zoomCommand,
   panCommand,
@@ -318,6 +356,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const labelsLayerRef = useRef<HTMLDivElement | null>(null);
+  const fxOverlayRef = useRef<HTMLCanvasElement | null>(null);
 
   const propsRef = useRef({
     videoElements,
@@ -330,6 +369,13 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     hdEnhance,
     countries,
     selectedCountry,
+    selectionMode,
+    radiusTarget,
+    onPickRadiusCenter,
+    showUnlockMap,
+    soundscapeTelemetry,
+    jukeboxPlaying,
+    audibleStems,
     onHoverChange,
     onCameraDistanceChange,
     onCameraCenterChange,
@@ -346,6 +392,13 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     hdEnhance,
     countries,
     selectedCountry,
+    selectionMode,
+    radiusTarget,
+    onPickRadiusCenter,
+    showUnlockMap,
+    soundscapeTelemetry,
+    jukeboxPlaying,
+    audibleStems,
     onHoverChange,
     onCameraDistanceChange,
     onCameraCenterChange,
@@ -381,11 +434,13 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     highlightLine: THREE.LineSegments | null;
     fallbackTex: THREE.DataTexture | null;
     maskTex: THREE.CanvasTexture | null;
+    unlockTex: THREE.CanvasTexture | null;
     texCache: Map<HTMLVideoElement, THREE.VideoTexture>;
   }>({
     highlightLine: null,
     fallbackTex: null,
     maskTex: null,
+    unlockTex: null,
     texCache: new Map(),
   });
 
@@ -458,6 +513,28 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       earthUniforms.uHasMask.value = 1;
     }
   }, [selectedCountry]);
+
+  // Update Collective Unlock / Illumination Map texture whenever community contributions change
+  useEffect(() => {
+    const earthUniforms = uniformsRef.current?.earth;
+    if (sceneRefs.current.unlockTex) {
+      sceneRefs.current.unlockTex.dispose();
+      sceneRefs.current.unlockTex = null;
+    }
+    if (!unlockState || !showUnlockMap) {
+      if (earthUniforms) {
+        earthUniforms.uHasUnlockTex.value = 0;
+        earthUniforms.uUnlockTex.value = sceneRefs.current.fallbackTex;
+      }
+      return;
+    }
+    const uTex = createUnlockIlluminationTexture(countries, unlockState, 2048, 1024);
+    sceneRefs.current.unlockTex = uTex;
+    if (earthUniforms && uTex) {
+      earthUniforms.uUnlockTex.value = uTex;
+      earthUniforms.uHasUnlockTex.value = 1;
+    }
+  }, [countries, unlockState, showUnlockMap]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -540,6 +617,9 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       uMaskTex: { value: fallbackTex },
       uHasMask: { value: 0 },
       uMaskDim: { value: 0.25 },
+      uUnlockTex: { value: fallbackTex },
+      uHasUnlockTex: { value: 0 },
+      uShowUnlockMap: { value: 1 },
       uFlatMix: { value: navRef.current.flatMix },
     };
 
@@ -703,12 +783,19 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       if (wasClick) {
         const coords = computeLonLatFromPointer(e.clientX, e.clientY);
         if (coords) {
-          const country = findCountryAtLonLat(
-            coords.lon,
-            coords.lat,
-            propsRef.current.countries
-          );
-          propsRef.current.onSelectCountry(country);
+          if (
+            propsRef.current.selectionMode === 'radius' &&
+            propsRef.current.onPickRadiusCenter
+          ) {
+            propsRef.current.onPickRadiusCenter(coords.lon, coords.lat);
+          } else {
+            const country = findCountryAtLonLat(
+              coords.lon,
+              coords.lat,
+              propsRef.current.countries
+            );
+            propsRef.current.onSelectCountry(country);
+          }
         }
       }
     };
@@ -797,10 +884,10 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
         p.onCameraCenterChange?.(normalizedLon, nav.lat);
       }
 
-      // Smoothly shift viewport frustum so selected country lands on the left side when right card opens
+      // Smoothly shift viewport frustum so selected country or radius lands on the left side when right card opens
       const w = container.clientWidth;
       const h = Math.max(1, container.clientHeight);
-      const desiredOffsetRatio = p.selectedCountry && w >= 960 ? 0.17 : 0.0;
+      const desiredOffsetRatio = (p.selectedCountry || p.radiusTarget) && w >= 960 ? 0.17 : 0.0;
       nav.viewOffsetX += (desiredOffsetRatio - nav.viewOffsetX) * 0.12;
       if (Math.abs(nav.viewOffsetX) > 0.001) {
         camera.setViewOffset(w, h, Math.round(w * nav.viewOffsetX), 0, w, h);
@@ -825,6 +912,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
       // High-contrast / mask adjustments
       earthUniforms.uMaskDim.value = p.highContrast ? 0.14 : 0.24;
+      earthUniforms.uShowUnlockMap.value = p.showUnlockMap ? 1.0 : 0.0;
       (bordersUniforms.uColor.value as THREE.Color).set(p.highContrast ? '#ffffff' : '#e2e8f0');
       bordersUniforms.uOpacity.value = p.highContrast
         ? 0.8
@@ -949,6 +1037,235 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       }
 
       renderer.render(scene, camera);
+
+      // Draw 1:1 Musical Visual Backing (reticles, isolines, beat rings, bass contours, wind & radius ring)
+      const fxCanvas = fxOverlayRef.current;
+      if (fxCanvas) {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const targetW = Math.max(1, Math.round(w * dpr));
+        const targetH = Math.max(1, Math.round(h * dpr));
+        if (fxCanvas.width !== targetW || fxCanvas.height !== targetH) {
+          fxCanvas.width = targetW;
+          fxCanvas.height = targetH;
+        }
+        const fxCtx = fxCanvas.getContext('2d');
+        if (fxCtx) {
+          fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          fxCtx.clearRect(0, 0, w, h);
+
+          const projectGeo = (lon: number, lat: number, alt = 0.014): { x: number; y: number } | null => {
+            const sPos = lonLatToSphere(lon, lat, GLOBE_RADIUS + alt);
+            if (nav.flatMix < 0.5) {
+              if (sPos.clone().normalize().dot(tempCamDir) < 0.22) return null;
+            }
+            const fPos = lonLatToFlat(lon, lat, FLAT_WIDTH, FLAT_HEIGHT, alt);
+            tempLabelPos.lerpVectors(sPos, fPos, nav.flatMix);
+            tempLabelPos.project(camera);
+            if (tempLabelPos.z > 1 || tempLabelPos.z < -1) return null;
+            return {
+              x: (tempLabelPos.x * 0.5 + 0.5) * w,
+              y: (-tempLabelPos.y * 0.5 + 0.5) * h,
+            };
+          };
+
+          const drawPill = (x: number, y: number, text: string, strokeHex: string, fillHex = 'rgba(5, 11, 24, 0.9)') => {
+            fxCtx.font = '700 10px "Space Grotesk", sans-serif';
+            const tw = fxCtx.measureText(text).width;
+            const pw = tw + 10;
+            const ph = 17;
+            fxCtx.fillStyle = fillHex;
+            fxCtx.strokeStyle = strokeHex;
+            fxCtx.lineWidth = 1;
+            fxCtx.fillRect(x + 9, y - ph * 0.5, pw, ph);
+            fxCtx.strokeRect(x + 9, y - ph * 0.5, pw, ph);
+            fxCtx.fillStyle = strokeHex;
+            fxCtx.textBaseline = 'middle';
+            fxCtx.fillText(text, x + 14, y);
+          };
+
+          const nowMs = performance.now();
+
+          // 1. Custom Radius Geodesic Ring
+          if (p.radiusTarget) {
+            const rt = p.radiusTarget;
+            const latDeg = rt.radiusKm / 111.32;
+            const cosLat = Math.max(0.25, Math.cos((rt.centerLat * Math.PI) / 180));
+            const lonDeg = rt.radiusKm / (111.32 * cosLat);
+            fxCtx.save();
+            fxCtx.strokeStyle = p.highContrast ? '#facc15' : '#38bdf8';
+            fxCtx.lineWidth = 1.8;
+            fxCtx.setLineDash([6, 4]);
+            fxCtx.beginPath();
+            let started = false;
+            for (let s = 0; s <= 40; s++) {
+              const ang = (s / 40) * Math.PI * 2;
+              const pt = projectGeo(
+                rt.centerLon + Math.cos(ang) * lonDeg,
+                THREE.MathUtils.clamp(rt.centerLat + Math.sin(ang) * latDeg, -84, 84)
+              );
+              if (pt) {
+                if (!started) {
+                  fxCtx.moveTo(pt.x, pt.y);
+                  started = true;
+                } else {
+                  fxCtx.lineTo(pt.x, pt.y);
+                }
+              } else {
+                started = false;
+              }
+            }
+            fxCtx.stroke();
+            fxCtx.setLineDash([]);
+            const centerPt = projectGeo(rt.centerLon, rt.centerLat);
+            if (centerPt) {
+              fxCtx.strokeStyle = p.highContrast ? '#ffffff' : '#38bdf8';
+              fxCtx.beginPath();
+              fxCtx.moveTo(centerPt.x - 6, centerPt.y);
+              fxCtx.lineTo(centerPt.x + 6, centerPt.y);
+              fxCtx.moveTo(centerPt.x, centerPt.y - 6);
+              fxCtx.lineTo(centerPt.x, centerPt.y + 6);
+              fxCtx.stroke();
+            }
+            const topPt =
+              projectGeo(
+                rt.centerLon,
+                THREE.MathUtils.clamp(rt.centerLat + latDeg, -84, 84)
+              ) ?? centerPt;
+            if (topPt) {
+              drawPill(
+                topPt.x - 36,
+                topPt.y - 12,
+                `Raio ${rt.radiusKm} km`,
+                p.highContrast ? '#facc15' : '#38bdf8'
+              );
+            }
+            fxCtx.restore();
+          }
+
+          // 2. Soundscape 1:1 Telemetry Overlay
+          const tel = p.soundscapeTelemetry;
+          const stems = p.audibleStems;
+          if (tel && stems) {
+            fxCtx.save();
+            fxCtx.globalAlpha = p.jukeboxPlaying ? 1.0 : 0.62;
+
+            // Harmony / CO: amber glowing isolines + chord pill
+            if (stems.harmony && tel.coSpots.length > 0) {
+              const coMain = tel.coSpots[0];
+              const pulse = p.jukeboxPlaying ? 0.5 + 0.5 * Math.sin(nowMs * 0.003) : 0.4;
+              for (const spot of tel.coSpots.slice(0, 3)) {
+                const pt = projectGeo(spot.lon, spot.lat);
+                if (!pt) continue;
+                fxCtx.strokeStyle = p.highContrast ? '#facc15' : 'rgba(251, 146, 60, 0.9)';
+                fxCtx.lineWidth = 1.4;
+                fxCtx.beginPath();
+                fxCtx.ellipse(pt.x, pt.y, 18 + pulse * 6, 11 + pulse * 4, 0.25, 0, Math.PI * 2);
+                fxCtx.stroke();
+                fxCtx.beginPath();
+                fxCtx.ellipse(pt.x, pt.y, 10 + pulse * 3, 6 + pulse * 2, 0.25, 0, Math.PI * 2);
+                fxCtx.stroke();
+              }
+              const mainPt = projectGeo(coMain.lon, coMain.lat);
+              if (mainPt) {
+                drawPill(mainPt.x, mainPt.y - 16, `CO · ${tel.chordName}`, p.highContrast ? '#facc15' : '#fb923c');
+              }
+            }
+
+            // Rhythm / Temp: concentric solar thermal rings pulsing to exact BPM
+            if (stems.rhythm) {
+              const pt = projectGeo(tel.tempHotSpot.lon, tel.tempHotSpot.lat);
+              if (pt) {
+                const beatFrac = p.jukeboxPlaying ? ((nowMs * tel.bpm) / 60000) % 1 : 0.25;
+                for (let ringIdx = 0; ringIdx < 2; ringIdx++) {
+                  const rPhase = (beatFrac + ringIdx * 0.5) % 1;
+                  const rad = 8 + rPhase * 28;
+                  fxCtx.strokeStyle = p.highContrast
+                    ? `rgba(250, 204, 21, ${(1 - rPhase).toFixed(2)})`
+                    : `rgba(251, 113, 133, ${(1 - rPhase).toFixed(2)})`;
+                  fxCtx.lineWidth = 1.8;
+                  fxCtx.beginPath();
+                  fxCtx.arc(pt.x, pt.y, rad, 0, Math.PI * 2);
+                  fxCtx.stroke();
+                }
+                drawPill(pt.x, pt.y + 18, `${tel.bpm} BPM`, p.highContrast ? '#facc15' : '#fb7185');
+              }
+            }
+
+            // Bass / NO2: emerald neon contour + note | cutoff Hz badge
+            if (stems.bass) {
+              const pt = projectGeo(tel.noxHotSpot.lon, tel.noxHotSpot.lat);
+              if (pt) {
+                const bassPulse = p.jukeboxPlaying ? 1 + Math.sin(nowMs * 0.008) * 0.2 : 1;
+                fxCtx.strokeStyle = p.highContrast ? '#ffffff' : '#34d399';
+                fxCtx.lineWidth = 1.9;
+                fxCtx.beginPath();
+                fxCtx.rect(pt.x - 13 * bassPulse, pt.y - 13 * bassPulse, 26 * bassPulse, 26 * bassPulse);
+                fxCtx.stroke();
+                drawPill(
+                  pt.x,
+                  pt.y,
+                  `${tel.bassNoteName} | ${tel.bassCutoffHz}Hz`,
+                  p.highContrast ? '#ffffff' : '#34d399'
+                );
+              }
+            }
+
+            // FX / Wind: dual sky-blue wind corridor streamlines + Wet %
+            if (stems.fx && tel.windCorridors.length > 0) {
+              fxCtx.strokeStyle = p.highContrast ? '#facc15' : '#38bdf8';
+              fxCtx.lineWidth = 1.5;
+              for (const wc of tel.windCorridors.slice(0, 4)) {
+                const p1 = projectGeo(wc.lon, wc.lat);
+                const p2 = projectGeo(wc.lon + wc.dx * 3.8, wc.lat + wc.dy * 3.8);
+                if (!p1 || !p2) continue;
+                fxCtx.beginPath();
+                fxCtx.moveTo(p1.x, p1.y);
+                fxCtx.lineTo(p2.x, p2.y);
+                fxCtx.stroke();
+                fxCtx.beginPath();
+                fxCtx.moveTo(p1.x, p1.y + 4);
+                fxCtx.lineTo(p2.x, p2.y + 4);
+                fxCtx.stroke();
+              }
+              const wPt = projectGeo(tel.windCorridors[0].lon, tel.windCorridors[0].lat);
+              if (wPt) {
+                drawPill(wPt.x, wPt.y - 16, `Vento · Wet ${tel.windWetPct}%`, p.highContrast ? '#facc15' : '#38bdf8');
+              }
+            }
+
+            // Melody / Lightning: golden crosshairs + expanding flash ring + floating note
+            if (stems.melody) {
+              tel.lightningMarkers.forEach((lm, idx) => {
+                const pt = projectGeo(lm.lon, lm.lat);
+                if (!pt) return;
+                const phase = p.jukeboxPlaying ? ((nowMs + idx * 180) % 900) / 900 : 0.3;
+                const col = p.highContrast ? '#facc15' : '#fbbf24';
+                fxCtx.strokeStyle = col;
+                fxCtx.lineWidth = 1.6;
+                fxCtx.beginPath();
+                fxCtx.arc(pt.x, pt.y, 7 + phase * 18, 0, Math.PI * 2);
+                fxCtx.stroke();
+                // Crosshair ticks
+                fxCtx.beginPath();
+                fxCtx.moveTo(pt.x - 10, pt.y);
+                fxCtx.lineTo(pt.x - 4, pt.y);
+                fxCtx.moveTo(pt.x + 4, pt.y);
+                fxCtx.lineTo(pt.x + 10, pt.y);
+                fxCtx.moveTo(pt.x, pt.y - 10);
+                fxCtx.lineTo(pt.x, pt.y - 4);
+                fxCtx.moveTo(pt.x, pt.y + 4);
+                fxCtx.lineTo(pt.x, pt.y + 10);
+                fxCtx.stroke();
+                if (idx === 0) {
+                  drawPill(pt.x, pt.y, `Raio · ${lm.noteName}`, col);
+                }
+              });
+            }
+
+            fxCtx.restore();
+          }
+        }
+      }
     };
 
     rafId = requestAnimationFrame(animate);
@@ -974,6 +1291,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       starMat.dispose();
       fallbackTex.dispose();
       sceneRefs.current.maskTex?.dispose();
+      sceneRefs.current.unlockTex?.dispose();
       for (const tex of sceneRefs.current.texCache.values()) {
         tex.dispose();
       }
@@ -991,8 +1309,9 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       className="earth-canvas-root"
       role="application"
       tabIndex={0}
-      aria-label="Mapa interativo 3D e 2D da Terra com camadas da NASA. Use as setas do teclado para mover, mais e menos para zoom, Espaço para reproduzir ou pausar, V para narração por voz e R para ler os dados do local."
+      aria-label="Mapa interativo 3D e 2D da Terra com camadas da NASA. Use as setas do teclado para mover, mais e menos para zoom, Espaço para reproduzir ou pausar, J para Jukebox musical, E para explicação da música, V para narração por voz e R para ler os dados do local."
     >
+      <canvas ref={fxOverlayRef} className="earth-fx-overlay" aria-hidden="true" />
       <div ref={labelsLayerRef} className="earth-labels-layer" aria-hidden="true" />
     </div>
   );

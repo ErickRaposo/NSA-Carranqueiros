@@ -29,6 +29,14 @@ export const GUEST_USER: UserAccount = {
   isGuest: true,
 };
 
+export const JURY_USER: UserAccount = {
+  name: 'Júri Space Apps',
+  email: 'juri@earthsong.space',
+  username: 'juri',
+  password: '',
+  isGuest: true,
+};
+
 function safeGetStorage(): Storage | null {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {

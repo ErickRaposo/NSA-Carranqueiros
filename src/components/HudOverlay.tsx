@@ -12,6 +12,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  Sun,
   Type,
   User,
   Volume2,
@@ -65,6 +66,10 @@ interface HudOverlayProps {
   onToggleLabels: () => void;
   hdEnhance: boolean;
   onToggleHdEnhance: () => void;
+  selectionMode: 'country' | 'radius';
+  onChangeSelectionMode: (mode: 'country' | 'radius') => void;
+  showUnlockMap: boolean;
+  onToggleUnlockMap: () => void;
   voiceEnabled: boolean;
   onToggleVoice: () => void;
   sonifyEnabled: boolean;
@@ -125,6 +130,10 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
   onToggleLabels,
   hdEnhance,
   onToggleHdEnhance,
+  selectionMode,
+  onChangeSelectionMode,
+  showUnlockMap,
+  onToggleUnlockMap,
   voiceEnabled,
   onToggleVoice,
   sonifyEnabled,
@@ -377,6 +386,43 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
             >
               <SharpenKernelIcon size={14} />
               <span>HD GPU (H)</span>
+            </button>
+
+            <button
+              type="button"
+              className={`toggle-chip ${showUnlockMap ? 'active' : ''}`}
+              onClick={onToggleUnlockMap}
+              aria-pressed={showUnlockMap}
+              title="Mostrar mapa de iluminação progressiva dos desbloqueios coletivos"
+              data-testid="unlock-map-btn"
+            >
+              <Sun size={14} aria-hidden="true" />
+              <span>Iluminação</span>
+            </button>
+          </div>
+
+          <span className="toolbar-divider" aria-hidden="true" />
+
+          <div className="segmented-control" role="group" aria-label="Modo de seleção da Jukebox">
+            <button
+              type="button"
+              className={`seg-btn ${selectionMode === 'country' ? 'active' : ''}`}
+              onClick={() => onChangeSelectionMode('country')}
+              aria-pressed={selectionMode === 'country'}
+              title="Clicar no mapa seleciona um país para a Jukebox 1:1"
+              data-testid="target-country-btn"
+            >
+              <span>País</span>
+            </button>
+            <button
+              type="button"
+              className={`seg-btn ${selectionMode === 'radius' ? 'active' : ''}`}
+              onClick={() => onChangeSelectionMode('radius')}
+              aria-pressed={selectionMode === 'radius'}
+              title="Clicar no mapa posiciona um raio geográfico customizado para a Jukebox 1:1"
+              data-testid="target-radius-btn"
+            >
+              <span>Raio</span>
             </button>
           </div>
 

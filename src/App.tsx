@@ -3,6 +3,7 @@ import { speakTextPt, stopSpeech } from './accessibility/a11yEngine';
 import {
   AuthSession,
   GUEST_USER,
+  JURY_USER,
   UserAccount,
   authenticateUser,
   clearStoredSession,
@@ -58,6 +59,10 @@ export function App(): React.ReactElement {
     setSession({ user: GUEST_USER, onboardingDone: false });
   }, []);
 
+  const handleEnterJuryMode = useCallback(() => {
+    setSession({ user: JURY_USER, onboardingDone: true });
+  }, []);
+
   const handleRegisterSuccess = useCallback((newUser: UserAccount) => {
     setUsers((prev) => [...prev, newUser]);
     setSession({ user: newUser, onboardingDone: false });
@@ -99,6 +104,7 @@ export function App(): React.ReactElement {
             highContrast={highContrast}
             onValidateLogin={handleValidateLogin}
             onEnterAsGuest={handleEnterAsGuest}
+            onEnterJuryMode={handleEnterJuryMode}
             onGoToRegister={() => setAuthView('register')}
           />
         ) : (
@@ -126,10 +132,12 @@ export function App(): React.ReactElement {
     );
   }
 
-  // Stage 3: Main Screen — EARTHSONG Accessible 3D Globe / 2D Map Explorer
+  // Stage 3: Main Screen — EARTHSONG Accessible 3D Globe / 2D Map Explorer + Jukebox
   return (
     <EarthExplorerView
       userName={session.user.name}
+      userId={session.user.username}
+      isJuryQuickEntry={session.user.username === 'juri'}
       highContrast={highContrast}
       onToggleHighContrast={handleToggleHighContrast}
       fontScale={fontScale}

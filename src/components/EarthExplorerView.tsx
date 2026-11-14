@@ -10,6 +10,7 @@ import { AstronautCopilot } from './AstronautCopilot';
 import { CountryDetailCard } from './CountryDetailCard';
 import { CameraViewTarget, EarthCanvas, HoverInfo } from './EarthCanvas';
 import { HudOverlay } from './HudOverlay';
+import { JukeboxPanel } from './JukeboxPanel';
 import { PlayerBar } from './PlayerBar';
 import {
   BlendMode,
@@ -24,9 +25,32 @@ import { CountryEntry, loadWorldCountries } from '../geo/countries';
 import { getCountryLogistics } from '../geo/countryLogistics';
 import { formatLatLon } from '../geo/projection';
 import { clampVideoTime, stepVideoTime } from '../utils/playerMath';
+import {
+  CommunityUnlockState,
+  STEM_METAS,
+  STEM_ORDER,
+  StemId,
+  buildCountryRegionKey,
+  buildRadiusRegionKey,
+  contributeRegionStem,
+  getRegionUnlockSummary,
+  localUnlockAdapter,
+} from '../community/unlockStore';
+import {
+  SoundscapeRadiusTarget,
+  SoundscapeSynthPlayer,
+  SoundscapeTarget,
+  SoundscapeVisualTelemetry,
+  buildExplainMusicPt,
+  deriveMusicalParameters,
+  getTargetBounds,
+  sampleSoundscapeStats,
+} from '../audio/soundscapeEngine';
 
 interface EarthExplorerViewProps {
   userName: string;
+  userId?: string;
+  isJuryQuickEntry?: boolean;
   highContrast: boolean;
   onToggleHighContrast: () => void;
   fontScale: number;
@@ -37,6 +61,8 @@ interface EarthExplorerViewProps {
 
 export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
   userName,
+  userId = userName.toLowerCase(),
+  isJuryQuickEntry = false,
   highContrast,
   onToggleHighContrast,
   fontScale,
@@ -60,6 +86,28 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
   const [showGrid, setShowGrid] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
   const [hdEnhance, setHdEnhance] = useState(true);
+  const [showUnlockMap, setShowUnlockMap] = useState(true);
+
+  const [selectionMode, setSelectionMode] = useState<'country' | 'radius'>('country');
+  const [radiusKm, setRadiusKm] = useState(900);
+  const [radiusTarget, setRadiusTarget] = useState<SoundscapeRadiusTarget | null>(null);
+
+  const [unlockState, setUnlockState] = useState<CommunityUnlockState>(() =>
+    localUnlockAdapter.load(countries)
+  );
+  const [unlockFeedback, setUnlockFeedback] = useState<string | null>(null);
+  const [jukeboxPlaying, setJukeboxPlaying] = useState(false);
+  const [stemUserMuted, setStemUserMuted] = useState<Record<StemId, boolean>>({
+    melody: false,
+    harmony: false,
+    rhythm: false,
+    bass: false,
+    fx: false,
+  });
+  const [soundscapeTelemetry, setSoundscapeTelemetry] =
+    useState<SoundscapeVisualTelemetry | null>(null);
+  const synthRef = useRef<SoundscapeSynthPlayer | null>(null);
+  const stepCounterRef = useRef(0);
 
   const [copilotOpen, setCopilotOpen] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
@@ -109,8 +157,14 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
     setVideoElements({ ...videoRefs.current });
     return () => {
       stopSpeech();
+      synthRef.current?.dispose();
+      synthRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    localUnlockAdapter.save(unlockState);
+  }, [unlockState]);
 
   const announce = useCallback(
     (msg: string, forceSpeak = false) => {
@@ -300,6 +354,11 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
   const handleSelectCountry = useCallback(
     (country: CountryEntry | null) => {
       setSelectedCountry(country);
+      if (country) {
+        setRadiusTarget(null);
+        setSelectionMode('country');
+      }
+      setUnlockFeedback(null);
       if (!country) {
         announce('Seleção de país removida.');
         return;
@@ -314,6 +373,241 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
       announce(buildCountryAudioSummary(country));
     },
     [announce, buildCountryAudioSummary]
+  );
+
+  // Auto-focus Brazil (1/5 partially unlocked demo) when entering via Jury No-Login quick access
+  useEffect(() => {
+    if (!isJuryQuickEntry) return;
+    const brazil = countries.find((c) => c.nameEn === 'Brazil') ?? countries[0];
+    if (brazil) {
+      setSelectedCountry(brazil);
+      nonceRef.current += 1;
+      setFlyTarget({
+        lon: brazil.lon,
+        lat: brazil.lat,
+        distance: brazil.idealDistance,
+        nonce: nonceRef.current,
+      });
+      setLiveAnnouncement(
+        'Modo Júri ativado sem login. Exemplo em exibição: Brasil com 1 de 5 camadas liberadas pelo coletivo. Pressione J para tocar ou clique em Liberar Tudo (Júri).'
+      );
+    }
+  }, [countries, isJuryQuickEntry]);
+
+  const soundscapeTarget: SoundscapeTarget | null = useMemo(() => {
+    if (selectedCountry) {
+      return { type: 'country', country: selectedCountry, label: selectedCountry.namePt };
+    }
+    if (radiusTarget) {
+      return radiusTarget;
+    }
+    return null;
+  }, [radiusTarget, selectedCountry]);
+
+  const activeRegionKey = useMemo(() => {
+    if (selectedCountry) return buildCountryRegionKey(selectedCountry);
+    if (radiusTarget) return buildRadiusRegionKey(radiusTarget.centerLon, radiusTarget.centerLat);
+    return null;
+  }, [radiusTarget, selectedCountry]);
+
+  const unlockSummary = useMemo(() => {
+    if (!activeRegionKey) {
+      return getRegionUnlockSummary(unlockState, 'none', userId);
+    }
+    return getRegionUnlockSummary(unlockState, activeRegionKey, userId);
+  }, [activeRegionKey, unlockState, userId]);
+
+  const audibleStems = useMemo<Record<StemId, boolean>>(
+    () => ({
+      melody: unlockSummary.unlockedStems.melody && !stemUserMuted.melody,
+      harmony: unlockSummary.unlockedStems.harmony && !stemUserMuted.harmony,
+      rhythm: unlockSummary.unlockedStems.rhythm && !stemUserMuted.rhythm,
+      bass: unlockSummary.unlockedStems.bass && !stemUserMuted.bass,
+      fx: unlockSummary.unlockedStems.fx && !stemUserMuted.fx,
+    }),
+    [stemUserMuted, unlockSummary.unlockedStems]
+  );
+
+  const handlePickRadiusCenter = useCallback(
+    (lon: number, lat: number) => {
+      setSelectedCountry(null);
+      setUnlockFeedback(null);
+      const label = `Raio ${radiusKm} km`;
+      setRadiusTarget({
+        type: 'radius',
+        centerLon: lon,
+        centerLat: lat,
+        radiusKm,
+        label,
+      });
+      nonceRef.current += 1;
+      setFlyTarget({
+        lon,
+        lat,
+        distance: Math.max(1.35, Math.min(2.6, 1.15 + radiusKm / 1900)),
+        nonce: nonceRef.current,
+      });
+      announce(`Raio sonoro de ${radiusKm} quilômetros posicionado em ${formatLatLon(lat, lon)}.`);
+    },
+    [announce, radiusKm]
+  );
+
+  const handleChangeSelectionMode = useCallback(
+    (mode: 'country' | 'radius') => {
+      setSelectionMode(mode);
+      if (mode === 'radius' && !radiusTarget) {
+        const lon = selectedCountry?.lon ?? cameraCenterRef.current.lon;
+        const lat = selectedCountry?.lat ?? cameraCenterRef.current.lat;
+        setSelectedCountry(null);
+        setRadiusTarget({
+          type: 'radius',
+          centerLon: lon,
+          centerLat: lat,
+          radiusKm,
+          label: `Raio ${radiusKm} km`,
+        });
+        announce('Modo Raio geográfico ativado. Clique no mapa ou ajuste o raio em km.');
+      } else if (mode === 'country') {
+        announce('Modo seleção por País ativado.');
+      }
+    },
+    [announce, radiusKm, radiusTarget, selectedCountry]
+  );
+
+  const handleContributeStem = useCallback(
+    (stemId: StemId) => {
+      if (!activeRegionKey || !soundscapeTarget) return;
+      const res = contributeRegionStem(unlockState, {
+        regionKey: activeRegionKey,
+        regionLabel: soundscapeTarget.label,
+        stemId,
+        contributorId: userId,
+        contributorName: userName,
+      });
+      setUnlockState(res.nextState);
+      setUnlockFeedback(res.reasonPt);
+      announce(res.reasonPt);
+    },
+    [activeRegionKey, announce, soundscapeTarget, unlockState, userId, userName]
+  );
+
+  const handleSimulateCollectiveNext = useCallback(() => {
+    if (!activeRegionKey || !soundscapeTarget) return;
+    const nextLocked = STEM_ORDER.find((s) => !unlockSummary.record?.contributions[s]);
+    if (!nextLocked) return;
+    const simIdx = Object.keys(unlockSummary.record?.contributions ?? {}).length + 1;
+    const simNames = ['Camila (SP)', 'Davi (BA)', 'Elena (RS)', 'Marcos (AM)', 'Nadia (CE)'];
+    const simName = simNames[simIdx % simNames.length];
+    const res = contributeRegionStem(unlockState, {
+      regionKey: activeRegionKey,
+      regionLabel: soundscapeTarget.label,
+      stemId: nextLocked,
+      contributorId: `community-sim-${simIdx}`,
+      contributorName: simName,
+      bypassSingleLimit: true,
+    });
+    setUnlockState(res.nextState);
+    setUnlockFeedback(res.reasonPt);
+    announce(res.reasonPt);
+  }, [activeRegionKey, announce, soundscapeTarget, unlockState, unlockSummary.record?.contributions]);
+
+  const handleExplainMusic = useCallback(() => {
+    if (!soundscapeTelemetry) {
+      announce('Selecione um país ou raio no mapa para explicar a música gerada.', true);
+      return;
+    }
+    const text = buildExplainMusicPt(soundscapeTelemetry, audibleStems ? unlockSummary : unlockSummary, audibleStems);
+    announce(text, true);
+  }, [announce, audibleStems, soundscapeTelemetry, unlockSummary]);
+
+  // Real-time 1:1 telemetry derivation & Jukebox step scheduler
+  useEffect(() => {
+    if (!soundscapeTarget) {
+      setSoundscapeTelemetry(null);
+      synthRef.current?.stop();
+      setJukeboxPlaying(false);
+      return;
+    }
+    const bounds = getTargetBounds(soundscapeTarget);
+    const stats = sampleSoundscapeStats(videoRefs.current, bounds, stepCounterRef.current);
+    const initialTel = deriveMusicalParameters(
+      soundscapeTarget,
+      bounds,
+      stats,
+      stepCounterRef.current,
+      Math.floor(stepCounterRef.current / 2)
+    );
+    setSoundscapeTelemetry(initialTel);
+
+    if (!jukeboxPlaying) {
+      synthRef.current?.stop();
+      return;
+    }
+
+    if (!synthRef.current) {
+      synthRef.current = new SoundscapeSynthPlayer();
+    }
+
+    // Also start NASA videos gently if paused so pixels evolve live with music
+    if (!isPlaying) {
+      getActiveVideos().forEach((v) => {
+        void v.play().catch(() => {});
+      });
+      setIsPlaying(true);
+    }
+
+    const stepMs = Math.max(240, Math.round((60 / initialTel.bpm / 2) * 1000));
+    const tickStep = () => {
+      stepCounterRef.current += 1;
+      const stepIdx = stepCounterRef.current;
+      const liveStats = sampleSoundscapeStats(videoRefs.current, bounds, stepIdx);
+      const tel = deriveMusicalParameters(
+        soundscapeTarget,
+        bounds,
+        liveStats,
+        stepIdx,
+        Math.floor(stepIdx / 2)
+      );
+      setSoundscapeTelemetry(tel);
+      synthRef.current?.triggerStep(tel, stepIdx, audibleStems);
+    };
+
+    tickStep();
+    const timer = window.setInterval(tickStep, stepMs);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [audibleStems, getActiveVideos, isPlaying, jukeboxPlaying, sampleTick, soundscapeTarget]);
+
+  const handleToggleStemMute = useCallback(
+    (stemId: StemId) => {
+      if (!unlockSummary.unlockedStems[stemId]) {
+        announce(`A camada ${STEM_METAS[stemId].labelPt} está bloqueada nesta região.`, true);
+        return;
+      }
+      setStemUserMuted((prev) => {
+        const nextMuted = !prev[stemId];
+        announce(
+          `${STEM_METAS[stemId].labelPt} ${nextMuted ? 'silenciada' : 'ativada'} na Jukebox.`
+        );
+        return { ...prev, [stemId]: nextMuted };
+      });
+    },
+    [announce, unlockSummary.unlockedStems]
+  );
+
+  const handleSoloStem = useCallback(
+    (stemId: StemId) => {
+      setStemUserMuted({
+        melody: stemId !== 'melody',
+        harmony: stemId !== 'harmony',
+        rhythm: stemId !== 'rhythm',
+        bass: stemId !== 'bass',
+        fx: stemId !== 'fx',
+      });
+      announce(`Ouvindo somente o instrumento ${STEM_METAS[stemId].labelPt}.`);
+    },
+    [announce]
   );
 
   const handleSpeakNow = useCallback(() => {
@@ -406,6 +700,7 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
   const handleFlyPreset = useCallback(
     (preset: QuickPreset) => {
       setSelectedCountry(null);
+      setRadiusTarget(null);
       nonceRef.current += 1;
       setFlyTarget({
         lon: preset.lon,
@@ -472,19 +767,45 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
           announce(next ? 'Nitidez HD por GPU ativada.' : 'Nitidez HD por GPU desativada.');
           return next;
         });
-      } else if (e.key === 'Escape' && selectedCountry) {
+      } else if (e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        if (!soundscapeTarget) {
+          const brazil = countries.find((c) => c.nameEn === 'Brazil') ?? countries[0];
+          if (brazil) handleSelectCountry(brazil);
+        }
+        setJukeboxPlaying((prev) => {
+          const next = !prev;
+          announce(next ? 'Jukebox espacial iniciada.' : 'Jukebox espacial pausada.');
+          return next;
+        });
+      } else if (e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        handleExplainMusic();
+      } else if (['1', '2', '3', '4', '5'].includes(e.key)) {
+        const stemIdx = Number(e.key) - 1;
+        const stemId = STEM_ORDER[stemIdx];
+        if (stemId) handleToggleStemMute(stemId);
+      } else if (e.key === 'Escape' && (selectedCountry || radiusTarget)) {
         handleSelectCountry(null);
+        setRadiusTarget(null);
+        setJukeboxPlaying(false);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
+    announce,
+    countries,
+    handleExplainMusic,
     handleSelectCountry,
     handleSpeakNow,
     handleTogglePlay,
+    handleToggleStemMute,
     handleZoomStep,
     onToggleHighContrast,
+    radiusTarget,
     selectedCountry,
+    soundscapeTarget,
   ]);
 
   const isPrimaryReady = Boolean(readyMap[primaryTrackId]);
@@ -537,6 +858,14 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
         countries={countries}
         allRings={allRings}
         selectedCountry={selectedCountry}
+        selectionMode={selectionMode}
+        radiusTarget={radiusTarget}
+        onPickRadiusCenter={handlePickRadiusCenter}
+        showUnlockMap={showUnlockMap}
+        unlockState={unlockState}
+        soundscapeTelemetry={soundscapeTelemetry}
+        jukeboxPlaying={jukeboxPlaying}
+        audibleStems={audibleStems}
         flyTarget={flyTarget}
         zoomCommand={zoomCommand}
         panCommand={panCommand}
@@ -572,6 +901,20 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
           setHdEnhance((prev) => {
             const next = !prev;
             announce(next ? 'Nitidez HD por GPU ativada.' : 'Nitidez HD por GPU desativada.');
+            return next;
+          })
+        }
+        selectionMode={selectionMode}
+        onChangeSelectionMode={handleChangeSelectionMode}
+        showUnlockMap={showUnlockMap}
+        onToggleUnlockMap={() =>
+          setShowUnlockMap((prev) => {
+            const next = !prev;
+            announce(
+              next
+                ? 'Mapa de iluminação coletiva ativado.'
+                : 'Mapa de iluminação coletiva ocultado.'
+            );
             return next;
           })
         }
@@ -628,12 +971,70 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
           ) : null
         }
         detailCard={
-          selectedCountry ? (
+          soundscapeTarget ? (
             <CountryDetailCard
               country={selectedCountry}
+              radiusTarget={radiusTarget}
               liveReadings={selectedCountryReadings}
-              onClose={() => handleSelectCountry(null)}
+              jukeboxSlot={
+                <JukeboxPanel
+                  regionLabel={soundscapeTarget.label}
+                  isRadiusMode={Boolean(radiusTarget && !selectedCountry)}
+                  radiusKm={radiusKm}
+                  onChangeRadiusKm={(km) => {
+                    setRadiusKm(km);
+                    setRadiusTarget((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            radiusKm: km,
+                            label: `Raio ${km} km`,
+                          }
+                        : null
+                    );
+                  }}
+                  jukeboxPlaying={jukeboxPlaying}
+                  onToggleJukeboxPlay={() => {
+                    setJukeboxPlaying((prev) => {
+                      const next = !prev;
+                      announce(
+                        next
+                          ? `Tocando Jukebox 1 para 1 de ${soundscapeTarget.label}.`
+                          : 'Jukebox pausada.'
+                      );
+                      return next;
+                    });
+                  }}
+                  onExplainMusic={handleExplainMusic}
+                  telemetry={soundscapeTelemetry}
+                  unlockSummary={unlockSummary}
+                  juryUnlockAll={unlockState.juryUnlockAll}
+                  onToggleJuryUnlockAll={() => {
+                    setUnlockState((prev) => {
+                      const nextAll = !prev.juryUnlockAll;
+                      announce(
+                        nextAll
+                          ? 'Modo Júri: todas as 5 camadas musicais liberadas para demonstração.'
+                          : 'Modo Júri desativado: retornando às camadas liberadas pelo coletivo.'
+                      );
+                      return { ...prev, juryUnlockAll: nextAll };
+                    });
+                  }}
+                  onContributeStem={handleContributeStem}
+                  onSimulateCollectiveNext={handleSimulateCollectiveNext}
+                  stemUserMuted={stemUserMuted}
+                  onToggleStemMute={handleToggleStemMute}
+                  onSoloStem={handleSoloStem}
+                  unlockFeedback={unlockFeedback}
+                />
+              }
+              onClose={() => {
+                handleSelectCountry(null);
+                setRadiusTarget(null);
+                setJukeboxPlaying(false);
+              }}
               onZoomIntoCountry={() => {
+                if (!selectedCountry) return;
                 nonceRef.current += 1;
                 setFlyTarget({
                   lon: selectedCountry.lon,
@@ -642,7 +1043,13 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
                   nonce: nonceRef.current,
                 });
               }}
-              onSpeakSummary={() => announce(buildCountryAudioSummary(selectedCountry), true)}
+              onSpeakSummary={() => {
+                if (selectedCountry) {
+                  announce(buildCountryAudioSummary(selectedCountry), true);
+                } else {
+                  handleExplainMusic();
+                }
+              }}
             />
           ) : null
         }
