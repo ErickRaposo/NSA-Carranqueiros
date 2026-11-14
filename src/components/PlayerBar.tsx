@@ -170,7 +170,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
           aria-valuetext={`${formatVideoTime(currentTime)} de ${formatVideoTime(duration)}`}
           data-testid="timeline-slider"
           style={{
-            background: `linear-gradient(to right, #38bdf8 ${progressPct}%, rgba(148,163,184,0.25) ${progressPct}%)`,
+            background: `linear-gradient(to right, #d4d4d8 ${progressPct}%, rgba(161,161,170,0.22) ${progressPct}%)`,
           }}
         />
       </div>

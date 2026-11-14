@@ -412,7 +412,7 @@ export const Astronaut3D: React.FC<Astronaut3DProps> = ({
           : 'h-[320px] w-full max-w-[380px] sm:h-[380px]'
       }
       role="img"
-      aria-label="Astronauta 3D animado acompanhando a explicação do sistema EARTHSONG"
+      aria-label="Astronauta 3D animado acompanhando a explicação do sistema"
     />
   );
 };

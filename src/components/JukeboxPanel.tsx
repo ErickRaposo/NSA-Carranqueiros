@@ -1,12 +1,5 @@
 import React from 'react';
-import { Lock, Pause, Play, Sparkles, Unlock, Volume2 } from 'lucide-react';
-import {
-  IsothermIcon,
-  LightningBoltIcon,
-  No2MoleculeIcon,
-  SpectralBandIcon,
-  WindBarbIcon,
-} from './CartographicIcons';
+import { Pause, Play, Plus, Unlock, Volume2 } from 'lucide-react';
 import {
   RegionUnlockSummary,
   STEM_METAS,
@@ -35,28 +28,13 @@ interface JukeboxPanelProps {
   unlockFeedback: string | null;
 }
 
-function StemIcon({ id }: { id: StemId }) {
-  switch (id) {
-    case 'melody':
-      return <LightningBoltIcon size={14} className="accent-amber" />;
-    case 'harmony':
-      return <SpectralBandIcon size={14} className="accent-orange" />;
-    case 'rhythm':
-      return <IsothermIcon size={14} className="accent-rose" />;
-    case 'bass':
-      return <No2MoleculeIcon size={14} className="accent-emerald" />;
-    case 'fx':
-      return <WindBarbIcon size={14} className="accent-cyan" />;
-  }
-}
-
 function formatStemReadout(id: StemId, t: SoundscapeVisualTelemetry | null): string {
   if (!t) return 'Analisando mapa...';
   switch (id) {
     case 'melody': {
       const panTag =
         t.melodyPan < -0.2 ? 'Oeste L' : t.melodyPan > 0.2 ? 'Leste R' : 'Centro';
-      return `${t.melodyNoteName} · ${panTag}`;
+      return `${t.melodyNoteName} (${panTag})`;
     }
     case 'harmony':
       return `${t.chordName} (${t.keyName})`;
@@ -65,7 +43,7 @@ function formatStemReadout(id: StemId, t: SoundscapeVisualTelemetry | null): str
     case 'bass':
       return `${t.bassNoteName} | ${t.bassCutoffHz}Hz (${t.bassStyle})`;
     case 'fx':
-      return `Wet ${t.windWetPct}% · ${t.windSpeedMsApprox} m/s`;
+      return `Wet ${t.windWetPct}%, ${t.windSpeedMsApprox} m/s`;
   }
 }
 
@@ -111,9 +89,6 @@ export const JukeboxPanel: React.FC<JukeboxPanelProps> = ({
             aria-label="Definir raio geográfico em quilômetros"
             data-testid="radius-km-slider"
           />
-          <p className="jukebox-micro-note">
-            Clique em qualquer ponto do globo/mapa para reposicionar o círculo de leitura musical.
-          </p>
         </div>
       )}
 
@@ -161,7 +136,7 @@ export const JukeboxPanel: React.FC<JukeboxPanelProps> = ({
               data-testid="simulate-collective-btn"
               title="Simular a contribuição de outro membro da comunidade (+1 camada)"
             >
-              <Sparkles size={12} aria-hidden="true" />
+              <Plus size={12} aria-hidden="true" />
               <span>+1 Coletivo</span>
             </button>
           )}
@@ -221,12 +196,10 @@ export const JukeboxPanel: React.FC<JukeboxPanelProps> = ({
                   <span className="stem-key-cap" title={`Atalho teclado ${meta.keyShortcut}`}>
                     {meta.keyShortcut}
                   </span>
-                  <StemIcon id={id} />
                   <div className="stem-titles">
                     <span className="stem-name">
-                      {meta.labelPt} · <small>{meta.layerNamePt}</small>
+                      {meta.labelPt} — <small>{meta.layerNamePt}</small>
                     </span>
-                    <span className="stem-instrument">{meta.instrumentPt}</span>
                   </div>
                 </div>
 
@@ -263,7 +236,6 @@ export const JukeboxPanel: React.FC<JukeboxPanelProps> = ({
                         : `Contribuir desbloqueando ${meta.labelPt} nesta região`
                     }
                   >
-                    <Lock size={11} aria-hidden="true" />
                     <span>Liberar</span>
                   </button>
                 )}
@@ -287,8 +259,6 @@ export const JukeboxPanel: React.FC<JukeboxPanelProps> = ({
                   }}
                 />
               </div>
-
-              <p className="stem-visual-rule">{meta.visualRulePt}</p>
             </div>
           );
         })}

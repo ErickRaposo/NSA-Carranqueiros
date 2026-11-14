@@ -21,24 +21,24 @@ interface IntroOnboardingProps {
 
 const INTRO_STEPS = [
   {
-    tag: '01 · Missão NASA Space Apps',
-    title: 'Olá! Eu sou o MINEIRØ, seu guia orbital.',
-    text: 'Este portal une visualizações reais da NASA (SVS 5011, 5147, 5148, 5153 e 5154) com leitura por voz em português, sonificação e mapa acessível.',
+    tag: '1. Boas-vindas',
+    title: 'Olá! Bem-vindo.',
+    text: 'Aqui você navega por imagens reais de satélite da NASA e transforma dados do planeta em som, música e leitura por voz em português.',
   },
   {
-    tag: '02 · Globo 3D, Mapa 2D e Mistura de Camadas',
-    title: 'Explore o planeta e sobreponha até 5 vídeos.',
-    text: 'Navegue pelo Globo 3D ou Mapa 2D, dê zoom dentro de cada país e misture camadas de raios, ventos, temperatura, CO e NOx com modos de mesclagem em tempo real.',
+    tag: '2. Globo 3D e Camadas',
+    title: 'Explore o mundo do seu jeito.',
+    text: 'Gire o globo em 3D ou veja no mapa plano, dê zoom em qualquer país e misture camadas de raios, ventos, temperatura, CO e NOx em tempo real.',
   },
   {
-    tag: '03 · Destaque Territorial & Logística',
-    title: 'Selecione um país para focar região e rotas.',
-    text: 'Ao clicar ou buscar um país, uma máscara destaca o território escolhido, desloca o mapa para a esquerda e abre o painel direito com fronteiras, portos e corredores.',
+    tag: '3. Países e Rotas',
+    title: 'Clique em um país para focar.',
+    text: 'Ao escolher um território, o mapa destaca a região e abre os detalhes ao lado com fronteiras, portos e informações do local.',
   },
   {
-    tag: '04 · Acessibilidade Universal (WCAG AAA)',
-    title: 'Ciência sentida por voz, som e alto contraste.',
-    text: 'Use as teclas V (voz automática), R (ler local e dados sob o cursor), S (sonificar intensidade), C (alto contraste) e as setas para explorar todo o planeta sem mouse.',
+    tag: '4. Feito para todos',
+    title: 'Voz, som e alto contraste no teclado.',
+    text: 'Aperte V para ativar a voz automática, R para ouvir o ponto atual, S para ouvir o som dos dados e C para alto contraste, sem precisar do mouse.',
   },
 ];
 
@@ -71,7 +71,6 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
     });
   }, []);
 
-  // Automatically speak each step when autoAudio is enabled
   useEffect(() => {
     if (!autoAudio) return;
 
@@ -84,7 +83,6 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
     };
   }, [stepIndex, autoAudio, speakStep]);
 
-  // Pre-warm speech voices list & cleanup on unmount
   useEffect(() => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.getVoices();
@@ -141,36 +139,36 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
   return (
     <main
       style={{ fontSize: `${Math.round(fontScale * 100)}%` }}
-      className={`relative flex min-h-screen w-full items-center justify-center overflow-y-auto px-4 py-8 sm:px-6 ${
+      className={`relative flex h-screen w-full items-center justify-center overflow-hidden px-4 py-6 sm:px-6 ${
         highContrast
           ? 'bg-black text-white'
           : 'bg-gradient-to-br from-[#030816] via-[#07142E] to-[#040B1C] text-slate-100'
       }`}
-      aria-label="Introdução interativa do EARTHSONG com o mascote MINEIRØ"
+      aria-label="Apresentação do sistema"
     >
       {!highContrast && <StarfieldBackground />}
 
       <div
-        className={`relative z-10 flex w-full max-w-4xl flex-col items-center gap-6 rounded-3xl border p-6 shadow-2xl backdrop-blur-md md:flex-row md:gap-8 md:p-10 ${
+        className={`relative z-10 flex w-full max-w-4xl flex-col items-center gap-6 rounded-xl p-6 shadow-2xl md:flex-row md:gap-8 md:p-10 ${
           highContrast
-            ? 'border-2 border-[#facc15] bg-black'
-            : 'border-[#1C325E] bg-[#061024]/90'
+            ? 'bg-black'
+            : 'bg-[#07152e]/95'
         }`}
       >
         {/* Top bar inside card */}
         <div className="flex w-full flex-wrap items-center justify-between gap-2 md:absolute md:top-5 md:right-6 md:left-6 md:w-auto">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-300">
+            <span className="text-xs font-medium text-slate-300">
               Olá, <strong className="text-white">{userName}</strong>
             </span>
             <button
               type="button"
               onClick={onToggleHighContrast}
               aria-pressed={highContrast}
-              className={`inline-flex min-h-[32px] cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
+              className={`inline-flex min-h-[32px] cursor-pointer items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium shadow-sm transition ${
                 highContrast
-                  ? 'border-[#facc15] bg-[#facc15] text-black'
-                  : 'border-[#1C325E] bg-[#0B1936] text-slate-200 hover:border-[#38bdf8]'
+                  ? 'bg-white text-black'
+                  : 'bg-[#0c2044] text-slate-200 hover:bg-[#122d5c]'
               }`}
             >
               <Contrast className="h-3.5 w-3.5" aria-hidden="true" />
@@ -179,10 +177,10 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
             <button
               type="button"
               onClick={onCycleFontScale}
-              className={`inline-flex min-h-[32px] cursor-pointer items-center rounded-full border px-2.5 py-1 text-xs font-semibold transition ${
+              className={`inline-flex min-h-[32px] cursor-pointer items-center rounded-md px-2.5 py-1 text-xs font-medium shadow-sm transition ${
                 highContrast
-                  ? 'border-[#facc15] bg-black text-[#facc15]'
-                  : 'border-[#1C325E] bg-[#0B1936] text-slate-200 hover:border-[#38bdf8]'
+                  ? 'bg-zinc-900 text-white'
+                  : 'bg-[#0c2044] text-slate-200 hover:bg-[#122d5c]'
               }`}
               aria-label={`Tamanho do texto ${Math.round(fontScale * 100)} por cento`}
             >
@@ -197,75 +195,65 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
               onFinish();
             }}
             data-testid="skip-onboarding-btn"
-            className={`min-h-[36px] cursor-pointer rounded-full border px-3.5 py-1 text-xs font-semibold transition ${
+            className={`min-h-[34px] cursor-pointer rounded-md px-3.5 py-1 text-xs font-medium shadow-sm transition ${
               highContrast
-                ? 'border-[#facc15] text-[#facc15] hover:bg-[#1a1a00]'
-                : 'border-[#1C325E] bg-[#0B1936]/70 text-slate-200 hover:border-[#38bdf8] hover:text-white'
+                ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                : 'bg-[#0c2044] text-slate-200 hover:bg-[#122d5c] hover:text-white'
             }`}
           >
             Pular para o Mapa (Esc)
           </button>
         </div>
 
-        {/* Left: 3D Floating Mascot MINEIRØ */}
+        {/* Left: 3D Floating Mascot */}
         <div className="flex w-full flex-col items-center justify-center md:mt-6 md:w-5/12">
           <Mineiro3D stepIndex={stepIndex} isExplaining={isSpeaking || stepIndex > 0} />
-          <span
-            className={`mt-1 rounded-full border px-3 py-0.5 text-[11px] font-bold tracking-widest ${
-              highContrast
-                ? 'border-[#facc15] bg-black text-[#facc15]'
-                : 'border-[#1C325E] bg-[#0B1936] text-slate-200'
-            }`}
-          >
-            MINEIRØ
-          </span>
         </div>
 
         {/* Right: Speech Bubble + Step Navigation */}
         <div className="flex w-full flex-col justify-center md:mt-6 md:w-7/12">
           <div className="sr-only" aria-live="polite">
-            MINEIRØ diz: {current.tag}. {current.title} {current.text}
+            {current.tag}. {current.title} {current.text}
           </div>
 
           {/* Speech Bubble pointing toward MINEIRØ */}
           <div
-            className={`relative rounded-2xl border p-5 shadow-xl sm:p-6 ${
+            className={`relative rounded-xl p-5 shadow-lg sm:p-6 ${
               highContrast
-                ? 'border-2 border-[#facc15] bg-black'
-                : 'border-[#254073] bg-[#0B1936]/95'
+                ? 'bg-zinc-900'
+                : 'bg-[#0c2044]/95'
             }`}
           >
             {/* Desktop left pointer tail */}
             <div
               aria-hidden="true"
-              className={`hidden md:block absolute top-12 -left-2.5 h-5 w-5 rotate-45 border-b border-l ${
+              className={`hidden md:block absolute top-12 -left-2.5 h-5 w-5 rotate-45 ${
                 highContrast
-                  ? 'border-[#facc15] bg-black'
-                  : 'border-[#254073] bg-[#0B1936]'
+                  ? 'bg-zinc-900'
+                  : 'bg-[#0c2044]'
               }`}
             />
             {/* Mobile top pointer tail */}
             <div
               aria-hidden="true"
-              className={`md:hidden absolute -top-2.5 left-1/2 -translate-x-1/2 h-5 w-5 rotate-45 border-t border-l ${
+              className={`md:hidden absolute -top-2.5 left-1/2 -translate-x-1/2 h-5 w-5 rotate-45 ${
                 highContrast
-                  ? 'border-[#facc15] bg-black'
-                  : 'border-[#254073] bg-[#0B1936]'
+                  ? 'bg-zinc-900'
+                  : 'bg-[#0c2044]'
               }`}
             />
 
             <div className="flex items-center justify-between gap-2">
               <span
                 className={`text-xs font-semibold tracking-wider ${
-                  highContrast ? 'text-[#facc15]' : 'text-[#38bdf8]'
+                  highContrast ? 'text-[#facc15]' : 'text-slate-300'
                 }`}
               >
                 {current.tag}
               </span>
 
-              {/* Live Voice Indicator */}
               {isSpeaking && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#163675] px-2.5 py-0.5 text-[10px] font-semibold text-slate-100">
+                <span className="inline-flex items-center gap-1 rounded-md bg-[#163675] px-2.5 py-0.5 text-[10px] font-medium text-slate-100">
                   <Volume2 className="h-3 w-3 animate-pulse" aria-hidden="true" />
                   Falando...
                 </span>
@@ -287,16 +275,16 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
               type="button"
               onClick={handleToggleAudio}
               aria-pressed={isSpeaking}
-              className={`inline-flex min-h-[38px] cursor-pointer items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
+              className={`inline-flex min-h-[38px] cursor-pointer items-center gap-2 rounded-lg px-4 py-1.5 text-xs font-medium shadow-sm transition active:scale-[0.97] ${
                 highContrast
-                  ? 'border-[#facc15] bg-black text-[#facc15] hover:bg-[#1a1a00]'
-                  : 'border-[#254073] bg-[#0B1936] text-slate-100 hover:border-[#38bdf8] hover:bg-[#122650]'
+                  ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                  : 'bg-[#122650] text-slate-100 hover:bg-[#18336b]'
               }`}
             >
               {isSpeaking ? (
                 <>
                   <VolumeX className="h-4 w-4" aria-hidden="true" />
-                  <span>Silenciar MINEIRØ</span>
+                  <span>Silenciar voz</span>
                 </>
               ) : (
                 <>
@@ -306,7 +294,7 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
               )}
             </button>
 
-            <div className="flex items-center gap-2" aria-label="Progresso da introdução">
+            <div className="flex items-center gap-2" aria-label="Progresso da apresentação">
               {INTRO_STEPS.map((_, idx) => (
                 <button
                   key={idx}
@@ -314,11 +302,11 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
                   aria-label={`Ir para passo ${idx + 1} de ${INTRO_STEPS.length}`}
                   aria-current={idx === stepIndex ? 'step' : undefined}
                   onClick={() => setStepIndex(idx)}
-                  className={`h-2.5 cursor-pointer rounded-full transition-all ${
+                  className={`h-2.5 cursor-pointer rounded-sm transition-all ${
                     idx === stepIndex
                       ? highContrast
-                        ? 'w-8 bg-[#facc15]'
-                        : 'w-8 bg-[#38bdf8]'
+                        ? 'w-8 bg-white'
+                        : 'w-8 bg-[#496FB8]'
                       : 'w-2.5 bg-[#1C325E] hover:bg-[#294885]'
                   }`}
                 />
@@ -332,10 +320,10 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
               <button
                 type="button"
                 onClick={handlePrev}
-                className={`inline-flex min-h-[44px] cursor-pointer items-center gap-1 rounded-full border px-4 py-2.5 text-sm font-semibold transition ${
+                className={`inline-flex min-h-[42px] cursor-pointer items-center gap-1 rounded-lg px-4 py-2 text-sm font-medium shadow-sm transition active:scale-[0.97] ${
                   highContrast
-                    ? 'border-[#facc15] bg-black text-[#facc15]'
-                    : 'border-[#1C325E] bg-[#0B1936] text-slate-100 hover:bg-[#122650]'
+                    ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+                    : 'bg-[#122650] text-slate-100 hover:bg-[#18336b]'
                 }`}
               >
                 <ChevronLeft className="h-4 w-4" aria-hidden="true" />
@@ -347,13 +335,13 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
               type="button"
               onClick={handleNext}
               data-testid="onboarding-next-btn"
-              className={`inline-flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition ${
+              className={`inline-flex min-h-[42px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg px-6 py-2 text-sm font-semibold shadow-md transition active:scale-[0.98] ${
                 highContrast
-                  ? 'bg-[#facc15] text-black hover:bg-[#fde047]'
+                  ? 'bg-white text-black hover:bg-zinc-200'
                   : 'bg-[#163675] text-white hover:bg-[#1E4591]'
               }`}
             >
-              <span>{isLast ? 'Abrir Explorador do Mundo' : 'Próximo'}</span>
+              <span>{isLast ? 'Abrir Mapa' : 'Próximo'}</span>
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>

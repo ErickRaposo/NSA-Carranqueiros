@@ -11,7 +11,7 @@ describe('authStorage', () => {
   it('authenticates default admin by username or email', () => {
     const users = [DEFAULT_ADMIN_USER];
     expect(authenticateUser(users, 'admin', '12345')?.name).toBe('Administrador');
-    expect(authenticateUser(users, 'ADMIN@earthsong.space', '12345')?.username).toBe('admin');
+    expect(authenticateUser(users, 'ADMIN@mineiro.space', '12345')?.username).toBe('admin');
     expect(authenticateUser(users, 'admin', 'wrong')).toBeNull();
     expect(authenticateUser(users, '', '12345')).toBeNull();
   });

@@ -1,0 +1,65 @@
+{
+  "version": 2,
+  "skills": {
+    "hallmark": {
+      "source": "Nutlope/hallmark",
+      "sourceType": "github",
+      "skillPath": "skills/hallmark/SKILL.md",
+      "computedHash": "e5d4ee5cf0af2dcc81a23ef49b587fbfd71236ff9f9df9da12d3bf347e26e572"
+    },
+    "impeccable": {
+      "source": "pbakaus/impeccable",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/impeccable/SKILL.md",
+      "computedHash": "c33b2d46e00adf2896eed068c35ad5b4fb0b71e1c54232987a7dfdd1d10d5ce5"
+    },
+    "motion-design-skill": {
+      "source": "akornmeier/motion-design-skill",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "2a1de076405dc263322d4cf6b340ac16ef0c9ea9ca788ae617842e7b6f134c0f"
+    },
+    "playwright": {
+      "source": "PyModel/react-frontend-skills",
+      "sourceType": "github",
+      "skillPath": "skills/playwright/SKILL.md",
+      "computedHash": "d8203a6b136d885089f5e1e66ef1507586ad6076b35160bbea2db215bb9441ca"
+    },
+    "shadcn": {
+      "source": "PyModel/react-frontend-skills",
+      "sourceType": "github",
+      "skillPath": "skills/shadcn/SKILL.md",
+      "computedHash": "9c37b8142ce6b755f010f2893d6561f7e60f2be7bd28491684287e1aa6fb28ff"
+    },
+    "tailwind": {
+      "source": "PyModel/react-frontend-skills",
+      "sourceType": "github",
+      "skillPath": "skills/tailwind/SKILL.md",
+      "computedHash": "48970e0d3348c1785a161f63d7ea3ad3d11d4b0bf0c050e3b2b842ae77ec70e3"
+    },
+    "tanstack-query": {
+      "source": "PyModel/react-frontend-skills",
+      "sourceType": "github",
+      "skillPath": "skills/tanstack-query/SKILL.md",
+      "computedHash": "e6e70c0ce19f3e172212e18732775c9f6e642bc76f86f75d261515c8f6c6f65e"
+    },
+    "typescript": {
+      "source": "PyModel/react-frontend-skills",
+      "sourceType": "github",
+      "skillPath": "skills/typescript/SKILL.md",
+      "computedHash": "62842665b2aad317ff1387080aaebddba22b4e0b49bfe4f55adf60325c1688db"
+    },
+    "ui-visual-composition": {
+      "source": "hueyexe/frontend-agent-skills",
+      "sourceType": "github",
+      "skillPath": "ui-visual-composition/SKILL.md",
+      "computedHash": "27259da5eaebd2782e07d25c187cebd7d5dd9ef07232727e27a3b59a489e6f49"
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-best-practices/SKILL.md",
+      "computedHash": "7991ed4fbecdac23f47c1a40c243e00a212a9e7f3604db93959b3ae11dffe299"
+    }
+  }
+}

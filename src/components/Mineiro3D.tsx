@@ -315,7 +315,7 @@ export const Mineiro3D: React.FC<Mineiro3DProps> = ({
           ? 'h-[148px] w-[132px]'
           : 'h-[320px] w-full max-w-[360px] sm:h-[380px]'
       }
-      aria-label="Mascote 3D MINEIRØ flutuando e gesticulando enquanto explica o sistema"
+      aria-label="Mascote 3D flutuando e gesticulando enquanto explica o sistema"
     />
   );
 };

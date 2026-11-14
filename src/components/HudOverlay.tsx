@@ -1,37 +1,23 @@
 import React, { useMemo, useState } from 'react';
+import mineiroLogo from '../assets/mineiro-logo.png';
 import {
-  ArrowDown,
-  ArrowUp,
-  AudioLines,
-  Contrast,
+  ChevronsUpDown,
   Globe,
-  Layers3,
   LogOut,
   Map as MapIcon,
-  Orbit,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
   Sun,
   Type,
-  User,
-  Volume2,
-  VolumeX,
   X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
 import {
-  MineiroOrbIcon,
   GraticuleIcon,
-  IsothermIcon,
-  LightningBoltIcon,
-  No2MoleculeIcon,
-  OrbitalReticleIcon,
   PolygonBorderIcon,
   SharpenKernelIcon,
-  SpectralBandIcon,
-  WindBarbIcon,
 } from './CartographicIcons';
 import { CountryEntry, searchCountries } from '../geo/countries';
 import {
@@ -40,13 +26,9 @@ import {
   DatasetId,
   LayerConfig,
   NASA_DATASETS,
-  NasaDatasetMeta,
   QUICK_PRESETS,
   QuickPreset,
 } from '../datasets/nasaDatasets';
-import { formatLatLon } from '../geo/projection';
-import { HoverInfo } from './EarthCanvas';
-import { SampledReading } from '../accessibility/a11yEngine';
 
 interface HudOverlayProps {
   viewMode: '3d' | '2d';
@@ -56,8 +38,7 @@ interface HudOverlayProps {
   onSoloLayer: (id: DatasetId) => void;
   onChangeLayerOpacity: (id: DatasetId, opacity: number) => void;
   onChangeLayerBlendMode: (id: DatasetId, mode: BlendMode) => void;
-  onMoveLayer: (id: DatasetId, direction: -1 | 1) => void;
-  onMixAllPreset: () => void;
+  onReorderLayer: (fromId: DatasetId, toId: DatasetId) => void;
   showBorders: boolean;
   onToggleBorders: () => void;
   showGrid: boolean;
@@ -70,46 +51,15 @@ interface HudOverlayProps {
   onChangeSelectionMode: (mode: 'country' | 'radius') => void;
   showUnlockMap: boolean;
   onToggleUnlockMap: () => void;
-  voiceEnabled: boolean;
-  onToggleVoice: () => void;
-  sonifyEnabled: boolean;
-  onToggleSonify: () => void;
-  highContrast: boolean;
-  onToggleHighContrast: () => void;
-  fontScale: number;
-  onCycleFontScale: () => void;
-  onSpeakNow: () => void;
   countries: CountryEntry[];
   selectedCountry: CountryEntry | null;
   onSelectAndFlyCountry: (country: CountryEntry) => void;
   onFlyPreset: (preset: QuickPreset) => void;
   onZoomStep: (delta: number) => void;
-  hoverInfo: HoverInfo | null;
-  hoverReadings: SampledReading[];
-  cameraDistance: number;
-  userName: string;
-  copilotOpen: boolean;
-  onToggleCopilot: () => void;
-  onReopenTour: () => void;
   onLogout: () => void;
   copilotWidget?: React.ReactNode;
   detailCard?: React.ReactNode;
   playerBar?: React.ReactNode;
-}
-
-function DatasetIcon({ category }: { category: NasaDatasetMeta['accentCategory'] }) {
-  switch (category) {
-    case 'lightning':
-      return <LightningBoltIcon size={15} className="accent-amber" />;
-    case 'temperature':
-      return <IsothermIcon size={15} className="accent-rose" />;
-    case 'wind':
-      return <WindBarbIcon size={15} className="accent-cyan" />;
-    case 'co':
-      return <SpectralBandIcon size={15} className="accent-orange" />;
-    case 'nox':
-      return <No2MoleculeIcon size={15} className="accent-emerald" />;
-  }
 }
 
 export const HudOverlay: React.FC<HudOverlayProps> = ({
@@ -120,8 +70,7 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
   onSoloLayer,
   onChangeLayerOpacity,
   onChangeLayerBlendMode,
-  onMoveLayer,
-  onMixAllPreset,
+  onReorderLayer,
   showBorders,
   onToggleBorders,
   showGrid,
@@ -134,27 +83,11 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
   onChangeSelectionMode,
   showUnlockMap,
   onToggleUnlockMap,
-  voiceEnabled,
-  onToggleVoice,
-  sonifyEnabled,
-  onToggleSonify,
-  highContrast,
-  onToggleHighContrast,
-  fontScale,
-  onCycleFontScale,
-  onSpeakNow,
   countries,
   selectedCountry,
   onSelectAndFlyCountry,
   onFlyPreset,
   onZoomStep,
-  hoverInfo,
-  hoverReadings,
-  cameraDistance,
-  userName,
-  copilotOpen,
-  onToggleCopilot,
-  onReopenTour,
   onLogout,
   copilotWidget,
   detailCard,
@@ -163,13 +96,14 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [draggedLayerId, setDraggedLayerId] = useState<DatasetId | null>(null);
+  const [dragOverLayerId, setDragOverLayerId] = useState<DatasetId | null>(null);
 
   const searchResults = useMemo(
     () => searchCountries(searchQuery, countries, 8),
     [searchQuery, countries]
   );
 
-  const approxAltKm = Math.max(400, Math.round((cameraDistance - 1) * 6371));
   const enabledLayers = layers.filter((l) => l.enabled);
 
   // Display top-most layer first in the stack UI while keeping shader bottom-to-top
@@ -184,13 +118,11 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
       {/* TOP BAR */}
       <header className="top-hud console-frame" aria-label="Barra principal e acessibilidade">
         <div className="brand-block">
-          <div className="brand-reticle" aria-hidden="true">
-            <OrbitalReticleIcon size={18} />
-          </div>
-          <div>
-            <h1 className="brand-title font-display">EARTHSONG</h1>
-            <p className="brand-subtitle">SVS 5011–5154 / Console Cartográfico</p>
-          </div>
+          <img
+            src={mineiroLogo}
+            alt="Logo"
+            className="h-7 w-auto object-contain"
+          />
         </div>
 
         {/* COUNTRY SEARCH */}
@@ -253,70 +185,8 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
           )}
         </div>
 
-        {/* ACCESSIBILITY + MAP CONTROLS */}
+        {/* MAP CONTROLS & SESSION */}
         <div className="top-actions">
-          <div className="a11y-toolbar" role="group" aria-label="Recursos de acessibilidade">
-            <button
-              type="button"
-              className={`toggle-chip ${voiceEnabled ? 'active' : ''}`}
-              onClick={onToggleVoice}
-              aria-pressed={voiceEnabled}
-              title="Ativar ou desativar narração automática por voz em PT-BR (Tecla V)"
-              data-testid="a11y-voice-btn"
-            >
-              {voiceEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
-              <span>Voz (V)</span>
-            </button>
-
-            <button
-              type="button"
-              className="toggle-chip"
-              onClick={onSpeakNow}
-              title="Ouvir posição e leituras atmosféricas atuais (Tecla R)"
-              data-testid="a11y-read-now-btn"
-            >
-              <Volume2 size={14} />
-              <span>Ler (R)</span>
-            </button>
-
-            <button
-              type="button"
-              className={`toggle-chip ${sonifyEnabled ? 'active' : ''}`}
-              onClick={onToggleSonify}
-              aria-pressed={sonifyEnabled}
-              title="Sonificação: converter intensidade dos dados em tom sonoro (Tecla S)"
-              data-testid="a11y-sonify-btn"
-            >
-              <AudioLines size={14} />
-              <span>Som (S)</span>
-            </button>
-
-            <button
-              type="button"
-              className={`toggle-chip ${highContrast ? 'active' : ''}`}
-              onClick={onToggleHighContrast}
-              aria-pressed={highContrast}
-              title="Modo Alto Contraste e Baixa Visão (Tecla C)"
-              data-testid="a11y-contrast-btn"
-            >
-              <Contrast size={14} />
-              <span>Contraste (C)</span>
-            </button>
-
-            <button
-              type="button"
-              className="toggle-chip"
-              onClick={onCycleFontScale}
-              title="Alternar tamanho do texto da interface"
-              aria-label={`Tamanho da fonte atual ${Math.round(fontScale * 100)} por cento`}
-              data-testid="a11y-font-btn"
-            >
-              <span>A+{Math.round(fontScale * 100)}%</span>
-            </button>
-          </div>
-
-          <span className="toolbar-divider" aria-hidden="true" />
-
           <div className="segmented-control" role="group" aria-label="Modo de visualização">
             <button
               type="button"
@@ -428,35 +298,7 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
 
           <span className="toolbar-divider" aria-hidden="true" />
 
-          <div className="session-controls" role="group" aria-label="Guia MINEIRØ e sessão do usuário">
-            <button
-              type="button"
-              className={`toggle-chip ${copilotOpen ? 'active' : ''}`}
-              onClick={onToggleCopilot}
-              aria-pressed={copilotOpen}
-              title="Mostrar ou ocultar o Guia 3D MINEIRØ"
-              data-testid="toggle-copilot-btn"
-            >
-              <MineiroOrbIcon size={14} />
-              <span>MINEIRØ</span>
-            </button>
-
-            <button
-              type="button"
-              className="toggle-chip"
-              onClick={onReopenTour}
-              title="Reabrir introdução guiada pelo MINEIRØ"
-              data-testid="reopen-tour-btn"
-            >
-              <Orbit size={14} aria-hidden="true" />
-              <span>Tour</span>
-            </button>
-
-            <span className="user-pill" title={`Sessão ativa: ${userName}`} data-testid="logged-user-pill">
-              <User size={13} aria-hidden="true" />
-              <span>{userName}</span>
-            </span>
-
+          <div className="session-controls" role="group" aria-label="Sessão do usuário">
             <button
               type="button"
               className="toggle-chip logout-chip"
@@ -480,22 +322,9 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
           >
             <div className="panel-header">
               <div className="panel-title-row">
-                <Layers3 size={15} aria-hidden="true" />
                 <span>Mixer NASA ({enabledLayers.length}/5)</span>
               </div>
               <div className="panel-header-actions">
-                {!panelCollapsed && (
-                  <button
-                    type="button"
-                    className="mini-action-btn"
-                    onClick={onMixAllPreset}
-                    title="Ativar todas as 5 camadas simultaneamente com mesclagem"
-                    data-testid="mix-all-btn"
-                  >
-                    <Layers3 size={12} aria-hidden="true" />
-                    <span>Misturar 5</span>
-                  </button>
-                )}
                 <button
                   type="button"
                   className="icon-btn"
@@ -525,19 +354,50 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                 </nav>
 
                 <p className="mixer-hint">
-                  Combine camadas simultâneas, reordene a pilha e selecione o método de mesclagem.
+                  Ative, arraste ou mescle camadas.
                 </p>
 
             <div className="layer-stack-list">
-              {displayLayers.map((cfg, displayIdx) => {
+              {displayLayers.map((cfg) => {
                 const ds = NASA_DATASETS[cfg.id];
-                const isTop = displayIdx === 0;
-                const isBottom = displayIdx === displayLayers.length - 1;
+                const isDragging = draggedLayerId === cfg.id;
+                const isDragOver = dragOverLayerId === cfg.id && draggedLayerId !== cfg.id;
 
                 return (
                   <div
                     key={cfg.id}
-                    className={`mixer-card ${cfg.enabled ? 'is-enabled' : ''}`}
+                    draggable
+                    onDragStart={(e) => {
+                      setDraggedLayerId(cfg.id);
+                      e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.setData('text/plain', cfg.id);
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (dragOverLayerId !== cfg.id) {
+                        setDragOverLayerId(cfg.id);
+                      }
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverLayerId === cfg.id) {
+                        setDragOverLayerId(null);
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const fromId = (e.dataTransfer.getData('text/plain') as DatasetId) || draggedLayerId;
+                      if (fromId && fromId !== cfg.id) {
+                        onReorderLayer(fromId, cfg.id);
+                      }
+                      setDraggedLayerId(null);
+                      setDragOverLayerId(null);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedLayerId(null);
+                      setDragOverLayerId(null);
+                    }}
+                    className={`mixer-card ${cfg.enabled ? 'is-enabled' : ''} ${isDragging ? 'is-dragging' : ''} ${isDragOver ? 'is-drag-over' : ''}`}
                     data-testid={`mixer-card-${cfg.id}`}
                   >
                     <div className="mixer-card-top">
@@ -549,7 +409,6 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                           aria-label={`Ativar camada ${ds.shortName} (${ds.svsId})`}
                           data-testid={`toggle-${cfg.id}`}
                         />
-                        <DatasetIcon category={ds.accentCategory} />
                         <span className="mixer-title">
                           {ds.shortName} <small className="muted-tag">{ds.svsId}</small>
                         </span>
@@ -565,26 +424,13 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                         >
                           Solo
                         </button>
-                        <button
-                          type="button"
-                          className="tiny-icon-btn"
-                          disabled={isTop}
-                          onClick={() => onMoveLayer(cfg.id, 1)}
-                          aria-label={`Mover ${ds.shortName} para cima`}
-                          title="Mover para cima na pilha"
+                        <span
+                          className="drag-handle"
+                          title="Arraste para cima ou para baixo para reordenar"
+                          aria-label={`Arrastar ${ds.shortName} para reordenar`}
                         >
-                          <ArrowUp size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          className="tiny-icon-btn"
-                          disabled={isBottom}
-                          onClick={() => onMoveLayer(cfg.id, -1)}
-                          aria-label={`Mover ${ds.shortName} para baixo`}
-                          title="Mover para baixo na pilha"
-                        >
-                          <ArrowDown size={12} />
-                        </button>
+                          <ChevronsUpDown size={14} aria-hidden="true" />
+                        </span>
                       </div>
                     </div>
 
@@ -654,8 +500,6 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
         </div>
 
         <div className="hud-center-col">
-          {copilotWidget}
-
           {/* RIGHT ZOOM STEPPER */}
           <div className="right-zoom-stack console-frame" role="group" aria-label="Controles de zoom do mapa">
             <button
@@ -679,36 +523,14 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
           </div>
         </div>
 
-        {detailCard}
+        <div className="hud-right-col">
+          {detailCard}
+          {copilotWidget}
+        </div>
       </div>
 
-      {/* DOCKED BOTTOM TELEMETRY + PLAYER CONSOLE */}
+      {/* DOCKED BOTTOM PLAYER CONSOLE */}
       <div className="bottom-console-dock">
-        <div className="telemetry-strip console-frame" data-testid="telemetry-bar">
-          <span className="telemetry-cell">
-            <strong>ALT</strong> {approxAltKm.toLocaleString('pt-BR')} km
-          </span>
-          <span className="sep" aria-hidden="true">|</span>
-          <span className="telemetry-cell">
-            <strong>COORD</strong>{' '}
-            {hoverInfo ? formatLatLon(hoverInfo.lat, hoverInfo.lon) : 'Passe o cursor ou use setas'}
-          </span>
-          {hoverInfo?.country && (
-            <>
-              <span className="sep" aria-hidden="true">|</span>
-              <span className="country-tag">{hoverInfo.country.namePt}</span>
-            </>
-          )}
-          {hoverReadings[0] && (
-            <>
-              <span className="sep" aria-hidden="true">|</span>
-              <span className="reading-inline">
-                {hoverReadings[0].svsId}: {hoverReadings[0].labelPt}
-              </span>
-            </>
-          )}
-        </div>
-
         {playerBar}
       </div>
     </div>

@@ -99,7 +99,7 @@ export interface UnlockSyncAdapter {
   save(state: CommunityUnlockState): void;
 }
 
-const STORAGE_KEY = 'earthsong_collective_unlocks_v1';
+const STORAGE_KEY = 'mineiro_collective_unlocks_v1';
 
 export function buildCountryRegionKey(country: CountryEntry): string {
   return `country:${country.id}`;

@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { Disc3, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { Disc3, Eye, EyeOff, UserRound } from 'lucide-react';
+import mineiroLogo from '../assets/mineiro-logo.png';
 
 interface LoginPageProps {
   highContrast: boolean;
@@ -47,24 +48,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   };
 
   const inputClass = highContrast
-    ? 'w-full rounded-lg border-2 border-[#facc15] bg-black px-4 py-3 text-sm text-white placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#facc15]'
-    : 'w-full rounded-lg border border-[#1C325E] bg-[#0B1936] px-4 py-3 text-sm text-slate-100 placeholder:text-slate-400 transition focus:border-[#38bdf8] focus:outline-none focus:ring-2 focus:ring-[#38bdf8]/25';
+    ? 'w-full rounded-lg bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-white'
+    : 'w-full rounded-lg bg-[#0c1a36] px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-400 shadow-inner transition focus:bg-[#122449] focus:outline-none focus:ring-2 focus:ring-blue-400/60';
 
   return (
     <>
       <div className="text-center">
-        <span
-          className={`inline-block rounded-full border px-3 py-1 text-xs font-semibold ${
-            highContrast
-              ? 'border-[#facc15] text-[#facc15]'
-              : 'border-[#1C325E] bg-[#0B1936]/80 text-[#38bdf8]'
-          }`}
-        >
-          Portal EARTHSONG · NASA SVS
-        </span>
-        <h1 className="font-display mt-3 text-3xl font-bold tracking-tight">Entrar</h1>
-        <p className="mt-1.5 text-sm text-slate-300">
-          Acesse o explorador acessível da Terra com 5 camadas climáticas da NASA.
+        <img
+          src={mineiroLogo}
+          alt="Logo"
+          className="mx-auto h-11 w-auto object-contain"
+        />
+        <h1 className="font-display mt-4 text-2xl font-bold tracking-tight text-slate-100">
+          Entrar
+        </h1>
+        <p className="mt-1 text-sm text-slate-300">
+          Explore os dados da Terra com som e narração em português.
         </p>
       </div>
 
@@ -87,10 +86,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       {infoMsg && (
         <div
           role="status"
-          className={`mt-5 rounded-lg border p-3 text-xs font-medium ${
+          className={`mt-5 rounded-lg p-3 text-xs font-medium ${
             highContrast
-              ? 'border-white bg-black text-white'
-              : 'border-[#38bdf8]/40 bg-[#0B1936] text-slate-200'
+              ? 'bg-zinc-900 text-white'
+              : 'bg-[#0f2042] text-slate-200'
           }`}
         >
           {infoMsg}
@@ -109,7 +108,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             id="login-identifier"
             type="text"
             autoComplete="username"
-            placeholder="admin ou admin@earthsong.space"
+            placeholder="admin ou admin@mineiro.space"
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             className={inputClass}
@@ -153,41 +152,41 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         <button
           type="submit"
           data-testid="login-submit-btn"
-          className={`mt-2 w-full min-h-[44px] cursor-pointer rounded-full py-3 text-sm font-semibold transition active:scale-[0.99] ${
+          className={`mt-2 w-full min-h-[42px] cursor-pointer rounded-lg py-2.5 text-sm font-semibold shadow-md transition active:scale-[0.98] ${
             highContrast
-              ? 'bg-[#facc15] text-black hover:bg-[#fde047]'
-              : 'bg-[#163675] text-white hover:bg-[#1E4591]'
+              ? 'bg-white text-black hover:bg-zinc-200'
+              : 'bg-[#1a3a7a] text-white hover:bg-[#234b9c]'
           }`}
         >
-          Entrar na missão
+          Entrar
         </button>
 
         <button
           type="button"
           onClick={onEnterAsGuest}
           data-testid="guest-login-btn"
-          className={`flex w-full min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-full border py-2.5 text-sm font-semibold transition ${
+          className={`flex w-full min-h-[42px] cursor-pointer items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium shadow-sm transition active:scale-[0.98] ${
             highContrast
-              ? 'border-2 border-[#facc15] bg-black text-[#facc15] hover:bg-[#1a1a00]'
-              : 'border-[#38bdf8]/45 bg-[#0B1936] text-[#38bdf8] hover:border-[#38bdf8] hover:bg-[#102652]'
+              ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+              : 'bg-[#0f2042] text-slate-200 hover:bg-[#172d59] hover:text-white'
           }`}
         >
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
-          <span>Entrar como Visitante (Tour Guiado)</span>
+          <UserRound className="h-4 w-4" aria-hidden="true" />
+          <span>Entrar como visitante</span>
         </button>
 
         <button
           type="button"
           onClick={onEnterJuryMode}
           data-testid="jury-quick-btn"
-          className={`flex w-full min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-full border py-2.5 text-sm font-semibold transition ${
+          className={`flex w-full min-h-[42px] cursor-pointer items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium shadow-sm transition active:scale-[0.98] ${
             highContrast
-              ? 'border-2 border-white bg-black text-white hover:bg-[#1a1a1a]'
-              : 'border-amber-400/50 bg-[#171204]/90 text-amber-300 hover:border-amber-300 hover:bg-[#261d06]'
+              ? 'bg-zinc-900 text-white hover:bg-zinc-800'
+              : 'bg-[#0f2042]/90 text-slate-200 hover:bg-[#172d59] hover:text-white'
           }`}
         >
           <Disc3 className="h-4 w-4" aria-hidden="true" />
-          <span>Modo Júri — Jukebox Coletiva (Sem Login)</span>
+          <span>Modo Júri (Jukebox Coletiva)</span>
         </button>
       </form>
 

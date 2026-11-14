@@ -56,8 +56,8 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
   };
 
   const inputClass = highContrast
-    ? 'w-full rounded-lg border-2 border-[#facc15] bg-black px-4 py-2.5 text-sm text-white placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#facc15]'
-    : 'w-full rounded-lg border border-[#1C325E] bg-[#0B1936] px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-400 transition focus:border-[#38bdf8] focus:outline-none focus:ring-2 focus:ring-[#38bdf8]/25';
+    ? 'w-full rounded-lg bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-white'
+    : 'w-full rounded-lg bg-[#0c1a36] px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-400 shadow-inner transition focus:bg-[#122449] focus:outline-none focus:ring-2 focus:ring-blue-400/60';
 
   return (
     <>
@@ -192,10 +192,10 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
 
         <button
           type="submit"
-          className={`mt-2 w-full min-h-[44px] cursor-pointer rounded-full py-3 text-sm font-semibold transition active:scale-[0.99] ${
+          className={`mt-2 w-full min-h-[42px] cursor-pointer rounded-lg py-2.5 text-sm font-semibold shadow-md transition active:scale-[0.98] ${
             highContrast
-              ? 'bg-[#facc15] text-black hover:bg-[#fde047]'
-              : 'bg-[#163675] text-white hover:bg-[#1E4591]'
+              ? 'bg-white text-black hover:bg-zinc-200'
+              : 'bg-[#1a3a7a] text-white hover:bg-[#234b9c]'
           }`}
         >
           Cadastrar e continuar

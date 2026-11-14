@@ -635,7 +635,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
     const gridUniforms: Record<string, THREE.IUniform> = {
       uFlatMix: { value: navRef.current.flatMix },
-      uColor: { value: new THREE.Color('#38bdf8') },
+      uColor: { value: new THREE.Color('#6488cc') },
       uOpacity: { value: 0.14 },
     };
     const gridGeo = buildMorphGraticuleGeometry(30, 15);
@@ -667,7 +667,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
     const highlightUniforms: Record<string, THREE.IUniform> = {
       uFlatMix: { value: navRef.current.flatMix },
-      uColor: { value: new THREE.Color('#38bdf8') },
+      uColor: { value: new THREE.Color('#6488cc') },
       uOpacity: { value: 1.0 },
     };
     const highlightMat = new THREE.ShaderMaterial({
@@ -920,7 +920,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
           ? 0.28
           : 0.45;
       (highlightUniforms.uColor.value as THREE.Color).set(
-        p.highContrast ? '#facc15' : '#38bdf8'
+        p.highContrast ? '#facc15' : '#6488cc'
       );
 
       // Bind up to 5 stacked layer uniforms bottom-to-top
@@ -1092,7 +1092,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
             const cosLat = Math.max(0.25, Math.cos((rt.centerLat * Math.PI) / 180));
             const lonDeg = rt.radiusKm / (111.32 * cosLat);
             fxCtx.save();
-            fxCtx.strokeStyle = p.highContrast ? '#facc15' : '#38bdf8';
+            fxCtx.strokeStyle = p.highContrast ? '#facc15' : '#6488cc';
             fxCtx.lineWidth = 1.8;
             fxCtx.setLineDash([6, 4]);
             fxCtx.beginPath();
@@ -1118,7 +1118,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
             fxCtx.setLineDash([]);
             const centerPt = projectGeo(rt.centerLon, rt.centerLat);
             if (centerPt) {
-              fxCtx.strokeStyle = p.highContrast ? '#ffffff' : '#38bdf8';
+              fxCtx.strokeStyle = p.highContrast ? '#ffffff' : '#6488cc';
               fxCtx.beginPath();
               fxCtx.moveTo(centerPt.x - 6, centerPt.y);
               fxCtx.lineTo(centerPt.x + 6, centerPt.y);
@@ -1136,7 +1136,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
                 topPt.x - 36,
                 topPt.y - 12,
                 `Raio ${rt.radiusKm} km`,
-                p.highContrast ? '#facc15' : '#38bdf8'
+                p.highContrast ? '#facc15' : '#6488cc'
               );
             }
             fxCtx.restore();
@@ -1212,7 +1212,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
             // FX / Wind: dual sky-blue wind corridor streamlines + Wet %
             if (stems.fx && tel.windCorridors.length > 0) {
-              fxCtx.strokeStyle = p.highContrast ? '#facc15' : '#38bdf8';
+              fxCtx.strokeStyle = p.highContrast ? '#facc15' : '#6488cc';
               fxCtx.lineWidth = 1.5;
               for (const wc of tel.windCorridors.slice(0, 4)) {
                 const p1 = projectGeo(wc.lon, wc.lat);
@@ -1229,7 +1229,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
               }
               const wPt = projectGeo(tel.windCorridors[0].lon, tel.windCorridors[0].lat);
               if (wPt) {
-                drawPill(wPt.x, wPt.y - 16, `Vento · Wet ${tel.windWetPct}%`, p.highContrast ? '#facc15' : '#38bdf8');
+                drawPill(wPt.x, wPt.y - 16, `Vento · Wet ${tel.windWetPct}%`, p.highContrast ? '#facc15' : '#6488cc');
               }
             }
 

@@ -11,19 +11,19 @@ export interface AuthSession {
   onboardingDone: boolean;
 }
 
-const USERS_STORAGE_KEY = 'earthsong_users_v1';
-const SESSION_STORAGE_KEY = 'earthsong_session_v1';
+const USERS_STORAGE_KEY = 'mineiro_users_v1';
+const SESSION_STORAGE_KEY = 'mineiro_session_v1';
 
 export const DEFAULT_ADMIN_USER: UserAccount = {
   name: 'Administrador',
-  email: 'admin@earthsong.space',
+  email: 'admin@mineiro.space',
   username: 'admin',
   password: '12345',
 };
 
 export const GUEST_USER: UserAccount = {
   name: 'Visitante',
-  email: 'visitante@earthsong.space',
+  email: 'visitante@mineiro.space',
   username: 'visitante',
   password: '',
   isGuest: true,
@@ -31,7 +31,7 @@ export const GUEST_USER: UserAccount = {
 
 export const JURY_USER: UserAccount = {
   name: 'Júri Space Apps',
-  email: 'juri@earthsong.space',
+  email: 'juri@mineiro.space',
   username: 'juri',
   password: '',
   isGuest: true,

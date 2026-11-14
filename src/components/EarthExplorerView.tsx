@@ -55,7 +55,7 @@ interface EarthExplorerViewProps {
   onToggleHighContrast: () => void;
   fontScale: number;
   onCycleFontScale: () => void;
-  onReopenTour: () => void;
+  onReopenTour?: () => void;
   onLogout: () => void;
 }
 
@@ -67,7 +67,6 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
   onToggleHighContrast,
   fontScale,
   onCycleFontScale,
-  onReopenTour,
   onLogout,
 }) => {
   const { countries, allRings } = useMemo(() => loadWorldCountries(), []);
@@ -109,11 +108,10 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
   const synthRef = useRef<SoundscapeSynthPlayer | null>(null);
   const stepCounterRef = useRef(0);
 
-  const [copilotOpen, setCopilotOpen] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [sonifyEnabled, setSonifyEnabled] = useState(false);
   const [liveAnnouncement, setLiveAnnouncement] = useState(
-    'Explorador EARTHSONG carregado. Use Tab para navegar ou setas para mover o globo.'
+    'Explorador carregado. Use Tab para navegar ou setas para mover o globo.'
   );
 
   const [selectedCountry, setSelectedCountry] = useState<CountryEntry | null>(null);
@@ -208,29 +206,18 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
     setLayers((prev) => prev.map((l) => (l.id === id ? { ...l, blendMode } : l)));
   }, []);
 
-  const handleMoveLayer = useCallback((id: DatasetId, direction: -1 | 1) => {
+  const handleReorderLayer = useCallback((fromId: DatasetId, toId: DatasetId) => {
+    if (fromId === toId) return;
     setLayers((prev) => {
-      const idx = prev.findIndex((l) => l.id === id);
-      if (idx === -1) return prev;
-      const targetIdx = idx + direction;
-      if (targetIdx < 0 || targetIdx >= prev.length) return prev;
+      const fromIdx = prev.findIndex((l) => l.id === fromId);
+      const toIdx = prev.findIndex((l) => l.id === toId);
+      if (fromIdx === -1 || toIdx === -1) return prev;
       const next = [...prev];
-      const [moved] = next.splice(idx, 1);
-      next.splice(targetIdx, 0, moved);
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
       return next;
     });
   }, []);
-
-  const handleMixAllPreset = useCallback(() => {
-    setLayers([
-      { id: 'svs5148', enabled: true, opacity: 1.0, blendMode: 'normal' },
-      { id: 'svs5147', enabled: true, opacity: 0.55, blendMode: 'overlay' },
-      { id: 'svs5153', enabled: true, opacity: 0.65, blendMode: 'screen' },
-      { id: 'svs5154', enabled: true, opacity: 0.65, blendMode: 'screen' },
-      { id: 'svs5011', enabled: true, opacity: 0.85, blendMode: 'add' },
-    ]);
-    announce('Todas as 5 camadas da NASA ativadas em modo mesclado.');
-  }, [announce]);
 
   const getActiveVideos = useCallback((): HTMLVideoElement[] => {
     const list: HTMLVideoElement[] = [];
@@ -888,8 +875,7 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
         onSoloLayer={handleSoloLayer}
         onChangeLayerOpacity={handleChangeLayerOpacity}
         onChangeLayerBlendMode={handleChangeLayerBlendMode}
-        onMoveLayer={handleMoveLayer}
-        onMixAllPreset={handleMixAllPreset}
+        onReorderLayer={handleReorderLayer}
         showBorders={showBorders}
         onToggleBorders={() => setShowBorders((v) => !v)}
         showGrid={showGrid}
@@ -918,57 +904,38 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
             return next;
           })
         }
-        voiceEnabled={voiceEnabled}
-        onToggleVoice={() =>
-          setVoiceEnabled((prev) => {
-            const next = !prev;
-            if (!next) stopSpeech();
-            else speakTextPt('Narração por voz em português ativada.');
-            return next;
-          })
-        }
-        sonifyEnabled={sonifyEnabled}
-        onToggleSonify={() => setSonifyEnabled((v) => !v)}
-        highContrast={highContrast}
-        onToggleHighContrast={onToggleHighContrast}
-        fontScale={fontScale}
-        onCycleFontScale={onCycleFontScale}
-        onSpeakNow={handleSpeakNow}
         countries={countries}
         selectedCountry={selectedCountry}
         onSelectAndFlyCountry={handleSelectCountry}
         onFlyPreset={handleFlyPreset}
         onZoomStep={handleZoomStep}
-        hoverInfo={hoverInfo}
-        hoverReadings={hoverReadings}
-        cameraDistance={cameraDistance}
-        userName={userName}
-        copilotOpen={copilotOpen}
-        onToggleCopilot={() => setCopilotOpen((v) => !v)}
-        onReopenTour={() => {
-          stopSpeech();
-          onReopenTour();
-        }}
         onLogout={() => {
           stopSpeech();
           onLogout();
         }}
         copilotWidget={
-          copilotOpen ? (
-            <AstronautCopilot
-              selectedCountry={selectedCountry}
-              voiceEnabled={voiceEnabled}
-              sonifyEnabled={sonifyEnabled}
-              liveAnnouncement={liveAnnouncement}
-              onSpeakNow={handleSpeakNow}
-              onToggleSonify={() => setSonifyEnabled((v) => !v)}
-              onReopenTour={() => {
-                stopSpeech();
-                onReopenTour();
-              }}
-              onMinimize={() => setCopilotOpen(false)}
-            />
-          ) : null
+          <AstronautCopilot
+            selectedCountry={selectedCountry}
+            userName={userName}
+            approxAltKm={Math.max(400, Math.round((cameraDistance - 1) * 6371))}
+            hoverInfo={hoverInfo}
+            voiceEnabled={voiceEnabled}
+            sonifyEnabled={sonifyEnabled}
+            highContrast={highContrast}
+            fontScale={fontScale}
+            liveAnnouncement={liveAnnouncement}
+            onToggleVoice={() =>
+              setVoiceEnabled((prev) => {
+                const next = !prev;
+                if (!next) stopSpeech();
+                else speakTextPt('Narração por voz em português ativada.');
+                return next;
+              })
+            }
+            onToggleSonify={() => setSonifyEnabled((v) => !v)}
+            onToggleHighContrast={onToggleHighContrast}
+            onCycleFontScale={onCycleFontScale}
+          />
         }
         detailCard={
           soundscapeTarget ? (

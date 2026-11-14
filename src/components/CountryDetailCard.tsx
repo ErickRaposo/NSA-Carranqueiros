@@ -47,11 +47,8 @@ export const CountryDetailCard: React.FC<CountryDetailCardProps> = ({
       <div className="detail-card-header">
         <div>
           <div className="detail-kicker">
-            <OrbitalReticleIcon size={12} />
-            <span>{isRadius ? 'Alvo por Raio Geográfico' : 'Dossiê & Jukebox 1:1'}</span>
-            <span className="detail-iso-tag">
-              {country ? `ISO ${country.id}` : `${radiusTarget?.radiusKm} km`}
-            </span>
+            <span>{isRadius ? 'Raio Geográfico' : 'Dossiê'}</span>
+            {country && <span className="detail-iso-tag">ISO {country.id}</span>}
           </div>
           <h2 className="detail-title font-display">
             {country ? country.namePt : radiusTarget?.label}
@@ -155,7 +152,6 @@ export const CountryDetailCard: React.FC<CountryDetailCardProps> = ({
 
           <section className="detail-section">
             <h3 className="detail-section-title">
-              <span className="detail-section-index">01</span>
               <span>Panorama Regional</span>
             </h3>
             <p className="detail-text">{logistics.summaryPt}</p>
@@ -168,7 +164,6 @@ export const CountryDetailCard: React.FC<CountryDetailCardProps> = ({
 
           <section className="detail-section">
             <h3 className="detail-section-title">
-              <span className="detail-section-index">02</span>
               <span>Logística Marítima e Portuária</span>
             </h3>
             <p className="detail-text">{logistics.maritimePortsPt}</p>
@@ -176,7 +171,6 @@ export const CountryDetailCard: React.FC<CountryDetailCardProps> = ({
 
           <section className="detail-section">
             <h3 className="detail-section-title">
-              <span className="detail-section-index">03</span>
               <span>Corredores Aéreos e Terrestres</span>
             </h3>
             <p className="detail-text">{logistics.airAndLandCorridorsPt}</p>
