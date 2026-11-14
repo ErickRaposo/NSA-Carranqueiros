@@ -131,6 +131,7 @@ export function App(): React.ReactElement {
         onExploreEarth={handleEnterAsGuest}
         onEnterJuryMode={handleEnterJuryMode}
         onOpenAuth={() => setAuthView('login')}
+        onOpenRegister={() => setAuthView('register')}
       />
     );
   }
@@ -154,10 +155,10 @@ export function App(): React.ReactElement {
         <button
           type="button"
           onClick={() => setAuthView('portal')}
-          className="mb-3 inline-flex min-h-[36px] cursor-pointer items-center gap-1.5 text-xs font-semibold text-slate-300 underline-offset-4 hover:text-white hover:underline"
+          className="mb-3 inline-flex min-h-[36px] cursor-pointer items-center text-xs font-semibold text-slate-300 underline-offset-4 hover:text-white hover:underline"
           data-testid="back-to-portal-btn"
         >
-          ← Voltar ao Portal
+          Voltar
         </button>
 
         {authView === 'login' ? (

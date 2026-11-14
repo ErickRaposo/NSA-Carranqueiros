@@ -295,9 +295,13 @@ export const Mineiro3D: React.FC<Mineiro3DProps> = ({
       renderer.setSize(w, h);
     };
 
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(handleResize) : null;
+    resizeObserver?.observe(container);
     window.addEventListener('resize', handleResize);
 
     return () => {
+      resizeObserver?.disconnect();
       window.removeEventListener('resize', handleResize);
       window.cancelAnimationFrame(frameId);
       renderer.dispose();

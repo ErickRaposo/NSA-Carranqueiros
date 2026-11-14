@@ -612,7 +612,7 @@ export const PlayerHUD: React.FC<PlayerHUDProps> = ({
               data-testid="logout-btn"
             >
               <LogOut size={13} aria-hidden="true" />
-              <span>{isGuestSession ? 'Voltar ao Portal Inicial' : 'Sair da Conta'}</span>
+              <span>{isGuestSession ? 'Voltar' : 'Sair da Conta'}</span>
             </button>
           </div>
         </div>

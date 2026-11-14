@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ArrowRight,
-  ChevronLeft,
   Contrast,
   Volume2,
   VolumeX,
@@ -320,13 +319,12 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
               <button
                 type="button"
                 onClick={handlePrev}
-                className={`inline-flex min-h-[42px] cursor-pointer items-center gap-1 rounded-lg px-4 py-2 text-sm font-medium shadow-sm transition active:scale-[0.97] ${
+                className={`inline-flex min-h-[42px] cursor-pointer items-center justify-center rounded-lg px-4 py-2 text-sm font-medium shadow-sm transition active:scale-[0.97] ${
                   highContrast
                     ? 'bg-zinc-900 text-white hover:bg-zinc-800'
                     : 'bg-[#122650] text-slate-100 hover:bg-[#18336b]'
                 }`}
               >
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                 <span>Voltar</span>
               </button>
             )}

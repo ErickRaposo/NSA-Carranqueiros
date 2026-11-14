@@ -136,3 +136,28 @@ export function authenticateUser(
     ) ?? null
   );
 }
+
+export function findUserByIdentifier(identifier: string): UserAccount | null {
+  const normalized = identifier.trim().toLowerCase();
+  if (!normalized) return null;
+  const users = loadStoredUsers();
+  return (
+    users.find(
+      (u) => u.username.toLowerCase() === normalized || u.email.toLowerCase() === normalized
+    ) ?? null
+  );
+}
+
+export function updateUserPassword(identifier: string, newPassword: string): boolean {
+  const normalized = identifier.trim().toLowerCase();
+  if (!normalized || newPassword.length < 5) return false;
+  const users = loadStoredUsers();
+  const idx = users.findIndex(
+    (u) => u.username.toLowerCase() === normalized || u.email.toLowerCase() === normalized
+  );
+  if (idx === -1) return false;
+
+  const updated = users.map((u, i) => (i === idx ? { ...u, password: newPassword } : u));
+  saveStoredUsers(updated);
+  return true;
+}

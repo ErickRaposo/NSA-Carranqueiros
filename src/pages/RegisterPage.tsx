@@ -1,7 +1,11 @@
-import React, { useRef, useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, Eye, EyeOff, Search } from 'lucide-react';
 import { UserAccount } from '../auth/authStorage';
-import { ORIGIN_COUNTRY_OPTIONS } from '../components/CountryFlag';
+import {
+  ALL_COUNTRY_OPTIONS,
+  CountryFlagIcon,
+  getOriginCountryNamePt,
+} from '../components/CountryFlag';
 
 interface RegisterPageProps {
   highContrast: boolean;
@@ -18,12 +22,51 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [originCountryCode, setOriginCountryCode] = useState('BR');
+  const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const alertRef = useRef<HTMLDivElement | null>(null);
+  const countryDropdownRef = useRef<HTMLDivElement | null>(null);
+  const countrySearchInputRef = useRef<HTMLInputElement | null>(null);
+
+  const filteredCountries = useMemo(() => {
+    const q = countrySearch
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    if (!q) return ALL_COUNTRY_OPTIONS;
+    return ALL_COUNTRY_OPTIONS.filter((opt) => {
+      const normalizedName = opt.namePt
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      return normalizedName.includes(q) || opt.code.toLowerCase().includes(q);
+    });
+  }, [countrySearch]);
+
+  useEffect(() => {
+    if (!countryDropdownOpen) return;
+    requestAnimationFrame(() => countrySearchInputRef.current?.focus());
+    const handleOutside = (e: MouseEvent) => {
+      if (countryDropdownRef.current && !countryDropdownRef.current.contains(e.target as Node)) {
+        setCountryDropdownOpen(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCountryDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [countryDropdownOpen]);
 
   const showError = (msg: string) => {
     setErrorMsg(msg);
@@ -130,23 +173,123 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
           />
         </div>
 
-        <div>
-          <label htmlFor="reg-country" className="mb-1 block text-xs font-semibold text-slate-200">
+        <div ref={countryDropdownRef} className="relative">
+          <label
+            id="reg-country-label"
+            htmlFor="reg-country-btn"
+            className="mb-1 block text-xs font-semibold text-slate-200"
+          >
             País de origem
           </label>
-          <select
-            id="reg-country"
-            value={originCountryCode}
-            onChange={(e) => setOriginCountryCode(e.target.value)}
-            className={inputClass}
+          <button
+            id="reg-country-btn"
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={countryDropdownOpen}
+            aria-labelledby="reg-country-label reg-country-btn"
+            onClick={() => setCountryDropdownOpen((prev) => !prev)}
+            className={`${inputClass} flex items-center justify-between gap-2 text-left cursor-pointer`}
+            data-testid="reg-country-select"
           >
-            <option value="">Órbita Livre / Não informar</option>
-            {ORIGIN_COUNTRY_OPTIONS.map((opt) => (
-              <option key={opt.code} value={opt.code}>
-                {opt.namePt} ({opt.code})
-              </option>
-            ))}
-          </select>
+            <span className="flex items-center gap-2.5 min-w-0 truncate">
+              <CountryFlagIcon code={originCountryCode || null} />
+              <span className="truncate">
+                {originCountryCode
+                  ? `${getOriginCountryNamePt(originCountryCode)} (${originCountryCode})`
+                  : 'Órbita Livre / Não informar'}
+              </span>
+            </span>
+            <ChevronDown
+              className={`h-4 w-4 shrink-0 text-slate-300 transition-transform ${
+                countryDropdownOpen ? 'rotate-180' : ''
+              }`}
+              aria-hidden="true"
+            />
+          </button>
+
+          {countryDropdownOpen && (
+            <div
+              className={`absolute left-0 right-0 z-30 mt-1.5 rounded-lg border shadow-xl ${
+                highContrast
+                  ? 'border-white bg-black text-white'
+                  : 'border-[#1e3a66] bg-[#09152c] text-slate-100'
+              }`}
+            >
+              <div
+                className={`flex items-center gap-2 border-b px-3 py-2 ${
+                  highContrast ? 'border-white/30' : 'border-[#1e3a66]'
+                }`}
+              >
+                <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+                <input
+                  ref={countrySearchInputRef}
+                  type="text"
+                  value={countrySearch}
+                  onChange={(e) => setCountrySearch(e.target.value)}
+                  placeholder="Pesquisar país..."
+                  aria-label="Pesquisar país de origem"
+                  data-testid="reg-country-search"
+                  className="w-full bg-transparent text-xs text-slate-100 placeholder:text-slate-400 focus:outline-none"
+                />
+              </div>
+
+              <ul
+                role="listbox"
+                aria-labelledby="reg-country-label"
+                className="max-h-52 overflow-y-auto p-1"
+              >
+                {!countrySearch.trim() && (
+                  <li
+                    role="option"
+                    aria-selected={originCountryCode === ''}
+                    onClick={() => {
+                      setOriginCountryCode('');
+                      setCountryDropdownOpen(false);
+                      setCountrySearch('');
+                    }}
+                    className={`flex cursor-pointer items-center gap-2.5 rounded-md px-3 py-2 text-sm transition ${
+                      originCountryCode === ''
+                        ? 'bg-[#1a3a7a] text-white'
+                        : 'hover:bg-[#122449]'
+                    }`}
+                  >
+                    <CountryFlagIcon code={null} />
+                    <span>Órbita Livre / Não informar</span>
+                  </li>
+                )}
+
+                {filteredCountries.length === 0 ? (
+                  <li className="px-3 py-2.5 text-center text-xs text-slate-400">
+                    Nenhum país encontrado.
+                  </li>
+                ) : (
+                  filteredCountries.map((opt) => {
+                    const selected = originCountryCode === opt.code;
+                    return (
+                      <li
+                        key={opt.code}
+                        role="option"
+                        aria-selected={selected}
+                        onClick={() => {
+                          setOriginCountryCode(opt.code);
+                          setCountryDropdownOpen(false);
+                          setCountrySearch('');
+                        }}
+                        className={`flex cursor-pointer items-center gap-2.5 rounded-md px-3 py-2 text-sm transition ${
+                          selected ? 'bg-[#1a3a7a] text-white' : 'hover:bg-[#122449]'
+                        }`}
+                      >
+                        <CountryFlagIcon code={opt.code} />
+                        <span>
+                          {opt.namePt} ({opt.code})
+                        </span>
+                      </li>
+                    );
+                  })
+                )}
+              </ul>
+            </div>
+          )}
         </div>
 
         <div>
@@ -231,7 +374,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
           onClick={onGoToLogin}
           className="cursor-pointer underline transition hover:text-white"
         >
-          Voltar ao login
+          Voltar
         </button>
       </div>
     </>

@@ -32,11 +32,42 @@ export const ORIGIN_COUNTRY_OPTIONS: OriginCountryOption[] = [
   { code: 'MZ', namePt: 'Moçambique' },
 ];
 
+export const ALL_ISO_ALPHA2_CODES: string[] = [
+  'AF', 'ZA', 'AL', 'DE', 'AD', 'AO', 'AG', 'SA', 'DZ', 'AR', 'AM', 'AU', 'AT', 'AZ',
+  'BS', 'BD', 'BB', 'BH', 'BE', 'BZ', 'BJ', 'BY', 'BO', 'BA', 'BW', 'BR', 'BN', 'BG',
+  'BF', 'BI', 'BT', 'CV', 'CM', 'KH', 'CA', 'QA', 'KZ', 'TD', 'CL', 'CN', 'CY', 'SG',
+  'CO', 'KM', 'CG', 'CD', 'KP', 'KR', 'CI', 'CR', 'HR', 'CU', 'DK', 'DJ', 'DM', 'EG',
+  'SV', 'AE', 'EC', 'ER', 'SK', 'SI', 'ES', 'US', 'EE', 'SZ', 'ET', 'FJ', 'PH', 'FI',
+  'FR', 'GA', 'GM', 'GH', 'GE', 'GD', 'GR', 'GT', 'GY', 'GN', 'GW', 'GQ', 'HT', 'HN',
+  'HU', 'YE', 'MH', 'SB', 'IN', 'ID', 'IR', 'IQ', 'IE', 'IS', 'IL', 'IT', 'JM', 'JP',
+  'JO', 'KI', 'KW', 'LA', 'LS', 'LV', 'LB', 'LR', 'LY', 'LI', 'LT', 'LU', 'MK', 'MG',
+  'MY', 'MW', 'MV', 'ML', 'MT', 'MA', 'MU', 'MR', 'MX', 'FM', 'MZ', 'MD', 'MC', 'MN',
+  'ME', 'MM', 'NA', 'NR', 'NP', 'NI', 'NE', 'NG', 'NO', 'NZ', 'OM', 'NL', 'PW', 'PA',
+  'PG', 'PK', 'PY', 'PE', 'PL', 'PT', 'KE', 'KG', 'GB', 'CF', 'CZ', 'DO', 'RO', 'RW',
+  'RU', 'WS', 'SM', 'LC', 'KN', 'ST', 'VC', 'SC', 'SN', 'SL', 'RS', 'SY', 'SO', 'LK',
+  'SD', 'SS', 'SE', 'CH', 'SR', 'TH', 'TW', 'TJ', 'TZ', 'TL', 'TG', 'TO', 'TT', 'TN',
+  'TM', 'TR', 'TV', 'UA', 'UG', 'UY', 'UZ', 'VU', 'VA', 'VE', 'VN', 'ZM', 'ZW',
+];
+
+const PT_COUNTRY_OVERRIDES: Record<string, string> = Object.fromEntries(
+  ORIGIN_COUNTRY_OPTIONS.map((o) => [o.code, o.namePt])
+);
+
+const regionDisplayNames =
+  typeof Intl !== 'undefined' && typeof Intl.DisplayNames === 'function'
+    ? new Intl.DisplayNames(['pt-BR'], { type: 'region' })
+    : null;
+
+export const ALL_COUNTRY_OPTIONS: OriginCountryOption[] = ALL_ISO_ALPHA2_CODES.map((code) => ({
+  code,
+  namePt: PT_COUNTRY_OVERRIDES[code] || regionDisplayNames?.of(code) || code,
+})).sort((a, b) => a.namePt.localeCompare(b.namePt, 'pt-BR'));
+
 export function getOriginCountryNamePt(code?: string | null): string {
   if (!code) return 'Órbita Livre';
   const normalized = code.trim().toUpperCase();
-  const match = ORIGIN_COUNTRY_OPTIONS.find((opt) => opt.code === normalized);
-  return match ? match.namePt : normalized;
+  const match = ALL_COUNTRY_OPTIONS.find((opt) => opt.code === normalized);
+  return match ? match.namePt : regionDisplayNames?.of(normalized) || normalized;
 }
 
 function renderVectorFlagSvg(code: string): React.ReactNode {
@@ -173,6 +204,72 @@ function renderVectorFlagSvg(code: string): React.ReactNode {
           <circle cx="5" cy="4.8" r="2" fill="#ffde00" />
         </svg>
       );
+    case 'UY':
+      return (
+        <svg viewBox="0 0 20 14" className="country-flag-svg" aria-hidden="true">
+          <rect width="20" height="14" fill="#ffffff" />
+          <rect y="2.2" width="20" height="1.8" fill="#0038a8" />
+          <rect y="5.6" width="20" height="1.8" fill="#0038a8" />
+          <rect y="9.0" width="20" height="1.8" fill="#0038a8" />
+          <rect y="12.2" width="20" height="1.8" fill="#0038a8" />
+          <rect width="8" height="7" fill="#ffffff" />
+          <circle cx="4" cy="3.5" r="1.8" fill="#fcd116" />
+        </svg>
+      );
+    case 'PE':
+      return (
+        <svg viewBox="0 0 20 14" className="country-flag-svg" aria-hidden="true">
+          <rect width="7" height="14" fill="#d91023" />
+          <rect x="6.5" width="7" height="14" fill="#ffffff" />
+          <rect x="13" width="7" height="14" fill="#d91023" />
+        </svg>
+      );
+    case 'KR':
+      return (
+        <svg viewBox="0 0 20 14" className="country-flag-svg" aria-hidden="true">
+          <rect width="20" height="14" fill="#ffffff" />
+          <circle cx="10" cy="7" r="3.4" fill="#cd2e3a" />
+          <path d="M6.6,7 A3.4,3.4 0 0,0 13.4,7 Z" fill="#0047a0" />
+        </svg>
+      );
+    case 'AU':
+      return (
+        <svg viewBox="0 0 20 14" className="country-flag-svg" aria-hidden="true">
+          <rect width="20" height="14" fill="#00008b" />
+          <rect width="9" height="7" fill="#012169" />
+          <path d="M4.5,0 V7 M0,3.5 H9" stroke="#ffffff" strokeWidth="1.8" />
+          <path d="M4.5,0 V7 M0,3.5 H9" stroke="#e4002b" strokeWidth="1" />
+          <circle cx="15" cy="4" r="1" fill="#ffffff" />
+          <circle cx="13" cy="8" r="0.9" fill="#ffffff" />
+          <circle cx="16.5" cy="9" r="0.9" fill="#ffffff" />
+        </svg>
+      );
+    case 'ZA':
+      return (
+        <svg viewBox="0 0 20 14" className="country-flag-svg" aria-hidden="true">
+          <rect width="20" height="7" fill="#e03c31" />
+          <rect y="7" width="20" height="7" fill="#001489" />
+          <path d="M0,0 L9,7 L0,14 Z" fill="#000000" />
+          <path d="M0,0 L9,7 L20,7 M0,14 L9,7" stroke="#007749" strokeWidth="2.8" fill="none" />
+        </svg>
+      );
+    case 'AO':
+      return (
+        <svg viewBox="0 0 20 14" className="country-flag-svg" aria-hidden="true">
+          <rect width="20" height="7" fill="#cc092f" />
+          <rect y="7" width="20" height="7" fill="#000000" />
+          <circle cx="10" cy="7" r="2.2" fill="none" stroke="#ffcb00" strokeWidth="1.2" />
+        </svg>
+      );
+    case 'MZ':
+      return (
+        <svg viewBox="0 0 20 14" className="country-flag-svg" aria-hidden="true">
+          <rect width="20" height="4.7" fill="#007168" />
+          <rect y="4.6" width="20" height="4.8" fill="#000000" />
+          <rect y="9.3" width="20" height="4.7" fill="#fce100" />
+          <polygon points="0,0 8.5,7 0,14" fill="#d21034" />
+        </svg>
+      );
     default:
       return (
         <svg viewBox="0 0 20 14" className="country-flag-svg" aria-hidden="true">
@@ -192,6 +289,39 @@ function renderVectorFlagSvg(code: string): React.ReactNode {
       );
   }
 }
+
+export const CountryFlagIcon: React.FC<{ code?: string | null }> = ({ code }) => {
+  const normalized = code?.trim().toUpperCase() || null;
+  const [imgFailed, setImgFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    setImgFailed(false);
+  }, [normalized]);
+
+  if (!normalized) {
+    return (
+      <span className="country-flag-icon-wrap" aria-hidden="true">
+        <Globe size={14} />
+      </span>
+    );
+  }
+
+  return (
+    <span className="country-flag-icon-wrap" aria-hidden="true">
+      {!imgFailed ? (
+        <img
+          src={`https://flagcdn.com/w40/${normalized.toLowerCase()}.png`}
+          alt=""
+          loading="lazy"
+          className="h-[14px] w-[20px] rounded-[2px] object-cover"
+          onError={() => setImgFailed(true)}
+        />
+      ) : (
+        renderVectorFlagSvg(normalized)
+      )}
+    </span>
+  );
+};
 
 interface CountryFlagBadgeProps {
   code?: string | null;
