@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
-import { Contrast, ImagePlus, Volume2 } from 'lucide-react';
+import React from 'react';
+import { Contrast, Volume2 } from 'lucide-react';
+import symbollLogo from '../assets/symboll.png';
 import { StarfieldBackground } from './StarfieldBackground';
 
 interface AuthLayoutProps {
@@ -19,18 +20,6 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
   onCycleFontScale,
   onSpeakScreen,
 }) => {
-  const [bannerSrc, setBannerSrc] = useState<string>('/banner.png');
-  const [bannerMissing, setBannerMissing] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const handleBannerPreview = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    setBannerSrc(url);
-    setBannerMissing(false);
-  };
-
   return (
     <div
       style={{ fontSize: `${Math.round(fontScale * 100)}%` }}
@@ -47,70 +36,18 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
       {/* Moving deep-space starfield across the background */}
       {!highContrast && <StarfieldBackground />}
 
-      {/* Left Half: Space Canvas + Official Square Artwork Banner (1:1) */}
+      {/* Left Half: Space Canvas + Logo Symboll directly over background */}
       <section
         aria-label="Área visual do portal EARTHSONG"
         className="relative z-10 flex w-full items-center justify-center p-6 sm:p-8 lg:w-1/2 lg:p-12"
       >
-        <div
-          className={`relative flex aspect-square w-full max-w-[460px] items-center justify-center overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-sm ${
-            highContrast
-              ? 'border-2 border-[#facc15] bg-black'
-              : 'border-[#1E3566] bg-[#07142E]/70'
+        <img
+          src={symbollLogo}
+          alt="Logo EARTHSONG"
+          className={`h-auto w-full max-w-[380px] object-contain ${
+            highContrast ? 'rounded-2xl border-2 border-[#facc15] p-2' : ''
           }`}
-        >
-          {!bannerMissing ? (
-            <>
-              <img
-                src={bannerSrc}
-                alt="Ilustração do astronauta EARTHSONG observando o planeta Terra com fluxos atmosféricos da NASA"
-                onError={() => setBannerMissing(true)}
-                className="h-full w-full object-cover"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className={`absolute right-3 bottom-3 inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-[#38bdf8] ${
-                  highContrast
-                    ? 'border-[#facc15] bg-black text-[#facc15] hover:bg-[#1a1a00]'
-                    : 'border-[#2C4B88]/80 bg-[#061024]/80 text-slate-200 hover:bg-[#102857]'
-                }`}
-                title="Testar outra imagem quadrada para o banner"
-              >
-                <ImagePlus className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Trocar imagem</span>
-              </button>
-            </>
-          ) : (
-            <div className="flex h-full w-full flex-col items-center justify-center p-8 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[#26427A] bg-[#0D2149] text-slate-200">
-                <ImagePlus className="h-8 w-8" aria-hidden="true" />
-              </div>
-              <p className="font-display mt-5 text-lg font-bold tracking-wide text-slate-100">
-                Banner Quadrado (1:1)
-              </p>
-              <p className="mt-2 max-w-xs text-xs leading-relaxed text-slate-300">
-                Selecione uma imagem quadrada para exibir aqui.
-              </p>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="mt-5 cursor-pointer rounded-full border border-[#2C4B88] bg-[#102857] px-4 py-2 text-xs font-semibold text-slate-100 transition hover:bg-[#173673]"
-              >
-                Escolher imagem do computador
-              </button>
-            </div>
-          )}
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleBannerPreview}
-            className="hidden"
-            aria-label="Selecionar imagem para substituir o banner quadrado"
-          />
-        </div>
+        />
       </section>
 
       {/* Right Half: Sober Dark Navy Form Panel + Accessibility Toolbar */}

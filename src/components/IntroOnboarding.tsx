@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ArrowRight,
   ChevronLeft,
@@ -7,7 +7,7 @@ import {
   VolumeX,
 } from 'lucide-react';
 import { speakTextPt, stopSpeech } from '../accessibility/a11yEngine';
-import { Astronaut3D } from './Astronaut3D';
+import { Mineiro3D } from './Mineiro3D';
 import { StarfieldBackground } from './StarfieldBackground';
 
 interface IntroOnboardingProps {
@@ -22,7 +22,7 @@ interface IntroOnboardingProps {
 const INTRO_STEPS = [
   {
     tag: '01 · Missão NASA Space Apps',
-    title: 'Olá! Eu sou seu guia orbital no EARTHSONG.',
+    title: 'Olá! Eu sou o MINEIRØ, seu guia orbital.',
     text: 'Este portal une visualizações reais da NASA (SVS 5011, 5147, 5148, 5153 e 5154) com leitura por voz em português, sonificação e mapa acessível.',
   },
   {
@@ -52,30 +52,43 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
 }) => {
   const [stepIndex, setStepIndex] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [autoAudio, setAutoAudio] = useState(true);
 
   const current = INTRO_STEPS[stepIndex];
   const isLast = stepIndex === INTRO_STEPS.length - 1;
 
-  const stopOnboardingSpeech = () => {
+  const stopOnboardingSpeech = useCallback(() => {
     stopSpeech();
     setIsSpeaking(false);
-  };
+  }, []);
 
-  const speakStep = (index: number) => {
+  const speakStep = useCallback((index: number) => {
     const step = INTRO_STEPS[index];
-    setIsSpeaking(true);
-    speakTextPt(`${step.title} ${step.text}`);
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      const checkEnd = window.setInterval(() => {
-        if (!window.speechSynthesis.speaking) {
-          setIsSpeaking(false);
-          window.clearInterval(checkEnd);
-        }
-      }, 250);
-    }
-  };
+    speakTextPt(`${step.title} ${step.text}`, true, {
+      maleVoice: true,
+      onStart: () => setIsSpeaking(true),
+      onEnd: () => setIsSpeaking(false),
+    });
+  }, []);
 
+  // Automatically speak each step when autoAudio is enabled
   useEffect(() => {
+    if (!autoAudio) return;
+
+    const timer = window.setTimeout(() => {
+      speakStep(stepIndex);
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [stepIndex, autoAudio, speakStep]);
+
+  // Pre-warm speech voices list & cleanup on unmount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.getVoices();
+    }
     return () => {
       stopSpeech();
     };
@@ -97,7 +110,7 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onFinish]);
+  }, [onFinish, stopOnboardingSpeech]);
 
   const handleNext = () => {
     if (isLast) {
@@ -105,22 +118,22 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
       onFinish();
       return;
     }
-    const next = stepIndex + 1;
-    setStepIndex(next);
-    if (isSpeaking) speakStep(next);
+    setStepIndex((prev) => prev + 1);
   };
 
   const handlePrev = () => {
     if (stepIndex === 0) return;
-    const prev = stepIndex - 1;
-    setStepIndex(prev);
-    if (isSpeaking) speakStep(prev);
+    setStepIndex((prev) => prev - 1);
   };
 
-  const handleToggleVoice = () => {
-    if (isSpeaking) {
+  const handleToggleAudio = () => {
+    if (autoAudio && isSpeaking) {
+      setAutoAudio(false);
       stopOnboardingSpeech();
+    } else if (autoAudio) {
+      speakStep(stepIndex);
     } else {
+      setAutoAudio(true);
       speakStep(stepIndex);
     }
   };
@@ -133,7 +146,7 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
           ? 'bg-black text-white'
           : 'bg-gradient-to-br from-[#030816] via-[#07142E] to-[#040B1C] text-slate-100'
       }`}
-      aria-label="Introdução interativa do EARTHSONG"
+      aria-label="Introdução interativa do EARTHSONG com o mascote MINEIRØ"
     >
       {!highContrast && <StarfieldBackground />}
 
@@ -194,39 +207,87 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
           </button>
         </div>
 
-        {/* Left: 3D Modern Astronaut */}
-        <div className="flex w-full items-center justify-center md:mt-6 md:w-5/12">
-          <Astronaut3D stepIndex={stepIndex} isExplaining={isSpeaking || stepIndex > 0} />
-        </div>
-
-        {/* Right: Step Explanation */}
-        <div className="flex w-full flex-col justify-center md:mt-6 md:w-7/12">
-          <div className="sr-only" aria-live="polite">
-            {current.tag}. {current.title} {current.text}
-          </div>
-
+        {/* Left: 3D Floating Mascot MINEIRØ */}
+        <div className="flex w-full flex-col items-center justify-center md:mt-6 md:w-5/12">
+          <Mineiro3D stepIndex={stepIndex} isExplaining={isSpeaking || stepIndex > 0} />
           <span
-            className={`text-xs font-semibold tracking-wider ${
-              highContrast ? 'text-[#facc15]' : 'text-[#38bdf8]'
+            className={`mt-1 rounded-full border px-3 py-0.5 text-[11px] font-bold tracking-widest ${
+              highContrast
+                ? 'border-[#facc15] bg-black text-[#facc15]'
+                : 'border-[#1C325E] bg-[#0B1936] text-slate-200'
             }`}
           >
-            {current.tag}
+            MINEIRØ
           </span>
+        </div>
 
-          <h1 className="font-display mt-2 text-2xl font-bold leading-tight sm:text-3xl">
-            {current.title}
-          </h1>
+        {/* Right: Speech Bubble + Step Navigation */}
+        <div className="flex w-full flex-col justify-center md:mt-6 md:w-7/12">
+          <div className="sr-only" aria-live="polite">
+            MINEIRØ diz: {current.tag}. {current.title} {current.text}
+          </div>
 
-          <p className="mt-4 max-w-[60ch] text-sm leading-relaxed text-slate-200">
-            {current.text}
-          </p>
+          {/* Speech Bubble pointing toward MINEIRØ */}
+          <div
+            className={`relative rounded-2xl border p-5 shadow-xl sm:p-6 ${
+              highContrast
+                ? 'border-2 border-[#facc15] bg-black'
+                : 'border-[#254073] bg-[#0B1936]/95'
+            }`}
+          >
+            {/* Desktop left pointer tail */}
+            <div
+              aria-hidden="true"
+              className={`hidden md:block absolute top-12 -left-2.5 h-5 w-5 rotate-45 border-b border-l ${
+                highContrast
+                  ? 'border-[#facc15] bg-black'
+                  : 'border-[#254073] bg-[#0B1936]'
+              }`}
+            />
+            {/* Mobile top pointer tail */}
+            <div
+              aria-hidden="true"
+              className={`md:hidden absolute -top-2.5 left-1/2 -translate-x-1/2 h-5 w-5 rotate-45 border-t border-l ${
+                highContrast
+                  ? 'border-[#facc15] bg-black'
+                  : 'border-[#254073] bg-[#0B1936]'
+              }`}
+            />
 
-          <div className="mt-5">
+            <div className="flex items-center justify-between gap-2">
+              <span
+                className={`text-xs font-semibold tracking-wider ${
+                  highContrast ? 'text-[#facc15]' : 'text-[#38bdf8]'
+                }`}
+              >
+                {current.tag}
+              </span>
+
+              {/* Live Voice Indicator */}
+              {isSpeaking && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#163675] px-2.5 py-0.5 text-[10px] font-semibold text-slate-100">
+                  <Volume2 className="h-3 w-3 animate-pulse" aria-hidden="true" />
+                  Falando...
+                </span>
+              )}
+            </div>
+
+            <h1 className="font-display mt-2 text-2xl font-bold leading-tight sm:text-3xl">
+              {current.title}
+            </h1>
+
+            <p className="mt-3 max-w-[60ch] text-sm leading-relaxed text-slate-200">
+              {current.text}
+            </p>
+          </div>
+
+          {/* Audio control + Progress dots */}
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <button
               type="button"
-              onClick={handleToggleVoice}
+              onClick={handleToggleAudio}
               aria-pressed={isSpeaking}
-              className={`inline-flex min-h-[40px] cursor-pointer items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+              className={`inline-flex min-h-[38px] cursor-pointer items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
                 highContrast
                   ? 'border-[#facc15] bg-black text-[#facc15] hover:bg-[#1a1a00]'
                   : 'border-[#254073] bg-[#0B1936] text-slate-100 hover:border-[#38bdf8] hover:bg-[#122650]'
@@ -235,38 +296,34 @@ export const IntroOnboarding: React.FC<IntroOnboardingProps> = ({
               {isSpeaking ? (
                 <>
                   <VolumeX className="h-4 w-4" aria-hidden="true" />
-                  <span>Parar voz do astronauta</span>
+                  <span>Silenciar MINEIRØ</span>
                 </>
               ) : (
                 <>
                   <Volume2 className="h-4 w-4" aria-hidden="true" />
-                  <span>Ouvir explicação em áudio</span>
+                  <span>Ouvir novamente</span>
                 </>
               )}
             </button>
-          </div>
 
-          {/* Step Dots */}
-          <div className="mt-6 flex items-center gap-2" aria-label="Progresso da introdução">
-            {INTRO_STEPS.map((_, idx) => (
-              <button
-                key={idx}
-                type="button"
-                aria-label={`Ir para passo ${idx + 1} de ${INTRO_STEPS.length}`}
-                aria-current={idx === stepIndex ? 'step' : undefined}
-                onClick={() => {
-                  setStepIndex(idx);
-                  if (isSpeaking) speakStep(idx);
-                }}
-                className={`h-2.5 cursor-pointer rounded-full transition-all ${
-                  idx === stepIndex
-                    ? highContrast
-                      ? 'w-8 bg-[#facc15]'
-                      : 'w-8 bg-[#38bdf8]'
-                    : 'w-2.5 bg-[#1C325E] hover:bg-[#294885]'
-                }`}
-              />
-            ))}
+            <div className="flex items-center gap-2" aria-label="Progresso da introdução">
+              {INTRO_STEPS.map((_, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  aria-label={`Ir para passo ${idx + 1} de ${INTRO_STEPS.length}`}
+                  aria-current={idx === stepIndex ? 'step' : undefined}
+                  onClick={() => setStepIndex(idx)}
+                  className={`h-2.5 cursor-pointer rounded-full transition-all ${
+                    idx === stepIndex
+                      ? highContrast
+                        ? 'w-8 bg-[#facc15]'
+                        : 'w-8 bg-[#38bdf8]'
+                      : 'w-2.5 bg-[#1C325E] hover:bg-[#294885]'
+                  }`}
+                />
+              ))}
+            </div>
           </div>
 
           {/* Navigation Buttons */}

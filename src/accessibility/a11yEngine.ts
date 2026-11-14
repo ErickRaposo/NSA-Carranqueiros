@@ -147,13 +147,66 @@ export function stopSpeech(): void {
   }
 }
 
-export function speakTextPt(text: string, interrupt = true): void {
+const MALE_VOICE_HINTS = [
+  'daniel',
+  'antonio',
+  'antônio',
+  'helio',
+  'hélio',
+  'felipe',
+  'miguel',
+  'rafael',
+  'ricardo',
+  'paulo',
+  'tiago',
+  'pedro',
+  'lucas',
+  'male',
+  'masculin',
+];
+
+function pickPortugueseVoice(preferMale: boolean): SpeechSynthesisVoice | null {
+  if (!isSpeechSupported()) return null;
+  const voices = window.speechSynthesis.getVoices();
+  const ptVoices = voices.filter((v) => v.lang.toLowerCase().startsWith('pt'));
+  const pool = ptVoices.length > 0 ? ptVoices : voices;
+  if (pool.length === 0) return null;
+
+  if (preferMale) {
+    const maleMatch = pool.find((v) =>
+      MALE_VOICE_HINTS.some((hint) => v.name.toLowerCase().includes(hint))
+    );
+    if (maleMatch) return maleMatch;
+  }
+
+  return pool.find((v) => v.lang.toLowerCase().includes('pt-br')) ?? pool[0];
+}
+
+export function speakTextPt(
+  text: string,
+  interrupt = true,
+  options?: { maleVoice?: boolean; onStart?: () => void; onEnd?: () => void }
+): void {
   if (!isSpeechSupported() || !text.trim()) return;
   try {
     if (interrupt) window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'pt-BR';
-    utterance.rate = 1.05;
+    utterance.rate = 1.02;
+    const preferMale = Boolean(options?.maleVoice);
+    utterance.pitch = preferMale ? 0.82 : 1.0;
+
+    const selectedVoice = pickPortugueseVoice(preferMale);
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    }
+
+    if (options?.onStart) utterance.onstart = options.onStart;
+    if (options?.onEnd) {
+      utterance.onend = options.onEnd;
+      utterance.onerror = options.onEnd;
+    }
+
     window.speechSynthesis.speak(utterance);
   } catch {
     // ignore speech engine errors
