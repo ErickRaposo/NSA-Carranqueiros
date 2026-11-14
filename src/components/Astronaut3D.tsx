@@ -2,13 +2,19 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
 interface Astronaut3DProps {
-  /** Current onboarding step index (0..3) drives gesture variations */
+  /** Current onboarding / copilot state (0..3) drives gesture variations */
   stepIndex: number;
   /** Whether the astronaut is actively explaining / narrating */
   isExplaining: boolean;
+  /** Render full onboarding stage or compact map copilot widget */
+  size?: 'full' | 'compact';
 }
 
-export const Astronaut3D: React.FC<Astronaut3DProps> = ({ stepIndex, isExplaining }) => {
+export const Astronaut3D: React.FC<Astronaut3DProps> = ({
+  stepIndex,
+  isExplaining,
+  size = 'full',
+}) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const stepRef = useRef(stepIndex);
   const explainingRef = useRef(isExplaining);
@@ -25,8 +31,14 @@ export const Astronaut3D: React.FC<Astronaut3DProps> = ({ stepIndex, isExplainin
     const container = mountRef.current;
     if (!container) return;
 
-    const width = container.clientWidth || 360;
-    const height = container.clientHeight || 420;
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+    const fallbackW = size === 'compact' ? 136 : 360;
+    const fallbackH = size === 'compact' ? 156 : 400;
+    const width = container.clientWidth || fallbackW;
+    const height = container.clientHeight || fallbackH;
 
     const scene = new THREE.Scene();
 
@@ -39,8 +51,20 @@ export const Astronaut3D: React.FC<Astronaut3DProps> = ({ stepIndex, isExplainin
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(renderer.domElement);
 
-    // Sober studio/space lighting (no neon)
-    const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.75);
+    const geometries: THREE.BufferGeometry[] = [];
+    const materials: THREE.Material[] = [];
+
+    const trackGeo = <T extends THREE.BufferGeometry>(geo: T): T => {
+      geometries.push(geo);
+      return geo;
+    };
+    const trackMat = <T extends THREE.Material>(mat: T): T => {
+      materials.push(mat);
+      return mat;
+    };
+
+    // Sober studio/space lighting
+    const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.78);
     scene.add(ambientLight);
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.45);
@@ -56,99 +80,111 @@ export const Astronaut3D: React.FC<Astronaut3DProps> = ({ stepIndex, isExplainin
     scene.add(fillLight);
 
     // Materials
-    const suitMat = new THREE.MeshStandardMaterial({
-      color: 0xe8eef7,
-      roughness: 0.42,
-      metalness: 0.08,
-    });
-    const darkNavyMat = new THREE.MeshStandardMaterial({
-      color: 0x0b1936,
-      roughness: 0.45,
-      metalness: 0.25,
-    });
-    const jointMat = new THREE.MeshStandardMaterial({
-      color: 0x1e3563,
-      roughness: 0.55,
-      metalness: 0.2,
-    });
-    const visorMat = new THREE.MeshStandardMaterial({
-      color: 0x071329,
-      roughness: 0.12,
-      metalness: 0.82,
-    });
-    const eyeMat = new THREE.MeshBasicMaterial({
-      color: 0xe0f2fe,
-    });
-    const chestIndicatorMat = new THREE.MeshBasicMaterial({
-      color: 0x93c5fd,
-    });
+    const suitMat = trackMat(
+      new THREE.MeshStandardMaterial({
+        color: 0xe8eef7,
+        roughness: 0.42,
+        metalness: 0.08,
+      })
+    );
+    const darkNavyMat = trackMat(
+      new THREE.MeshStandardMaterial({
+        color: 0x0b1936,
+        roughness: 0.45,
+        metalness: 0.25,
+      })
+    );
+    const jointMat = trackMat(
+      new THREE.MeshStandardMaterial({
+        color: 0x1e3563,
+        roughness: 0.55,
+        metalness: 0.2,
+      })
+    );
+    const visorMat = trackMat(
+      new THREE.MeshStandardMaterial({
+        color: 0x071329,
+        roughness: 0.12,
+        metalness: 0.82,
+      })
+    );
+    const eyeMat = trackMat(new THREE.MeshBasicMaterial({ color: 0xe0f2fe }));
+    const chestIndicatorMat = trackMat(new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
 
-    // Root Astronaut Group (floats in zero-G)
     const astronaut = new THREE.Group();
     scene.add(astronaut);
 
-    // Torso Group (breathes)
+    // Torso
     const torsoGroup = new THREE.Group();
     astronaut.add(torsoGroup);
 
-    const torsoGeo = new THREE.CapsuleGeometry(0.46, 0.52, 12, 24);
-    const torsoMesh = new THREE.Mesh(torsoGeo, suitMat);
+    const torsoMesh = new THREE.Mesh(
+      trackGeo(new THREE.CapsuleGeometry(0.46, 0.52, 12, 24)),
+      suitMat
+    );
     torsoGroup.add(torsoMesh);
 
-    // Chest Control Pack
-    const chestPack = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.32, 0.14), darkNavyMat);
+    const chestPack = new THREE.Mesh(
+      trackGeo(new THREE.BoxGeometry(0.46, 0.32, 0.14)),
+      darkNavyMat
+    );
     chestPack.position.set(0, 0.08, 0.43);
     torsoGroup.add(chestPack);
 
     const chestIndicator = new THREE.Mesh(
-      new THREE.BoxGeometry(0.24, 0.05, 0.02),
+      trackGeo(new THREE.BoxGeometry(0.24, 0.05, 0.02)),
       chestIndicatorMat
     );
     chestIndicator.position.set(0, 0.14, 0.5);
     torsoGroup.add(chestIndicator);
 
-    // Belt
-    const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.47, 0.12, 24), darkNavyMat);
+    const belt = new THREE.Mesh(
+      trackGeo(new THREE.CylinderGeometry(0.47, 0.47, 0.12, 24)),
+      darkNavyMat
+    );
     belt.position.set(0, -0.34, 0);
     torsoGroup.add(belt);
 
-    // Life-support Backpack
-    const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.78, 0.34), darkNavyMat);
+    const backpack = new THREE.Mesh(
+      trackGeo(new THREE.BoxGeometry(0.68, 0.78, 0.34)),
+      darkNavyMat
+    );
     backpack.position.set(0, 0.08, -0.45);
     torsoGroup.add(backpack);
 
-    const backpackTrim = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.56, 0.37), jointMat);
+    const backpackTrim = new THREE.Mesh(
+      trackGeo(new THREE.BoxGeometry(0.54, 0.56, 0.37)),
+      jointMat
+    );
     backpackTrim.position.set(0, 0.08, -0.46);
     torsoGroup.add(backpackTrim);
 
-    // Head / Helmet Group
+    // Head / Helmet
     const headGroup = new THREE.Group();
     headGroup.position.set(0, 0.86, 0);
     astronaut.add(headGroup);
 
     const neckCollar = new THREE.Mesh(
-      new THREE.TorusGeometry(0.32, 0.07, 12, 28),
+      trackGeo(new THREE.TorusGeometry(0.32, 0.07, 12, 28)),
       darkNavyMat
     );
     neckCollar.rotation.x = Math.PI / 2;
     neckCollar.position.set(0, -0.26, 0);
     headGroup.add(neckCollar);
 
-    const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.46, 32, 32), suitMat);
+    const helmet = new THREE.Mesh(trackGeo(new THREE.SphereGeometry(0.46, 32, 32)), suitMat);
     headGroup.add(helmet);
 
-    // Visor
-    const visor = new THREE.Mesh(new THREE.SphereGeometry(0.41, 32, 24), visorMat);
+    const visor = new THREE.Mesh(trackGeo(new THREE.SphereGeometry(0.41, 32, 24)), visorMat);
     visor.scale.set(1.02, 0.88, 0.88);
     visor.position.set(0, 0.01, 0.12);
     headGroup.add(visor);
 
-    // Eyes Group inside Visor (blinks & looks subtly)
     const eyesGroup = new THREE.Group();
     eyesGroup.position.set(0, 0.03, 0.49);
     headGroup.add(eyesGroup);
 
-    const eyeGeo = new THREE.CapsuleGeometry(0.035, 0.045, 8, 12);
+    const eyeGeo = trackGeo(new THREE.CapsuleGeometry(0.035, 0.045, 8, 12));
     const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
     leftEye.position.set(-0.12, 0, 0);
     eyesGroup.add(leftEye);
@@ -157,15 +193,18 @@ export const Astronaut3D: React.FC<Astronaut3DProps> = ({ stepIndex, isExplainin
     rightEye.position.set(0.12, 0, 0);
     eyesGroup.add(rightEye);
 
-    // Articulated Left Arm
+    // Left Arm
     const leftShoulder = new THREE.Group();
     leftShoulder.position.set(-0.56, 0.28, 0);
     astronaut.add(leftShoulder);
 
-    const shoulderJointL = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 16), jointMat);
-    leftShoulder.add(shoulderJointL);
+    const shoulderGeo = trackGeo(new THREE.SphereGeometry(0.14, 16, 16));
+    const upperArmGeo = trackGeo(new THREE.CapsuleGeometry(0.12, 0.34, 8, 16));
+    const forearmGeo = trackGeo(new THREE.CapsuleGeometry(0.11, 0.28, 8, 16));
+    const gloveGeo = trackGeo(new THREE.SphereGeometry(0.13, 16, 16));
 
-    const upperArmL = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.34, 8, 16), suitMat);
+    leftShoulder.add(new THREE.Mesh(shoulderGeo, jointMat));
+    const upperArmL = new THREE.Mesh(upperArmGeo, suitMat);
     upperArmL.position.set(-0.04, -0.25, 0);
     leftShoulder.add(upperArmL);
 
@@ -173,23 +212,21 @@ export const Astronaut3D: React.FC<Astronaut3DProps> = ({ stepIndex, isExplainin
     leftElbow.position.set(-0.04, -0.48, 0);
     leftShoulder.add(leftElbow);
 
-    const forearmL = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, 0.28, 8, 16), suitMat);
+    const forearmL = new THREE.Mesh(forearmGeo, suitMat);
     forearmL.position.set(0, -0.2, 0.04);
     leftElbow.add(forearmL);
 
-    const gloveL = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 16), darkNavyMat);
+    const gloveL = new THREE.Mesh(gloveGeo, darkNavyMat);
     gloveL.position.set(0, -0.4, 0.06);
     leftElbow.add(gloveL);
 
-    // Articulated Right Arm (main gesturing arm)
+    // Right Arm
     const rightShoulder = new THREE.Group();
     rightShoulder.position.set(0.56, 0.28, 0);
     astronaut.add(rightShoulder);
 
-    const shoulderJointR = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 16), jointMat);
-    rightShoulder.add(shoulderJointR);
-
-    const upperArmR = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.34, 8, 16), suitMat);
+    rightShoulder.add(new THREE.Mesh(shoulderGeo, jointMat));
+    const upperArmR = new THREE.Mesh(upperArmGeo, suitMat);
     upperArmR.position.set(0.04, -0.25, 0);
     rightShoulder.add(upperArmR);
 
@@ -197,32 +234,37 @@ export const Astronaut3D: React.FC<Astronaut3DProps> = ({ stepIndex, isExplainin
     rightElbow.position.set(0.04, -0.48, 0);
     rightShoulder.add(rightElbow);
 
-    const forearmR = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, 0.28, 8, 16), suitMat);
+    const forearmR = new THREE.Mesh(forearmGeo, suitMat);
     forearmR.position.set(0, -0.2, 0.04);
     rightElbow.add(forearmR);
 
-    const gloveR = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 16), darkNavyMat);
+    const gloveR = new THREE.Mesh(gloveGeo, darkNavyMat);
     gloveR.position.set(0, -0.4, 0.06);
     rightElbow.add(gloveR);
 
     // Legs
+    const thighGeo = trackGeo(new THREE.CapsuleGeometry(0.15, 0.36, 8, 16));
+    const kneeGeo = trackGeo(new THREE.SphereGeometry(0.14, 12, 12));
+    const shinGeo = trackGeo(new THREE.CapsuleGeometry(0.13, 0.34, 8, 16));
+    const bootGeo = trackGeo(new THREE.BoxGeometry(0.24, 0.16, 0.34));
+
     const createLeg = (xOffset: number) => {
       const legGroup = new THREE.Group();
       legGroup.position.set(xOffset, -0.52, 0);
 
-      const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.36, 8, 16), suitMat);
+      const thigh = new THREE.Mesh(thighGeo, suitMat);
       thigh.position.set(0, -0.24, 0);
       legGroup.add(thigh);
 
-      const knee = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 12), jointMat);
+      const knee = new THREE.Mesh(kneeGeo, jointMat);
       knee.position.set(0, -0.48, 0.02);
       legGroup.add(knee);
 
-      const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.34, 8, 16), suitMat);
+      const shin = new THREE.Mesh(shinGeo, suitMat);
       shin.position.set(0, -0.72, 0);
       legGroup.add(shin);
 
-      const boot = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.34), darkNavyMat);
+      const boot = new THREE.Mesh(bootGeo, darkNavyMat);
       boot.position.set(0, -0.96, 0.06);
       legGroup.add(boot);
 
@@ -234,122 +276,143 @@ export const Astronaut3D: React.FC<Astronaut3DProps> = ({ stepIndex, isExplainin
     astronaut.add(leftLeg);
     astronaut.add(rightLeg);
 
-    // Animation loop
     const clock = new THREE.Clock();
     let frameId = 0;
-
-    // Blink state
     let nextBlinkTime = 2.2;
     let blinkProgress = 0;
     let isBlinking = false;
 
-    const animate = () => {
-      const elapsed = clock.getElapsedTime();
-      const dt = Math.min(clock.getDelta(), 0.05) || 0.016;
+    const applyPose = (elapsed: number, dt: number) => {
       const step = stepRef.current;
       const explaining = explainingRef.current;
+      const motion = prefersReducedMotion ? 0 : 1;
 
-      // 1. Zero-G Floating
-      astronaut.position.y = Math.sin(elapsed * 1.4) * 0.1 - 0.1;
-      astronaut.rotation.y = Math.sin(elapsed * 0.65) * 0.12;
-      astronaut.rotation.z = Math.sin(elapsed * 0.85) * 0.03;
+      astronaut.position.y = Math.sin(elapsed * 1.4) * 0.1 * motion - 0.1;
+      astronaut.rotation.y = Math.sin(elapsed * 0.65) * 0.12 * motion;
+      astronaut.rotation.z = Math.sin(elapsed * 0.85) * 0.03 * motion;
 
-      // 2. Breathing (torso expansion + subtle shoulder rise)
-      const breath = Math.sin(elapsed * 2.1);
+      const breath = Math.sin(elapsed * 2.1) * motion;
       torsoGroup.scale.set(1 + breath * 0.022, 1 + breath * 0.015, 1 + breath * 0.03);
       leftShoulder.position.y = 0.28 + breath * 0.016;
       rightShoulder.position.y = 0.28 + breath * 0.016;
 
-      // Gentle chest light pulse
-      chestIndicatorMat.color.setHSL(0.59, 0.7, 0.6 + breath * 0.12);
+      chestIndicatorMat.color.setHSL(0.55, 0.85, explaining ? 0.64 + breath * 0.12 : 0.56);
 
-      // 3. Natural Eye Blinking
-      if (!isBlinking && elapsed >= nextBlinkTime) {
-        isBlinking = true;
-        blinkProgress = 0;
-      }
-      if (isBlinking) {
-        blinkProgress += dt * 7.5;
-        const scaleY = blinkProgress < 0.5 ? 1 - blinkProgress * 1.9 : (blinkProgress - 0.5) * 1.9;
-        const clamped = Math.max(0.06, Math.min(1, scaleY));
-        leftEye.scale.y = clamped;
-        rightEye.scale.y = clamped;
-        if (blinkProgress >= 1) {
-          isBlinking = false;
-          leftEye.scale.y = 1;
-          rightEye.scale.y = 1;
-          nextBlinkTime = elapsed + 2.4 + Math.random() * 2.6;
+      if (!prefersReducedMotion) {
+        if (!isBlinking && elapsed >= nextBlinkTime) {
+          isBlinking = true;
+          blinkProgress = 0;
         }
+        if (isBlinking) {
+          blinkProgress += dt * 7.5;
+          const scaleY =
+            blinkProgress < 0.5 ? 1 - blinkProgress * 1.9 : (blinkProgress - 0.5) * 1.9;
+          const clamped = Math.max(0.06, Math.min(1, scaleY));
+          leftEye.scale.y = clamped;
+          rightEye.scale.y = clamped;
+          if (blinkProgress >= 1) {
+            isBlinking = false;
+            leftEye.scale.y = 1;
+            rightEye.scale.y = 1;
+            nextBlinkTime = elapsed + 2.4 + Math.random() * 2.6;
+          }
+        }
+        eyesGroup.position.x = Math.sin(elapsed * 0.9) * 0.025;
       }
 
-      // Subtle eye glance
-      eyesGroup.position.x = Math.sin(elapsed * 0.9) * 0.025;
-
-      // 4. Head Tilt & Nod when explaining
       headGroup.rotation.x = explaining
-        ? Math.sin(elapsed * 3.4) * 0.055 + 0.04
-        : Math.sin(elapsed * 1.1) * 0.03;
-      headGroup.rotation.y = Math.sin(elapsed * 0.8) * 0.09;
-      headGroup.rotation.z = Math.cos(elapsed * 0.7) * 0.04;
+        ? Math.sin(elapsed * 3.4) * 0.055 * motion + 0.04
+        : Math.sin(elapsed * 1.1) * 0.03 * motion;
+      headGroup.rotation.y = Math.sin(elapsed * 0.8) * 0.09 * motion;
+      headGroup.rotation.z = Math.cos(elapsed * 0.7) * 0.04 * motion;
 
-      // 5. Arm Gestures per Step
       if (step === 0) {
-        // Friendly wave with right arm
-        rightShoulder.rotation.z = 1.95 + Math.sin(elapsed * 4.2) * 0.25;
+        rightShoulder.rotation.z = 1.95 + Math.sin(elapsed * 4.2) * 0.25 * motion;
         rightShoulder.rotation.x = -0.35;
-        rightElbow.rotation.z = 0.45 + Math.sin(elapsed * 4.2) * 0.2;
+        rightElbow.rotation.z = 0.45 + Math.sin(elapsed * 4.2) * 0.2 * motion;
         leftShoulder.rotation.z = -0.18 + breath * 0.04;
-        leftShoulder.rotation.x = Math.sin(elapsed * 1.2) * 0.08;
+        leftShoulder.rotation.x = Math.sin(elapsed * 1.2) * 0.08 * motion;
         leftElbow.rotation.x = -0.3;
       } else {
-        // Presenting / Explaining gestures
-        const talkGesture = explaining ? Math.sin(elapsed * 4.8) * 0.18 : Math.sin(elapsed * 1.8) * 0.08;
+        const talkGesture =
+          (explaining ? Math.sin(elapsed * 4.8) * 0.18 : Math.sin(elapsed * 1.8) * 0.08) *
+          motion;
         rightShoulder.rotation.z = 0.65 + talkGesture;
-        rightShoulder.rotation.x = -0.65 + Math.cos(elapsed * 2.6) * 0.12;
+        rightShoulder.rotation.x = -0.65 + Math.cos(elapsed * 2.6) * 0.12 * motion;
         rightElbow.rotation.x = -0.85 + talkGesture * 0.8;
         rightElbow.rotation.z = 0.15;
 
         leftShoulder.rotation.z = -0.35 - talkGesture * 0.5;
-        leftShoulder.rotation.x = -0.35 + Math.sin(elapsed * 2.1) * 0.1;
+        leftShoulder.rotation.x = -0.35 + Math.sin(elapsed * 2.1) * 0.1 * motion;
         leftElbow.rotation.x = -0.65;
       }
 
-      // Gentle zero-G leg float
-      leftLeg.rotation.x = Math.sin(elapsed * 1.3) * 0.08 + 0.08;
-      rightLeg.rotation.x = Math.sin(elapsed * 1.3 + Math.PI) * 0.08 + 0.05;
+      leftLeg.rotation.x = Math.sin(elapsed * 1.3) * 0.08 * motion + 0.08;
+      rightLeg.rotation.x = Math.sin(elapsed * 1.3 + Math.PI) * 0.08 * motion + 0.05;
+    };
 
+    const animate = () => {
+      const elapsed = clock.getElapsedTime();
+      const dt = Math.min(clock.getDelta(), 0.05) || 0.016;
+      applyPose(elapsed, dt);
       renderer.render(scene, camera);
-      frameId = window.requestAnimationFrame(animate);
+      if (!prefersReducedMotion) {
+        frameId = window.requestAnimationFrame(animate);
+      }
     };
 
     animate();
 
-    const handleResize = () => {
-      if (!container) return;
-      const w = container.clientWidth || 360;
-      const h = container.clientHeight || 420;
-      camera.aspect = w / h;
+    const updateSize = (w: number, h: number) => {
+      const safeW = Math.max(80, w);
+      const safeH = Math.max(80, h);
+      camera.aspect = safeW / safeH;
       camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
+      renderer.setSize(safeW, safeH);
+      if (prefersReducedMotion) {
+        renderer.render(scene, camera);
+      }
     };
 
-    window.addEventListener('resize', handleResize);
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver((entries) => {
+            const entry = entries[0];
+            if (entry) {
+              updateSize(entry.contentRect.width, entry.contentRect.height);
+            }
+          })
+        : null;
+    resizeObserver?.observe(container);
+
+    const handleWindowResize = () => {
+      updateSize(container.clientWidth || fallbackW, container.clientHeight || fallbackH);
+    };
+    window.addEventListener('resize', handleWindowResize);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      window.cancelAnimationFrame(frameId);
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', handleWindowResize);
+      if (frameId) window.cancelAnimationFrame(frameId);
+      geometries.forEach((g) => g.dispose());
+      materials.forEach((m) => m.dispose());
       renderer.dispose();
       if (renderer.domElement.parentNode === container) {
         container.removeChild(renderer.domElement);
       }
     };
-  }, []);
+  }, [size]);
 
   return (
     <div
       ref={mountRef}
-      className="h-[340px] w-full max-w-[380px] sm:h-[400px]"
-      aria-label="Astronauta 3D animado explicando como o sistema funciona"
+      className={
+        size === 'compact'
+          ? 'h-[150px] w-[132px] shrink-0'
+          : 'h-[320px] w-full max-w-[380px] sm:h-[380px]'
+      }
+      role="img"
+      aria-label="Astronauta 3D animado acompanhando a explicação do sistema EARTHSONG"
     />
   );
 };
