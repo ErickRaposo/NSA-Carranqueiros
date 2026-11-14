@@ -18,7 +18,9 @@ export const StarfieldBackground: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     let animationId = 0;
     let width = 0;
     let height = 0;
@@ -41,8 +43,8 @@ export const StarfieldBackground: React.FC = () => {
 
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
-      width = canvas.clientWidth;
-      height = canvas.clientHeight;
+      width = canvas.clientWidth || window.innerWidth;
+      height = canvas.clientHeight || window.innerHeight;
       canvas.width = Math.floor(width * dpr);
       canvas.height = Math.floor(height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
