@@ -87,6 +87,8 @@ describe('Collective Unlock Store & Illumination Progress', () => {
     expect(eco.unlockedVoicesCount).toBe(10);
     expect(eco.spotlightRegion).not.toBeNull();
     expect(eco.spotlightRegion?.isComplete).toBe(false);
+    expect(eco.recentFeed.length).toBeGreaterThan(0);
+    expect(eco.recentFeed[0].unlockedAt >= eco.recentFeed[eco.recentFeed.length - 1].unlockedAt).toBe(true);
     expect(DATASET_TO_STEM.svs5011).toBe('melody');
     expect(DATASET_TO_STEM.svs5148).toBe('fx');
   });

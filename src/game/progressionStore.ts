@@ -1,5 +1,5 @@
 import { SoundscapeVisualTelemetry } from '../audio/soundscapeEngine';
-import { StemId } from '../community/unlockStore';
+import { STEM_METAS, StemId } from '../community/unlockStore';
 
 export type MissionId =
   | 'cacador_de_raios'
@@ -67,9 +67,12 @@ export interface ProgressionSyncAdapter {
 }
 
 export interface ExplorerRank {
+  level: number;
+  maxLevel: number;
   title: string;
   minXp: number;
   nextXp: number | null;
+  progress01: number;
 }
 
 export const EXPLORER_RANKS: { title: string; minXp: number }[] = [
@@ -153,18 +156,29 @@ export function createInitialProgressionState(): ProgressionState {
 }
 
 export function getExplorerRank(xp: number): ExplorerRank {
+  const safeXp = Math.max(0, xp);
+  let levelIdx = 0;
   let current = EXPLORER_RANKS[0];
   let nextXp: number | null = EXPLORER_RANKS[1].minXp;
   for (let i = 0; i < EXPLORER_RANKS.length; i++) {
-    if (xp >= EXPLORER_RANKS[i].minXp) {
+    if (safeXp >= EXPLORER_RANKS[i].minXp) {
+      levelIdx = i;
       current = EXPLORER_RANKS[i];
       nextXp = EXPLORER_RANKS[i + 1]?.minXp ?? null;
     }
   }
+  const progress01 =
+    nextXp === null
+      ? 1
+      : Math.min(1, Math.max(0, (safeXp - current.minXp) / Math.max(1, nextXp - current.minXp)));
+
   return {
+    level: levelIdx + 1,
+    maxLevel: EXPLORER_RANKS.length,
     title: current.title,
     minXp: current.minXp,
     nextXp,
+    progress01,
   };
 }
 
@@ -503,4 +517,99 @@ export function loadProgressionState(userId: string): ProgressionState {
 
 export function saveProgressionState(userId: string, state: ProgressionState): void {
   localProgressionAdapter.save(userId, state);
+}
+
+export interface SonicPassportSummary {
+  illuminatedRegions: { regionKey: string; regionLabel: string; isComplete5of5: boolean }[];
+  favoriteStem: {
+    stemId: StemId;
+    labelPt: string;
+    accentHex: string;
+    usageCount: number;
+  } | null;
+  regionalTitles: string[];
+  hasGoldenTrailReward: boolean;
+}
+
+const REGION_TITLE_MAP: Record<string, string> = {
+  'América do Sul': 'Maestro Sul-Americano',
+  'América do Norte e Central': 'Guardião das Américas',
+  Europa: 'Maestro da Eurásia',
+  Ásia: 'Maestro da Eurásia',
+  África: 'Voz do Berço Solar',
+  Oceania: 'Sinfonia do Pacífico',
+};
+
+/**
+ * Derives the Sonic Passport / Logbook ("Diário de Bordo & Passaporte Sônico")
+ * strictly from real user discoveries, contributions, and symphonies.
+ */
+export function getSonicPassportSummary(
+  state: ProgressionState,
+  countriesByRegionKey?: ReadonlyMap<string, { namePt: string; regionPt: string }>
+): SonicPassportSummary {
+  const regionMap = new Map<string, { regionKey: string; regionLabel: string; isComplete5of5: boolean }>();
+  for (const item of state.contributionHistory) {
+    const prev = regionMap.get(item.regionKey);
+    regionMap.set(item.regionKey, {
+      regionKey: item.regionKey,
+      regionLabel: item.regionLabel,
+      isComplete5of5: Boolean(prev?.isComplete5of5 || item.isRegionComplete5of5 || state.unlockedSymphonyKeys.includes(item.regionKey)),
+    });
+  }
+  for (const key of state.contributedRegionKeys) {
+    if (!regionMap.has(key)) {
+      const meta = countriesByRegionKey?.get(key);
+      regionMap.set(key, {
+        regionKey: key,
+        regionLabel: meta?.namePt ?? key.replace(/^country:/, ''),
+        isComplete5of5: state.unlockedSymphonyKeys.includes(key),
+      });
+    }
+  }
+
+  // Favorite / most-attuned frequency combining contributions (weight 2) + discoveries (weight 1)
+  let bestStem: StemId | null = null;
+  let bestScore = 0;
+  const stemOrder: StemId[] = ['melody', 'harmony', 'rhythm', 'bass', 'fx'];
+  for (const stemId of stemOrder) {
+    const contribCount = state.contributionHistory.filter((h) => h.stemId === stemId).length;
+    const discCount = state.discoveredPhenomena[stemId] ?? 0;
+    const score = contribCount * 2 + discCount;
+    if (score > bestScore) {
+      bestScore = score;
+      bestStem = stemId;
+    }
+  }
+
+  const titlesSet = new Set<string>();
+  if (state.unlockedSymphonyKeys.length >= 1) {
+    titlesSet.add('Orquestrador Áureo 5/5');
+  }
+  if (bestStem === 'melody' && bestScore >= 2) {
+    titlesSet.add('Explorador Pentatônico');
+  }
+  if (countriesByRegionKey) {
+    const activeKeys = new Set([...state.contributedRegionKeys, ...state.unlockedSymphonyKeys]);
+    for (const key of activeKeys) {
+      const geo = countriesByRegionKey.get(key);
+      if (geo && REGION_TITLE_MAP[geo.regionPt]) {
+        titlesSet.add(REGION_TITLE_MAP[geo.regionPt]);
+      }
+    }
+  }
+
+  return {
+    illuminatedRegions: Array.from(regionMap.values()),
+    favoriteStem: bestStem
+      ? {
+          stemId: bestStem,
+          labelPt: STEM_METAS[bestStem].labelPt,
+          accentHex: STEM_METAS[bestStem].accentHex,
+          usageCount: bestScore,
+        }
+      : null,
+    regionalTitles: Array.from(titlesSet),
+    hasGoldenTrailReward: state.unlockedSymphonyKeys.length >= 1,
+  };
 }

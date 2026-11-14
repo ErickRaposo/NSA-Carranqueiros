@@ -4,6 +4,7 @@ import {
   getAchievementBadges,
   getExplorerRank,
   getMissionProgressList,
+  getSonicPassportSummary,
   localProgressionAdapter,
   recordCollectiveContribution,
   recordRegionDiscovery,
@@ -133,5 +134,51 @@ describe('progressionStore (XP anti-spam, 5 NASA missions & badges)', () => {
     expect(contrib1.nextState.contributionHistory[0].regionLabel).toBe('Brasil');
     expect(contribRepeat.nextState.contributionHistory).toHaveLength(1);
     expect(localProgressionAdapter.mode).toBe('local');
+  });
+
+  it('computes ExplorerRank numeric level (1..4) and normalized progress01 for PlayerHUD', () => {
+    const r1 = getExplorerRank(0);
+    expect(r1.level).toBe(1);
+    expect(r1.progress01).toBe(0);
+    expect(r1.nextXp).toBe(120);
+
+    const r1Mid = getExplorerRank(60);
+    expect(r1Mid.level).toBe(1);
+    expect(r1Mid.progress01).toBeCloseTo(0.5, 2);
+
+    const r2 = getExplorerRank(200);
+    expect(r2.level).toBe(2);
+    expect(r2.title).toBe('Cartógrafo Sonoro');
+    expect(r2.progress01).toBeCloseTo(0.5, 2);
+
+    const r4 = getExplorerRank(700);
+    expect(r4.level).toBe(4);
+    expect(r4.maxLevel).toBe(4);
+    expect(r4.nextXp).toBeNull();
+    expect(r4.progress01).toBe(1);
+  });
+
+  it('derives Sonic Passport regional titles, favorite frequency, and 5/5 golden trail reward', () => {
+    let state = createInitialProgressionState();
+    state = recordCollectiveContribution(state, {
+      regionKey: 'country:076',
+      regionLabel: 'Brasil',
+      stemId: 'melody',
+      isRegionComplete5of5: true,
+    }).nextState;
+
+    const geoMap = new Map([
+      ['country:076', { namePt: 'Brasil', regionPt: 'América do Sul' }],
+    ]);
+    const passport = getSonicPassportSummary(state, geoMap);
+    expect(passport.hasGoldenTrailReward).toBe(true);
+    expect(passport.favoriteStem?.stemId).toBe('melody');
+    expect(passport.regionalTitles).toContain('Orquestrador Áureo 5/5');
+    expect(passport.regionalTitles).toContain('Maestro Sul-Americano');
+    expect(passport.illuminatedRegions[0]).toEqual({
+      regionKey: 'country:076',
+      regionLabel: 'Brasil',
+      isComplete5of5: true,
+    });
   });
 });

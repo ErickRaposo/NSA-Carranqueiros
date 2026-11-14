@@ -24,5 +24,7 @@ describe('authStorage', () => {
     const session = loadStoredSession();
     expect(session).toEqual({ user: null, onboardingDone: false });
     expect(GUEST_USER.isGuest).toBe(true);
+    expect(GUEST_USER.originCountryCode).toBeUndefined();
+    expect(DEFAULT_ADMIN_USER.originCountryCode).toBe('BR');
   });
 });

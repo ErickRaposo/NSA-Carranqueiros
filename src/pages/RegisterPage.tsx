@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { UserAccount } from '../auth/authStorage';
+import { ORIGIN_COUNTRY_OPTIONS } from '../components/CountryFlag';
 
 interface RegisterPageProps {
   highContrast: boolean;
@@ -16,6 +17,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
+  const [originCountryCode, setOriginCountryCode] = useState('BR');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -52,6 +54,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
       email: email.trim(),
       username: username.trim(),
       password,
+      originCountryCode: originCountryCode || undefined,
     });
   };
 
@@ -125,6 +128,25 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
             onChange={(e) => setUsername(e.target.value)}
             className={inputClass}
           />
+        </div>
+
+        <div>
+          <label htmlFor="reg-country" className="mb-1 block text-xs font-semibold text-slate-200">
+            País de origem
+          </label>
+          <select
+            id="reg-country"
+            value={originCountryCode}
+            onChange={(e) => setOriginCountryCode(e.target.value)}
+            className={inputClass}
+          >
+            <option value="">Órbita Livre / Não informar</option>
+            {ORIGIN_COUNTRY_OPTIONS.map((opt) => (
+              <option key={opt.code} value={opt.code}>
+                {opt.namePt} ({opt.code})
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>

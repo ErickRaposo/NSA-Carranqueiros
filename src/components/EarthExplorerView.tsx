@@ -60,9 +60,13 @@ import {
 interface EarthExplorerViewProps {
   userName: string;
   userId?: string;
+  username?: string;
+  originCountryCode?: string;
+  onChangeOriginCountry?: (countryCode: string) => void;
   isJuryQuickEntry?: boolean;
   isGuestSession?: boolean;
   onOpenAuth?: () => void;
+  onOpenRegister?: () => void;
   highContrast: boolean;
   onToggleHighContrast: () => void;
   fontScale: number;
@@ -74,9 +78,13 @@ interface EarthExplorerViewProps {
 export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
   userName,
   userId = userName.toLowerCase(),
+  username,
+  originCountryCode,
+  onChangeOriginCountry,
   isJuryQuickEntry = false,
   isGuestSession = false,
   onOpenAuth,
+  onOpenRegister,
   highContrast,
   onToggleHighContrast,
   fontScale,
@@ -987,6 +995,9 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
         }
         motionPaused={motionPaused}
         isCelebrating5of5={Boolean(unlockSummary?.isCompleteReal)}
+        hasGoldenTrailReward={Boolean(
+          !isGuestSession && progression.unlockedSymphonyKeys.length > 0
+        )}
         unlockPulseNonce={unlockPulseNonce}
         flyTarget={flyTarget}
         zoomCommand={zoomCommand}
@@ -1053,11 +1064,32 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
           stopSpeech();
           onLogout();
         }}
+        userName={userName}
+        username={username ?? userId}
+        originCountryCode={originCountryCode}
+        onChangeOriginCountry={onChangeOriginCountry}
         isGuestSession={isGuestSession}
         onOpenAuth={onOpenAuth}
+        onOpenRegister={onOpenRegister}
+        highContrast={highContrast}
+        onToggleHighContrast={onToggleHighContrast}
+        fontScale={fontScale}
+        onCycleFontScale={onCycleFontScale}
+        voiceEnabled={voiceEnabled}
+        onToggleVoice={() =>
+          setVoiceEnabled((prev) => {
+            const next = !prev;
+            if (!next) stopSpeech();
+            else speakTextPt('Narração por voz em português ativada.');
+            return next;
+          })
+        }
+        sonifyEnabled={sonifyEnabled}
+        onToggleSonify={() => setSonifyEnabled((v) => !v)}
         ecosystemSummary={ecosystemSummary}
         explorerXp={progression.xp}
         progression={progression}
+        stemActivity={soundscapeTelemetry?.stemActivity}
         activeRegionLabel={soundscapeTarget?.label ?? null}
         activeRegionUnlockCount={unlockSummary?.unlockedCount ?? 0}
         discoveryToast={discoveryToast}
@@ -1070,7 +1102,7 @@ export const EarthExplorerView: React.FC<EarthExplorerViewProps> = ({
             progression={progression}
             jukeboxPlaying={jukeboxPlaying}
             motionPaused={motionPaused}
-            compactByDefault={Boolean(soundscapeTarget)}
+            compactByDefault={true}
             isGuestSession={isGuestSession}
             onSelectCountry={handleSelectCountry}
             voiceEnabled={voiceEnabled}

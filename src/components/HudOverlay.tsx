@@ -5,26 +5,28 @@ import {
   ArrowUp,
   Award,
   Compass,
+  Crown,
   Eye,
   EyeOff,
   Flag,
   Globe,
   HelpCircle,
-  Layers,
-  LogIn,
-  LogOut,
   Map as MapIcon,
   PanelLeftClose,
   Search,
+  Settings2,
   SlidersHorizontal,
   Sparkles,
   Sun,
+  Trophy,
   Type,
   Volume2,
   X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
+import { PlayerHUD } from './PlayerHUD';
+import { RankingPopover } from './RankingPopover';
 import {
   GraticuleIcon,
   PolygonBorderIcon,
@@ -48,12 +50,14 @@ import {
   GlobalEcosystemSummary,
   STEM_METAS,
   STEM_ORDER,
+  StemId,
 } from '../community/unlockStore';
 import {
   DiscoveryEvent,
   getAchievementBadges,
   getExplorerRank,
   getMissionProgressList,
+  getSonicPassportSummary,
   MissionId,
   PROGRESSION_SYNC_NOTICE_PT,
   ProgressionState,
@@ -144,11 +148,25 @@ interface HudOverlayProps {
   hoverReadings?: SampledReading[];
   approxAltKm?: number;
   onLogout: () => void;
+  userName?: string;
+  username?: string;
+  originCountryCode?: string;
+  onChangeOriginCountry?: (countryCode: string) => void;
   isGuestSession?: boolean;
   onOpenAuth?: () => void;
+  onOpenRegister?: () => void;
+  highContrast?: boolean;
+  onToggleHighContrast?: () => void;
+  fontScale?: number;
+  onCycleFontScale?: () => void;
+  voiceEnabled?: boolean;
+  onToggleVoice?: () => void;
+  sonifyEnabled?: boolean;
+  onToggleSonify?: () => void;
   ecosystemSummary?: GlobalEcosystemSummary;
   explorerXp?: number;
   progression?: ProgressionState;
+  stemActivity?: Partial<Record<StemId, number>>;
   activeRegionLabel?: string | null;
   activeRegionUnlockCount?: number;
   discoveryToast?: DiscoveryEvent | null;
@@ -190,11 +208,25 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
   hoverReadings = [],
   approxAltKm = 12600,
   onLogout,
+  userName = 'Visitante',
+  username = 'visitante',
+  originCountryCode,
+  onChangeOriginCountry,
   isGuestSession = false,
   onOpenAuth,
+  onOpenRegister,
+  highContrast = false,
+  onToggleHighContrast,
+  fontScale = 1,
+  onCycleFontScale,
+  voiceEnabled = false,
+  onToggleVoice,
+  sonifyEnabled = false,
+  onToggleSonify,
   ecosystemSummary,
   explorerXp: _explorerXp,
   progression,
+  stemActivity,
   activeRegionLabel: _activeRegionLabel,
   activeRegionUnlockCount: _activeRegionUnlockCount = 0,
   discoveryToast,
@@ -207,12 +239,19 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeArea, setActiveArea] = useState<LaunchpadAreaId | null>(null);
   const [visualMenuOpen, setVisualMenuOpen] = useState(false);
+  const [playerPopoverOpen, setPlayerPopoverOpen] = useState(false);
+  const [rankingPopoverOpen, setRankingPopoverOpen] = useState(false);
+  const [mobileCenterMenuOpen, setMobileCenterMenuOpen] = useState(false);
   const [samplingLayerId, setSamplingLayerId] = useState<DatasetId | null>(null);
   const [draggedLayerId, setDraggedLayerId] = useState<DatasetId | null>(null);
   const [dragOverLayerId, setDragOverLayerId] = useState<DatasetId | null>(null);
   const [zenMode, setZenMode] = useState(false);
 
   const visualMenuRef = useRef<HTMLDivElement | null>(null);
+  const rankingWrapRef = useRef<HTMLDivElement | null>(null);
+  const rankingBtnRef = useRef<HTMLButtonElement | null>(null);
+  const mobileCenterWrapRef = useRef<HTMLDivElement | null>(null);
+  const mobileCenterBtnRef = useRef<HTMLButtonElement | null>(null);
   const launchpadRefs = useRef<Partial<Record<LaunchpadAreaId, HTMLButtonElement | null>>>({});
 
   // Keyboard shortcut: Z toggles Modo Zen (Esc exits Zen)
@@ -249,6 +288,48 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
     };
   }, [visualMenuOpen]);
 
+  useEffect(() => {
+    if (!rankingPopoverOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (rankingWrapRef.current && !rankingWrapRef.current.contains(e.target as Node)) {
+        setRankingPopoverOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setRankingPopoverOpen(false);
+        requestAnimationFrame(() => rankingBtnRef.current?.focus());
+      }
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [rankingPopoverOpen]);
+
+  useEffect(() => {
+    if (!mobileCenterMenuOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (mobileCenterWrapRef.current && !mobileCenterWrapRef.current.contains(e.target as Node)) {
+        setMobileCenterMenuOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileCenterMenuOpen(false);
+        requestAnimationFrame(() => mobileCenterBtnRef.current?.focus());
+      }
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [mobileCenterMenuOpen]);
+
   // Close Launchpad drawer on Escape and return focus to its trigger button
   useEffect(() => {
     if (!activeArea) return;
@@ -284,6 +365,26 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
   const explorerRank = useMemo(
     () => (progression ? getExplorerRank(progression.xp) : null),
     [progression]
+  );
+
+  const countriesByRegionKey = useMemo(() => {
+    const map = new Map<string, { namePt: string; regionPt: string }>();
+    for (const c of countries) {
+      map.set(buildCountryRegionKey(c), { namePt: c.namePt, regionPt: c.regionPt });
+    }
+    return map;
+  }, [countries]);
+
+  const sonicPassport = useMemo(
+    () =>
+      !isGuestSession && progression
+        ? getSonicPassportSummary(progression, countriesByRegionKey)
+        : null,
+    [isGuestSession, progression, countriesByRegionKey]
+  );
+
+  const isContextualCenterAwake = Boolean(
+    hoverInfo || selectedCountry || visualMenuOpen || mobileCenterMenuOpen
   );
 
   const nextUnexploredCountry = useMemo(() => {
@@ -344,7 +445,21 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
     }, 850);
   };
 
-  // Unified 4-area Explorer Launchpad (no duplication with Planeta Vivo on the right)
+  const handlePadVerticalFader = (
+    e: React.PointerEvent<HTMLDivElement>,
+    datasetId: DatasetId,
+    isCurrentlyEnabled: boolean
+  ) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const rawRatio = 1 - (e.clientY - rect.top) / Math.max(1, rect.height);
+    const clamped = Math.max(0.08, Math.min(1, Number(rawRatio.toFixed(2))));
+    if (!isCurrentlyEnabled) {
+      onToggleLayer(datasetId);
+    }
+    onChangeLayerOpacity(datasetId, clamped);
+  };
+
+  // Unified 4-area Explorer Launchpad (Mesa de Som Bioluminescente + Passaporte Sônico)
   const launchpadAreas: {
     id: LaunchpadAreaId;
     label: string;
@@ -366,9 +481,9 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
     },
     {
       id: 'frequencias',
-      label: 'Frequências',
-      shortLabel: 'Freq.',
-      description: 'Descubra os 5 fenômenos NASA e ouça cada instrumento',
+      label: 'Mesa de Som do Planeta',
+      shortLabel: 'Mesa',
+      description: 'Pads bioluminescentes que pulsam e mesclam os 5 fenômenos NASA',
       badge: `${enabledLayers.length}/5`,
       icon: <SlidersHorizontal size={16} aria-hidden="true" />,
       testId: 'expand-layers-btn',
@@ -385,9 +500,9 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
     },
     {
       id: 'colecao',
-      label: 'Coleção',
-      shortLabel: 'Coleção',
-      description: 'Seu nível, descobertas, conquistas e histórico coletivo',
+      label: 'Diário & Passaporte',
+      shortLabel: 'Diário',
+      description: 'Seu Passaporte Sônico, títulos regionais, países iluminados e conquistas',
       badge: `${unlockedBadgesCount}/${badges.length || 5}`,
       unavailable: !progression,
       icon: <Award size={16} aria-hidden="true" />,
@@ -436,241 +551,511 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
         </button>
       )}
 
-      {/* TOP BAR */}
-      <header className="top-hud console-frame" aria-label="Barra principal e navegação">
-        <div className="brand-block">
-          <img src={mineiroLogo} alt="MINEIRØ" className="h-7 w-auto object-contain" />
-        </div>
+      {/* TOP BAR — 3 CONTEXTUAL FLOATING ISLANDS (GLOBE IS KING) */}
+      <header
+        className="top-hud top-hud-islands"
+        aria-label="Ilhas superiores de identidade, controles contextuais e progressão"
+        data-testid="explorer-topbar"
+      >
+        {/* ILHA ESQUERDA: LOGO MINEIRØ + BUSCA COMPACTA */}
+        <div
+          className="topbar-zone topbar-zone-left topbar-island"
+          data-testid="topbar-zone-left"
+        >
+          <div className="brand-block">
+            <img src={mineiroLogo} alt="MINEIRØ" className="h-6 w-auto object-contain" />
+          </div>
 
-        {/* COUNTRY SEARCH */}
-        <div className="search-wrapper">
-          <div className="search-input-box">
-            <Search size={15} className="search-icon" aria-hidden="true" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setSearchOpen(true);
-              }}
-              onFocus={() => setSearchOpen(true)}
-              placeholder="Buscar país ou região..."
-              className="search-input"
-              aria-label="Buscar país para explorar e acender camadas"
-              aria-expanded={searchOpen && searchResults.length > 0}
-              data-testid="country-search-input"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                className="clear-search-btn"
-                onClick={() => {
-                  setSearchQuery('');
-                  setSearchOpen(false);
+          <div className="search-wrapper">
+            <div className="search-input-box">
+              <Search size={15} className="search-icon" aria-hidden="true" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setSearchOpen(true);
                 }}
-                aria-label="Limpar busca de país"
+                onFocus={() => setSearchOpen(true)}
+                placeholder="Buscar país ou região..."
+                className="search-input"
+                aria-label="Buscar país ou região para explorar e acender camadas"
+                aria-expanded={searchOpen && searchResults.length > 0}
+                data-testid="country-search-input"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="clear-search-btn"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSearchOpen(false);
+                  }}
+                  aria-label="Limpar busca de país"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            {searchOpen && searchResults.length > 0 && (
+              <ul
+                className="search-dropdown console-frame"
+                role="listbox"
+                aria-label="Países encontrados"
+                data-testid="country-search-results"
               >
-                <X size={13} />
-              </button>
+                {searchResults.map((c) => (
+                  <li key={c.id} role="option" aria-selected={selectedCountry?.id === c.id}>
+                    <button
+                      type="button"
+                      className="search-result-btn"
+                      onClick={() => {
+                        onSelectAndFlyCountry(c);
+                        setSearchQuery(c.namePt);
+                        setSearchOpen(false);
+                      }}
+                    >
+                      <span>{c.namePt}</span>
+                      <span className="muted-sm">{c.regionPt}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
-
-          {searchOpen && searchResults.length > 0 && (
-            <ul
-              className="search-dropdown console-frame"
-              role="listbox"
-              aria-label="Países encontrados"
-              data-testid="country-search-results"
-            >
-              {searchResults.map((c) => (
-                <li key={c.id} role="option" aria-selected={selectedCountry?.id === c.id}>
-                  <button
-                    type="button"
-                    className="search-result-btn"
-                    onClick={() => {
-                      onSelectAndFlyCountry(c);
-                      setSearchQuery(c.namePt);
-                      setSearchOpen(false);
-                    }}
-                  >
-                    <span>{c.namePt}</span>
-                    <span className="muted-sm">{c.regionPt}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
 
-        {/* COMPACT CONTROLS */}
-        <div className="top-actions">
-          <div className="segmented-control" role="group" aria-label="Modo de visualização">
-            <button
-              type="button"
-              className={`seg-btn ${viewMode === '3d' ? 'active' : ''}`}
-              onClick={() => onToggleViewMode('3d')}
-              aria-pressed={viewMode === '3d'}
-              data-testid="mode-3d-btn"
-            >
-              <Globe size={14} aria-hidden="true" />
-              <span>3D</span>
-            </button>
-            <button
-              type="button"
-              className={`seg-btn ${viewMode === '2d' ? 'active' : ''}`}
-              onClick={() => onToggleViewMode('2d')}
-              aria-pressed={viewMode === '2d'}
-              data-testid="mode-2d-btn"
-            >
-              <MapIcon size={14} aria-hidden="true" />
-              <span>2D</span>
-            </button>
-          </div>
-
-          <div className="segmented-control" role="group" aria-label="Modo de seleção da Jukebox">
-            <button
-              type="button"
-              className={`seg-btn ${selectionMode === 'country' ? 'active' : ''}`}
-              onClick={() => onChangeSelectionMode('country')}
-              aria-pressed={selectionMode === 'country'}
-              title="Clicar no mapa escolhe um país para tocar e acender"
-              data-testid="target-country-btn"
-            >
-              <span>País</span>
-            </button>
-            <button
-              type="button"
-              className={`seg-btn ${selectionMode === 'radius' ? 'active' : ''}`}
-              onClick={() => onChangeSelectionMode('radius')}
-              aria-pressed={selectionMode === 'radius'}
-              title="Clicar no mapa posiciona um raio geográfico livre"
-              data-testid="target-radius-btn"
-            >
-              <span>Raio</span>
-            </button>
-          </div>
-
-          <button
-            type="button"
-            className={`toggle-chip illumination-pill ${showUnlockMap ? 'active' : ''}`}
-            onClick={onToggleUnlockMap}
-            aria-pressed={showUnlockMap}
-            title="Exibir faróis coletivos e regiões iluminadas no globo"
-            data-testid="unlock-map-btn"
-          >
-            <Sun size={14} aria-hidden="true" />
-            <span>Iluminação</span>
-          </button>
-
-          <div className="map-visual-popover-wrap" ref={visualMenuRef}>
-            <button
-              type="button"
-              className={`toggle-chip ${visualMenuOpen ? 'active' : ''}`}
-              onClick={() => setVisualMenuOpen((v) => !v)}
-              aria-expanded={visualMenuOpen}
-              aria-haspopup="true"
-              title="Ajustes cartográficos do globo (Fronteiras, Nomes, Grade, HD)"
-              data-testid="visual-map-menu-btn"
-            >
-              <Layers size={14} aria-hidden="true" />
-              <span>Mapa</span>
-            </button>
-
-            {visualMenuOpen && (
-              <div
-                className="map-visual-popover console-frame"
-                role="group"
-                aria-label="Opções visuais do mapa"
+        {/* ILHA CENTRAL CONTEXTUAL: DESPERTA AO INTERAGIR COM O GLOBO + MENU OPÇÕES */}
+        <div
+          className={`topbar-zone topbar-zone-center topbar-island is-contextual-island ${
+            isContextualCenterAwake ? 'is-awake' : ''
+          }`}
+          data-testid="topbar-zone-center"
+        >
+          <div className="topbar-center-inline">
+            <div className="segmented-control" role="group" aria-label="Alternância 3D e 2D">
+              <button
+                type="button"
+                className={`seg-btn ${viewMode === '3d' ? 'active' : ''}`}
+                onClick={() => onToggleViewMode('3d')}
+                aria-pressed={viewMode === '3d'}
+                data-testid="mode-3d-btn"
               >
-                <button
-                  type="button"
-                  className={`popover-toggle-item ${showBorders ? 'is-on' : ''}`}
-                  onClick={onToggleBorders}
-                  aria-pressed={showBorders}
+                <Globe size={14} aria-hidden="true" />
+                <span>3D</span>
+              </button>
+              <button
+                type="button"
+                className={`seg-btn ${viewMode === '2d' ? 'active' : ''}`}
+                onClick={() => onToggleViewMode('2d')}
+                aria-pressed={viewMode === '2d'}
+                data-testid="mode-2d-btn"
+              >
+                <MapIcon size={14} aria-hidden="true" />
+                <span>2D</span>
+              </button>
+            </div>
+
+            <div className="segmented-control" role="group" aria-label="Modo País ou Raio">
+              <button
+                type="button"
+                className={`seg-btn ${selectionMode === 'country' ? 'active' : ''}`}
+                onClick={() => onChangeSelectionMode('country')}
+                aria-pressed={selectionMode === 'country'}
+                title="Clicar no mapa escolhe um país para tocar e acender"
+                data-testid="target-country-btn"
+              >
+                <span>País</span>
+              </button>
+              <button
+                type="button"
+                className={`seg-btn ${selectionMode === 'radius' ? 'active' : ''}`}
+                onClick={() => onChangeSelectionMode('radius')}
+                aria-pressed={selectionMode === 'radius'}
+                title="Clicar no mapa posiciona um raio geográfico livre"
+                data-testid="target-radius-btn"
+              >
+                <span>Raio</span>
+              </button>
+            </div>
+
+            <div className="map-visual-popover-wrap" ref={visualMenuRef}>
+              <button
+                type="button"
+                className={`toggle-chip orbital-options-chip ${visualMenuOpen ? 'active' : ''}`}
+                onClick={() => {
+                  setVisualMenuOpen((v) => !v);
+                  setPlayerPopoverOpen(false);
+                  setRankingPopoverOpen(false);
+                  setMobileCenterMenuOpen(false);
+                }}
+                aria-expanded={visualMenuOpen}
+                aria-haspopup="true"
+                title="Opções orbitais: Mapa de Conexões, Camadas Cartográficas, Guia e Modo Zen"
+                data-testid="visual-map-menu-btn"
+              >
+                <Settings2 size={14} aria-hidden="true" />
+                <span>Opções</span>
+              </button>
+
+              {visualMenuOpen && (
+                <div
+                  className="map-visual-popover orbital-options-popover console-frame"
+                  role="group"
+                  aria-label="Opções orbitais e visuais do globo"
                 >
-                  <PolygonBorderIcon size={14} />
-                  <span>Fronteiras</span>
-                </button>
-                <button
-                  type="button"
-                  className={`popover-toggle-item ${showLabels ? 'is-on' : ''}`}
-                  onClick={onToggleLabels}
-                  aria-pressed={showLabels}
-                >
-                  <Type size={14} aria-hidden="true" />
-                  <span>Nomes</span>
-                </button>
-                <button
-                  type="button"
-                  className={`popover-toggle-item ${showGrid ? 'is-on' : ''}`}
-                  onClick={onToggleGrid}
-                  aria-pressed={showGrid}
-                >
-                  <GraticuleIcon size={14} />
-                  <span>Grade Lat/Lon</span>
-                </button>
-                <button
-                  type="button"
-                  className={`popover-toggle-item ${hdEnhance ? 'is-on' : ''}`}
-                  onClick={onToggleHdEnhance}
-                  aria-pressed={hdEnhance}
-                  data-testid="hd-enhance-btn"
-                >
-                  <SharpenKernelIcon size={14} />
-                  <span>Nitidez HD (H)</span>
-                </button>
+                  <button
+                    type="button"
+                    className={`popover-toggle-item ${showUnlockMap ? 'is-on' : ''}`}
+                    onClick={onToggleUnlockMap}
+                    aria-pressed={showUnlockMap}
+                    data-testid="unlock-map-btn"
+                  >
+                    <Sun size={14} aria-hidden="true" />
+                    <span>Conexões &amp; Iluminação</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`popover-toggle-item ${showBorders ? 'is-on' : ''}`}
+                    onClick={onToggleBorders}
+                    aria-pressed={showBorders}
+                  >
+                    <PolygonBorderIcon size={14} />
+                    <span>Fronteiras</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`popover-toggle-item ${showLabels ? 'is-on' : ''}`}
+                    onClick={onToggleLabels}
+                    aria-pressed={showLabels}
+                  >
+                    <Type size={14} aria-hidden="true" />
+                    <span>Nomes</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`popover-toggle-item ${showGrid ? 'is-on' : ''}`}
+                    onClick={onToggleGrid}
+                    aria-pressed={showGrid}
+                  >
+                    <GraticuleIcon size={14} />
+                    <span>Grade Lat/Lon</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`popover-toggle-item ${hdEnhance ? 'is-on' : ''}`}
+                    onClick={onToggleHdEnhance}
+                    aria-pressed={hdEnhance}
+                    data-testid="hd-enhance-btn"
+                  >
+                    <SharpenKernelIcon size={14} />
+                    <span>Nitidez HD (H)</span>
+                  </button>
+                  {onReopenTour && (
+                    <button
+                      type="button"
+                      className="popover-toggle-item"
+                      onClick={() => {
+                        setVisualMenuOpen(false);
+                        onReopenTour();
+                      }}
+                      data-testid="reopen-tour-btn"
+                    >
+                      <HelpCircle size={14} aria-hidden="true" />
+                      <span>Guia do Explorador</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={`popover-toggle-item ${zenMode ? 'is-on' : ''}`}
+                    onClick={() => {
+                      setVisualMenuOpen(false);
+                      setZenMode((v) => !v);
+                    }}
+                    aria-pressed={zenMode}
+                    data-testid="zen-mode-btn"
+                  >
+                    <EyeOff size={14} aria-hidden="true" />
+                    <span>Modo Zen (Z)</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* MENU EXPANSÍVEL EM TELAS MENORES (PRESERVA TODOS OS CONTROLES DO CENTRO) */}
+          <div className="topbar-mobile-center-wrap" ref={mobileCenterWrapRef}>
+            <button
+              ref={mobileCenterBtnRef}
+              type="button"
+              className={`toggle-chip topbar-mobile-tools-btn ${
+                mobileCenterMenuOpen ? 'active' : ''
+              }`}
+              onClick={() => {
+                setMobileCenterMenuOpen((v) => !v);
+                setPlayerPopoverOpen(false);
+                setRankingPopoverOpen(false);
+                setVisualMenuOpen(false);
+              }}
+              aria-expanded={mobileCenterMenuOpen}
+              aria-haspopup="dialog"
+              aria-label="Abrir controles de globo, mapa, iluminação, guia e modo Zen"
+              data-testid="topbar-mobile-controls-btn"
+            >
+              <SlidersHorizontal size={14} aria-hidden="true" />
+              <span>Controles</span>
+            </button>
+
+            {mobileCenterMenuOpen && (
+              <div
+                className="topbar-popover topbar-mobile-controls-popover console-frame"
+                role="dialog"
+                aria-label="Controles centrais do explorador"
+                data-testid="topbar-mobile-controls-popover"
+              >
+                <div className="topbar-popover-header">
+                  <strong>Controles do Globo</strong>
+                  <button
+                    type="button"
+                    className="icon-btn-sm"
+                    onClick={() => setMobileCenterMenuOpen(false)}
+                    aria-label="Fechar controles do globo"
+                  >
+                    <X size={14} aria-hidden="true" />
+                  </button>
+                </div>
+
+                <div className="mobile-controls-grid">
+                  <div className="segmented-control" role="group" aria-label="Projeção">
+                    <button
+                      type="button"
+                      className={`seg-btn ${viewMode === '3d' ? 'active' : ''}`}
+                      onClick={() => onToggleViewMode('3d')}
+                      aria-pressed={viewMode === '3d'}
+                    >
+                      <Globe size={13} aria-hidden="true" />
+                      <span>3D</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`seg-btn ${viewMode === '2d' ? 'active' : ''}`}
+                      onClick={() => onToggleViewMode('2d')}
+                      aria-pressed={viewMode === '2d'}
+                    >
+                      <MapIcon size={13} aria-hidden="true" />
+                      <span>2D</span>
+                    </button>
+                  </div>
+
+                  <div className="segmented-control" role="group" aria-label="Alvo">
+                    <button
+                      type="button"
+                      className={`seg-btn ${selectionMode === 'country' ? 'active' : ''}`}
+                      onClick={() => onChangeSelectionMode('country')}
+                      aria-pressed={selectionMode === 'country'}
+                    >
+                      <span>País</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`seg-btn ${selectionMode === 'radius' ? 'active' : ''}`}
+                      onClick={() => onChangeSelectionMode('radius')}
+                      aria-pressed={selectionMode === 'radius'}
+                    >
+                      <span>Raio</span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    className={`popover-toggle-item ${showUnlockMap ? 'is-on' : ''}`}
+                    onClick={onToggleUnlockMap}
+                    aria-pressed={showUnlockMap}
+                  >
+                    <Sun size={14} aria-hidden="true" />
+                    <span>Iluminação Coletiva</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`popover-toggle-item ${showBorders ? 'is-on' : ''}`}
+                    onClick={onToggleBorders}
+                    aria-pressed={showBorders}
+                  >
+                    <PolygonBorderIcon size={14} />
+                    <span>Fronteiras</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`popover-toggle-item ${showLabels ? 'is-on' : ''}`}
+                    onClick={onToggleLabels}
+                    aria-pressed={showLabels}
+                  >
+                    <Type size={14} aria-hidden="true" />
+                    <span>Nomes dos Países</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`popover-toggle-item ${showGrid ? 'is-on' : ''}`}
+                    onClick={onToggleGrid}
+                    aria-pressed={showGrid}
+                  >
+                    <GraticuleIcon size={14} />
+                    <span>Grade Lat/Lon</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`popover-toggle-item ${hdEnhance ? 'is-on' : ''}`}
+                    onClick={onToggleHdEnhance}
+                    aria-pressed={hdEnhance}
+                  >
+                    <SharpenKernelIcon size={14} />
+                    <span>Nitidez HD</span>
+                  </button>
+                  {onReopenTour && (
+                    <button
+                      type="button"
+                      className="popover-toggle-item"
+                      onClick={() => {
+                        setMobileCenterMenuOpen(false);
+                        onReopenTour();
+                      }}
+                    >
+                      <HelpCircle size={14} aria-hidden="true" />
+                      <span>Guia do Explorador</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={`popover-toggle-item ${zenMode ? 'is-on' : ''}`}
+                    onClick={() => {
+                      setMobileCenterMenuOpen(false);
+                      setZenMode((v) => !v);
+                    }}
+                    aria-pressed={zenMode}
+                  >
+                    <EyeOff size={14} aria-hidden="true" />
+                    <span>Modo Zen (Z)</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
+        </div>
 
-          {onReopenTour && (
-            <button
-              type="button"
-              className="toggle-chip"
-              onClick={onReopenTour}
-              title="Reabrir guia rápido de como explorar e despertar a sinfonia"
-              data-testid="reopen-tour-btn"
+        {/* ILHA DIREITA: INDICADOR DE XP + RANKING GLOBAL + PERFIL DO JOGADOR */}
+        <div
+          className="topbar-zone topbar-zone-right topbar-island"
+          data-testid="topbar-zone-right"
+        >
+          {isGuestSession ? (
+            <div
+              className="topbar-xp-pill is-guest"
+              role="status"
+              aria-label="Modo Visitante: entre ou cadastre-se para acumular XP na conta"
+              title="Entre ou crie sua conta para registrar XP e conquistas permanentes"
+              data-testid="topbar-xp-indicator"
             >
-              <HelpCircle size={14} aria-hidden="true" />
-              <span>Guia</span>
-            </button>
-          )}
-
-          <button
-            type="button"
-            className={`toggle-chip ${zenMode ? 'active' : ''}`}
-            onClick={() => setZenMode((v) => !v)}
-            aria-pressed={zenMode}
-            title="Modo Zen: ocultar painéis e contemplar a Terra viva (Tecla Z)"
-            data-testid="zen-mode-btn"
-          >
-            <EyeOff size={14} aria-hidden="true" />
-            <span>Zen</span>
-          </button>
-
-          {isGuestSession && onOpenAuth ? (
-            <button
-              type="button"
-              className="toggle-chip account-entry-chip"
-              onClick={onOpenAuth}
-              title="Entrar com sua conta para salvar histórico coletivo"
-              data-testid="topbar-login-btn"
-            >
-              <LogIn size={14} aria-hidden="true" />
-              <span>Entrar</span>
-            </button>
+              <Sparkles size={13} aria-hidden="true" />
+              <span>XP · Entrar</span>
+            </div>
           ) : (
-            <button
-              type="button"
-              className="toggle-chip logout-chip"
-              onClick={onLogout}
-              title="Sair da conta e voltar ao Portal"
-              data-testid="logout-btn"
+            <div
+              className="topbar-xp-pill is-authenticated"
+              role="status"
+              aria-label={`XP acumulado: ${(progression?.xp ?? 0).toLocaleString('pt-BR')} XP, Nível ${
+                explorerRank?.level ?? 1
+              }`}
+              title={`${(progression?.xp ?? 0).toLocaleString('pt-BR')} XP · ${
+                explorerRank?.title ?? 'Ouvinte Orbital'
+              }`}
+              data-testid="topbar-xp-indicator"
             >
-              <LogOut size={14} aria-hidden="true" />
-              <span>Sair</span>
-            </button>
+              <Sparkles size={13} aria-hidden="true" />
+              <strong>{(progression?.xp ?? 0).toLocaleString('pt-BR')} XP</strong>
+            </div>
           )}
+
+          <div className="topbar-ranking-wrap" ref={rankingWrapRef}>
+            <button
+              ref={rankingBtnRef}
+              type="button"
+              className={`topbar-ranking-btn ${rankingPopoverOpen ? 'active' : ''}`}
+              onClick={() => {
+                setRankingPopoverOpen((v) => !v);
+                setPlayerPopoverOpen(false);
+                setVisualMenuOpen(false);
+                setMobileCenterMenuOpen(false);
+              }}
+              aria-expanded={rankingPopoverOpen}
+              aria-haspopup="dialog"
+              aria-label="Abrir ranking global de exploradores"
+              title="Ranking global de exploradores"
+              data-testid="topbar-ranking-btn"
+            >
+              <Trophy size={14} aria-hidden="true" />
+              <span className="topbar-ranking-label">Ranking</span>
+            </button>
+
+            {rankingPopoverOpen && (
+              <RankingPopover
+                onClose={() => {
+                  setRankingPopoverOpen(false);
+                  requestAnimationFrame(() => rankingBtnRef.current?.focus());
+                }}
+                isGuestSession={isGuestSession}
+                userName={userName}
+                username={username}
+                originCountryCode={originCountryCode}
+                realXp={progression?.xp ?? 0}
+                contributionsCount={progression?.contributedRegionKeys.length ?? 0}
+                achievementsCount={unlockedBadgesCount}
+                onOpenAuth={onOpenAuth}
+              />
+            )}
+          </div>
+
+          <PlayerHUD
+            userName={userName}
+            username={username}
+            originCountryCode={originCountryCode}
+            isGuestSession={isGuestSession}
+            xp={progression?.xp ?? 0}
+            rank={explorerRank}
+            exploredCount={progression?.exploredRegionKeys.length ?? 0}
+            contributionsCount={progression?.contributedRegionKeys.length ?? 0}
+            symphoniesCount={progression?.unlockedSymphonyKeys.length ?? 0}
+            completedMissionsCount={completedMissionsCount}
+            totalMissionsCount={missions.length || 5}
+            badges={badges}
+            contributionHistory={progression?.contributionHistory ?? []}
+            sonicPassport={sonicPassport}
+            onChangeOriginCountry={onChangeOriginCountry}
+            onOpenCollection={() => setActiveArea('colecao')}
+            onOpenRanking={() => {
+              setPlayerPopoverOpen(false);
+              setRankingPopoverOpen(true);
+            }}
+            onOpenAuth={onOpenAuth}
+            onOpenRegister={onOpenRegister}
+            onLogout={onLogout}
+            highContrast={highContrast}
+            onToggleHighContrast={onToggleHighContrast}
+            fontScale={fontScale}
+            onCycleFontScale={onCycleFontScale}
+            voiceEnabled={voiceEnabled}
+            onToggleVoice={onToggleVoice}
+            sonifyEnabled={sonifyEnabled}
+            onToggleSonify={onToggleSonify}
+            isOpen={playerPopoverOpen}
+            onToggleOpen={() => {
+              setPlayerPopoverOpen((v) => !v);
+              setRankingPopoverOpen(false);
+              setVisualMenuOpen(false);
+              setMobileCenterMenuOpen(false);
+            }}
+            onClose={() => setPlayerPopoverOpen(false)}
+          />
         </div>
       </header>
 
@@ -875,10 +1260,14 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                 {activeArea === 'frequencias' && (
                   <div className="launchpad-section-stack" data-testid="launchpad-panel-frequencias">
                     <p className="launchpad-section-lead">
-                      Cada cor no globo é um fenômeno real da NASA transformado em instrumento musical. Ative ou ouça uma amostra:
+                      Toque nos pads orgânicos para despertar cada camada ou arraste a coluna luminosa verticalmente para modular o brilho no globo:
                     </p>
 
-                    <div className="layer-stack-list" role="list" aria-label="Descobertas de frequências planetárias">
+                    <div
+                      className="layer-stack-list organic-soundboard-list"
+                      role="list"
+                      aria-label="Mesa de som bioluminescente do planeta"
+                    >
                       {displayLayers.map((cfg, displayIdx) => {
                         const ds = NASA_DATASETS[cfg.id];
                         const stemMeta = STEM_METAS[DATASET_TO_STEM[cfg.id]];
@@ -889,6 +1278,7 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                         const prevDisplayLayer = displayLayers[displayIdx - 1];
                         const nextDisplayLayer = displayLayers[displayIdx + 1];
                         const litRegionsCount = stemCommunityCounts[stemMeta.id] ?? 0;
+                        const activity01 = cfg.enabled ? (stemActivity?.[stemMeta.id] ?? 0.25) : 0;
 
                         return (
                           <div
@@ -926,80 +1316,136 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                               setDraggedLayerId(null);
                               setDragOverLayerId(null);
                             }}
-                            className={`launchpad-pad discovery-freq-card ${cfg.enabled ? 'is-enabled' : ''} ${
-                              isDragging ? 'is-dragging' : ''
-                            } ${isDragOver ? 'is-drag-over' : ''}`}
-                            style={{ '--pad-accent': stemMeta.accentHex } as React.CSSProperties}
+                            className={`launchpad-pad discovery-freq-card organic-sound-pad ${
+                              cfg.enabled ? 'is-enabled' : ''
+                            } ${isDragging ? 'is-dragging' : ''} ${
+                              isDragOver ? 'is-drag-over' : ''
+                            }`}
+                            style={
+                              {
+                                '--pad-accent': stemMeta.accentHex,
+                                '--pad-pulse': activity01.toFixed(2),
+                              } as React.CSSProperties
+                            }
                             data-testid={`mixer-card-${cfg.id}`}
                           >
-                            <div className="launchpad-pad-top">
-                              <label className="launchpad-toggle-label">
-                                <input
-                                  type="checkbox"
-                                  checked={cfg.enabled}
-                                  onChange={() => onToggleLayer(cfg.id)}
-                                  aria-label={`Exibir no globo: ${meta.headline}`}
-                                  data-testid={`toggle-${cfg.id}`}
-                                  className="launchpad-checkbox"
-                                />
-                                <span
-                                  className="launchpad-icon-box"
-                                  style={{
-                                    color: cfg.enabled ? 'var(--bg-void)' : stemMeta.accentHex,
-                                    background: cfg.enabled
-                                      ? stemMeta.accentHex
-                                      : 'rgba(255,255,255,0.06)',
-                                  }}
-                                  aria-hidden="true"
-                                >
-                                  <StemLayerIcon stem={stemMeta.id} size={15} />
-                                </span>
+                            <div className="organic-pad-main">
+                              <div className="organic-pad-body">
+                                <div className="launchpad-pad-top">
+                                  <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={cfg.enabled}
+                                    onClick={() => onToggleLayer(cfg.id)}
+                                    aria-label={`Ativar camada no globo: ${meta.headline}`}
+                                    data-testid={`toggle-${cfg.id}`}
+                                    className={`organic-orb-toggle ${cfg.enabled ? 'is-lit' : ''}`}
+                                  >
+                                    <span
+                                      className="launchpad-icon-box organic-icon-orb"
+                                      style={{
+                                        color: cfg.enabled ? '#040914' : stemMeta.accentHex,
+                                        background: cfg.enabled
+                                          ? stemMeta.accentHex
+                                          : 'rgba(255,255,255,0.06)',
+                                      }}
+                                      aria-hidden="true"
+                                    >
+                                      <StemLayerIcon stem={stemMeta.id} size={15} />
+                                    </span>
+                                    <div className="launchpad-titles">
+                                      <span className="launchpad-title">{meta.headline}</span>
+                                      <span className="launchpad-sub">
+                                        {meta.phenomenonPt} · {meta.instrumentTag}
+                                      </span>
+                                    </div>
+                                  </button>
 
-                                <div className="launchpad-titles">
-                                  <span className="launchpad-title">{meta.headline}</span>
-                                  <span className="launchpad-sub">
-                                    {meta.phenomenonPt} · {meta.instrumentTag}
+                                  <button
+                                    type="button"
+                                    className={`tiny-btn freq-sample-btn ${
+                                      isSampling ? 'is-on' : ''
+                                    } ${cfg.enabled ? 'is-layer-lit' : ''}`}
+                                    onClick={() => handlePlayFrequencySample(cfg.id, cfg.enabled)}
+                                    title={`Ouvir amostra sonora de ${stemMeta.labelPt} e exibir no globo`}
+                                    data-testid={`sample-freq-${cfg.id}`}
+                                  >
+                                    <Volume2 size={11} aria-hidden="true" />
+                                    <span>{isSampling ? 'Tocando...' : 'Amostra'}</span>
+                                  </button>
+                                </div>
+
+                                <p className="freq-story-copy">{meta.storyPt}</p>
+
+                                <div className="freq-meta-strip">
+                                  <span
+                                    className="freq-status-pill"
+                                    style={{
+                                      color: cfg.enabled ? stemMeta.accentHex : 'var(--text-muted)',
+                                    }}
+                                  >
+                                    {cfg.enabled
+                                      ? `● Brilho ${Math.round(cfg.opacity * 100)}%`
+                                      : '○ Adormecida no globo'}
+                                  </span>
+                                  <span className="freq-community-count">
+                                    Acesa em {litRegionsCount}{' '}
+                                    {litRegionsCount === 1 ? 'região' : 'regiões'}
                                   </span>
                                 </div>
-                              </label>
+                              </div>
 
-                              <button
-                                type="button"
-                                className={`tiny-btn freq-sample-btn ${isSampling ? 'is-on' : ''}`}
-                                onClick={() => handlePlayFrequencySample(cfg.id, cfg.enabled)}
-                                title={`Ouvir amostra sonora de ${stemMeta.labelPt} e exibir no globo`}
-                                data-testid={`sample-freq-${cfg.id}`}
-                              >
-                                <Volume2 size={11} aria-hidden="true" />
-                                <span>{isSampling ? 'Tocando...' : 'Amostra'}</span>
-                              </button>
-                            </div>
-
-                            <p className="freq-story-copy">{meta.storyPt}</p>
-
-                            <div className="freq-meta-strip">
-                              <span
-                                className="freq-status-pill"
-                                style={{
-                                  color: cfg.enabled ? stemMeta.accentHex : 'var(--text-muted)',
-                                }}
-                              >
-                                {cfg.enabled ? '● Visível no globo' : '○ Oculta no globo'}
-                              </span>
-                              <span className="freq-community-count">
-                                Acesa em {litRegionsCount}{' '}
-                                {litRegionsCount === 1 ? 'região' : 'regiões'}
-                              </span>
-                            </div>
-
-                            <div className="launchpad-energy-track" aria-hidden="true">
+                              {/* GESTURAL VERTICAL FADER (DRAG UP/DOWN OR KEYBOARD ARROWS) */}
                               <div
-                                className="launchpad-energy-fill"
-                                style={{
-                                  transform: `scaleX(${cfg.enabled ? cfg.opacity : 0})`,
-                                  background: stemMeta.accentHex,
+                                role="slider"
+                                tabIndex={0}
+                                aria-label={`Intensidade bioluminescente de ${meta.headline}`}
+                                aria-valuemin={8}
+                                aria-valuemax={100}
+                                aria-valuenow={Math.round((cfg.enabled ? cfg.opacity : 0) * 100)}
+                                title="Arraste verticalmente (ou use Setas ↑/↓) para mesclar o brilho da camada"
+                                className={`pad-vertical-fader ${cfg.enabled ? 'is-lit' : ''}`}
+                                data-testid={`vertical-fader-${cfg.id}`}
+                                onPointerDown={(e) => {
+                                  e.stopPropagation();
+                                  e.currentTarget.setPointerCapture(e.pointerId);
+                                  handlePadVerticalFader(e, cfg.id, cfg.enabled);
                                 }}
-                              />
+                                onPointerMove={(e) => {
+                                  if (e.buttons === 1 || e.pressure > 0) {
+                                    e.stopPropagation();
+                                    handlePadVerticalFader(e, cfg.id, cfg.enabled);
+                                  }
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
+                                    e.preventDefault();
+                                    if (!cfg.enabled) onToggleLayer(cfg.id);
+                                    onChangeLayerOpacity(
+                                      cfg.id,
+                                      Math.min(1, Number((cfg.opacity + 0.1).toFixed(2)))
+                                    );
+                                  } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
+                                    e.preventDefault();
+                                    onChangeLayerOpacity(
+                                      cfg.id,
+                                      Math.max(0.08, Number((cfg.opacity - 0.1).toFixed(2)))
+                                    );
+                                  }
+                                }}
+                              >
+                                <span
+                                  className="pad-vertical-fader-fill"
+                                  style={{
+                                    transform: `scaleY(${cfg.enabled ? cfg.opacity : 0.06})`,
+                                    background: stemMeta.accentHex,
+                                  }}
+                                  aria-hidden="true"
+                                />
+                                <span className="pad-vertical-fader-pct" aria-hidden="true">
+                                  {cfg.enabled ? `${Math.round(cfg.opacity * 100)}` : '—'}
+                                </span>
+                              </div>
                             </div>
 
                             {/* Official NASA Colorbar directly visible when layer is active */}
@@ -1013,27 +1459,10 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                               </div>
                             )}
 
-                            {/* Secondary Collapsible Composer & SVS Drawer */}
+                            {/* Secondary Collapsible Blending & Order Controls */}
                             <details className="composer-advanced-details">
-                              <summary>Ajustes de Compositor &amp; {ds.svsId}</summary>
+                              <summary>Mesclagem Óptica &amp; {ds.svsId}</summary>
                               <div className="launchpad-drawer">
-                                <div className="mixer-opacity-row">
-                                  <span>Intensidade visual</span>
-                                  <span>{Math.round(cfg.opacity * 100)}%</span>
-                                </div>
-                                <input
-                                  type="range"
-                                  min={0}
-                                  max={1}
-                                  step={0.02}
-                                  value={cfg.opacity}
-                                  onChange={(e) =>
-                                    onChangeLayerOpacity(cfg.id, Number(e.target.value))
-                                  }
-                                  className="blend-slider"
-                                  aria-label={`Intensidade visual de ${meta.headline}`}
-                                  style={{ accentColor: stemMeta.accentHex }}
-                                />
                                 <div className="composer-drawer-actions">
                                   <label className="blend-inline-label">
                                     <span>Mescla:</span>
@@ -1166,17 +1595,92 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
 
                 {activeArea === 'colecao' && progression && (
                   <div className="launchpad-section-stack" data-testid="launchpad-panel-colecao">
-                    {explorerRank && (
+                    {!isGuestSession && explorerRank ? (
                       <div className="planet-meter-box">
                         <div className="planet-meter-header">
                           <span>{explorerRank.title}</span>
-                          <strong>{progression.xp} XP</strong>
+                          <strong>{progression.xp.toLocaleString('pt-BR')} XP</strong>
                         </div>
                         <div className="journey-stats-row">
                           <span>{progression.exploredRegionKeys.length} regiões</span>
                           <span>{progression.contributedRegionKeys.length} acesas</span>
                           <span>{progression.unlockedSymphonyKeys.length} sinfonias 5/5</span>
                         </div>
+                      </div>
+                    ) : (
+                      <div className="planet-meter-box">
+                        <span className="launchpad-section-lead">
+                          Crie sua conta ou faça login na ilha superior direita para gravar seu Passaporte Sônico permanente.
+                        </span>
+                      </div>
+                    )}
+
+                    {/* SONIC PASSPORT: REGIONAL TITLES, FAVORITE LAYER & ILLUMINATED COUNTRIES */}
+                    {sonicPassport && (
+                      <div className="launchpad-subsection" data-testid="logbook-sonic-passport">
+                        <span className="launchpad-subhead">Passaporte Sônico &amp; Títulos</span>
+                        <div className="collection-stems-list">
+                          <div className="collection-stem-row">
+                            <Crown size={12} className="ranking-gold-icon" aria-hidden="true" />
+                            <span className="collection-stem-name">Rastro Áureo no Globo</span>
+                            <strong className="collection-stem-val">
+                              {sonicPassport.hasGoldenTrailReward ? 'Desbloqueado' : 'Complete 5/5'}
+                            </strong>
+                          </div>
+                          {sonicPassport.favoriteStem && (
+                            <div className="collection-stem-row">
+                              <span
+                                className="collection-stem-dot"
+                                style={{ background: sonicPassport.favoriteStem.accentHex }}
+                                aria-hidden="true"
+                              />
+                              <span className="collection-stem-name">Camada mais afinada</span>
+                              <strong className="collection-stem-val">
+                                {sonicPassport.favoriteStem.labelPt}
+                              </strong>
+                            </div>
+                          )}
+                        </div>
+
+                        {sonicPassport.regionalTitles.length > 0 && (
+                          <div className="badges-grid">
+                            {sonicPassport.regionalTitles.map((t) => (
+                              <span key={t} className="badge-chip is-unlocked">
+                                <Crown size={11} aria-hidden="true" />
+                                <span>{t}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {sonicPassport.illuminatedRegions.length > 0 && (
+                          <div className="badges-grid">
+                            {sonicPassport.illuminatedRegions.map((reg) => {
+                              const targetC = countries.find(
+                                (cItem) => buildCountryRegionKey(cItem) === reg.regionKey
+                              );
+                              return (
+                                <button
+                                  key={reg.regionKey}
+                                  type="button"
+                                  className="passport-country-pill is-clickable"
+                                  disabled={!targetC}
+                                  onClick={() => {
+                                    if (targetC) {
+                                      onSelectAndFlyCountry(targetC);
+                                      setActiveArea(null);
+                                    }
+                                  }}
+                                >
+                                  <span>
+                                    {reg.regionLabel}
+                                    {reg.isComplete5of5 ? ' ★ 5/5' : ''}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
 

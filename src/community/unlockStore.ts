@@ -418,6 +418,20 @@ export interface EcosystemRegionItem {
   }[];
 }
 
+export interface EcosystemFeedEvent {
+  id: string;
+  regionKey: string;
+  regionLabel: string;
+  country: CountryEntry | null;
+  contributorName: string;
+  initial: string;
+  stemId: StemId;
+  stemLabelPt: string;
+  accentHex: string;
+  unlockedAt: string;
+  isRegionComplete: boolean;
+}
+
 export interface GlobalEcosystemSummary {
   litRegionsCount: number;
   completedRegionsCount: number;
@@ -425,6 +439,7 @@ export interface GlobalEcosystemSummary {
   totalVoicesTarget: number;
   spotlightRegion: EcosystemRegionItem | null;
   regions: EcosystemRegionItem[];
+  recentFeed: EcosystemFeedEvent[];
 }
 
 /**
@@ -441,10 +456,12 @@ export function getGlobalEcosystemSummary(
   }
 
   const regions: EcosystemRegionItem[] = [];
+  const feedAccumulator: EcosystemFeedEvent[] = [];
   let unlockedVoicesCount = 0;
   let completedRegionsCount = 0;
 
   for (const rec of Object.values(state.regions)) {
+    const country = byKey.get(rec.regionKey) ?? null;
     const unlockedStems: Record<StemId, boolean> = {
       melody: state.juryUnlockAll || Boolean(rec.contributions.melody),
       harmony: state.juryUnlockAll || Boolean(rec.contributions.harmony),
@@ -470,18 +487,40 @@ export function getGlobalEcosystemSummary(
     if (unlockedCount === 0) continue;
 
     unlockedVoicesCount += unlockedCount;
-    if (unlockedCount >= 5) completedRegionsCount += 1;
+    const isComplete = unlockedCount >= 5;
+    if (isComplete) completedRegionsCount += 1;
+
+    for (const stemId of STEM_ORDER) {
+      const c = rec.contributions[stemId];
+      if (!c) continue;
+      const trimmed = c.contributorName.trim();
+      feedAccumulator.push({
+        id: `${rec.regionKey}:${stemId}:${c.unlockedAt}`,
+        regionKey: rec.regionKey,
+        regionLabel: rec.regionLabel,
+        country,
+        contributorName: trimmed,
+        initial: (trimmed[0] ?? '?').toUpperCase(),
+        stemId,
+        stemLabelPt: STEM_METAS[stemId].labelPt,
+        accentHex: STEM_METAS[stemId].accentHex,
+        unlockedAt: c.unlockedAt,
+        isRegionComplete: isComplete,
+      });
+    }
 
     regions.push({
       regionKey: rec.regionKey,
       regionLabel: rec.regionLabel,
-      country: byKey.get(rec.regionKey) ?? null,
+      country,
       unlockedCount,
-      isComplete: unlockedCount >= 5,
+      isComplete,
       unlockedStems,
       contributors,
     });
   }
+
+  feedAccumulator.sort((a, b) => b.unlockedAt.localeCompare(a.unlockedAt));
 
   // Prioritize incomplete regions closest to 5/5 first so collaboration feels urgent & rewarding
   regions.sort((a, b) => {
@@ -500,5 +539,6 @@ export function getGlobalEcosystemSummary(
     totalVoicesTarget: targetRegions * 5,
     spotlightRegion,
     regions,
+    recentFeed: feedAccumulator.slice(0, 8),
   };
 }

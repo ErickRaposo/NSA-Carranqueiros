@@ -96,6 +96,30 @@ export function App(): React.ReactElement {
     setAuthView('login');
   }, []);
 
+  const handleOpenRegister = useCallback(() => {
+    stopSpeech();
+    clearStoredSession();
+    setSession({ user: null, onboardingDone: false });
+    setAuthView('register');
+  }, []);
+
+  const handleChangeOriginCountry = useCallback(
+    (countryCode: string) => {
+      const normalized = countryCode || undefined;
+      setSession((prev) =>
+        prev.user ? { ...prev, user: { ...prev.user, originCountryCode: normalized } } : prev
+      );
+      setUsers((prev) =>
+        prev.map((u) =>
+          session.user && u.username.toLowerCase() === session.user.username.toLowerCase()
+            ? { ...u, originCountryCode: normalized }
+            : u
+        )
+      );
+    },
+    [session.user]
+  );
+
   // Stage 1A: Cinematic Entry Portal ("O planeta está esperando para ser ouvido.")
   if (!session.user && authView === 'portal') {
     return (
@@ -174,6 +198,9 @@ export function App(): React.ReactElement {
     <EarthExplorerView
       userName={session.user.name}
       userId={session.user.username}
+      username={session.user.username}
+      originCountryCode={session.user.originCountryCode}
+      onChangeOriginCountry={handleChangeOriginCountry}
       isGuestSession={Boolean(session.user.isGuest)}
       isJuryQuickEntry={session.user.username === 'juri'}
       highContrast={highContrast}
@@ -182,6 +209,7 @@ export function App(): React.ReactElement {
       onCycleFontScale={handleCycleFontScale}
       onReopenTour={handleReopenTour}
       onOpenAuth={handleOpenAccountAuth}
+      onOpenRegister={handleOpenRegister}
       onLogout={handleLogout}
     />
   );

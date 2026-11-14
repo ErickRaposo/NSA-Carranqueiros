@@ -65,6 +65,7 @@ interface EarthCanvasProps {
   getAudioReactiveBands?: () => AudioReactiveFrame;
   motionPaused?: boolean;
   isCelebrating5of5?: boolean;
+  hasGoldenTrailReward?: boolean;
   unlockPulseNonce?: number;
   flyTarget: CameraViewTarget | null;
   zoomCommand?: { delta: number; nonce: number } | null;
@@ -370,6 +371,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   getAudioReactiveBands,
   motionPaused = false,
   isCelebrating5of5 = false,
+  hasGoldenTrailReward = false,
   unlockPulseNonce = 0,
   flyTarget,
   zoomCommand,
@@ -383,6 +385,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   const labelsLayerRef = useRef<HTMLDivElement | null>(null);
   const fxOverlayRef = useRef<HTMLCanvasElement | null>(null);
   const lastUnlockPulseRef = useRef({ nonce: unlockPulseNonce, startedAtMs: 0 });
+  const hoverLiveRef = useRef<HoverInfo | null>(null);
+  const trailRef = useRef<{ lon: number; lat: number; bornMs: number }[]>([]);
 
   const propsRef = useRef({
     videoElements,
@@ -406,6 +410,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     getAudioReactiveBands,
     motionPaused,
     isCelebrating5of5,
+    hasGoldenTrailReward,
     unlockPulseNonce,
     onHoverChange,
     onCameraDistanceChange,
@@ -434,6 +439,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     getAudioReactiveBands,
     motionPaused,
     isCelebrating5of5,
+    hasGoldenTrailReward,
     unlockPulseNonce,
     onHoverChange,
     onCameraDistanceChange,
@@ -842,6 +848,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       } else {
         const coords = computeLonLatFromPointer(e.clientX, e.clientY);
         if (!coords) {
+          hoverLiveRef.current = null;
           propsRef.current.onHoverChange(null);
         } else {
           const country = findCountryAtLonLat(
@@ -849,11 +856,28 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
             coords.lat,
             propsRef.current.countries
           );
-          propsRef.current.onHoverChange({
+          const nextHover: HoverInfo = {
             lon: coords.lon,
             lat: coords.lat,
             country,
-          });
+          };
+          hoverLiveRef.current = nextHover;
+          if (
+            (propsRef.current.hasGoldenTrailReward || propsRef.current.isCelebrating5of5) &&
+            !propsRef.current.motionPaused
+          ) {
+            const nowT = performance.now();
+            const trail = trailRef.current;
+            const prev = trail[trail.length - 1];
+            if (
+              !prev ||
+              Math.hypot(coords.lon - prev.lon, coords.lat - prev.lat) > 1.4
+            ) {
+              trail.push({ lon: coords.lon, lat: coords.lat, bornMs: nowT });
+              if (trail.length > 7) trail.shift();
+            }
+          }
+          propsRef.current.onHoverChange(nextHover);
         }
       }
     };
@@ -916,10 +940,16 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       renderer.setSize(w, h);
     };
 
+    const onPointerLeave = () => {
+      hoverLiveRef.current = null;
+      propsRef.current.onHoverChange(null);
+    };
+
     const dom = renderer.domElement;
     dom.addEventListener('pointerdown', onPointerDown);
     dom.addEventListener('pointermove', onPointerMove);
     dom.addEventListener('pointerup', onPointerUp);
+    dom.addEventListener('pointerleave', onPointerLeave);
     dom.addEventListener('wheel', onWheel, { passive: false });
     dom.addEventListener('dblclick', onDoubleClick);
     window.addEventListener('resize', onResize);
@@ -1291,6 +1321,154 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
             fxCtx.restore();
           }
 
+          // 0a-2. Human Connections Map ("Mapa de Conexões Humanas"):
+          // Ephemeral contributor constellation & geodesic arcs when hovering/focusing an illuminated region
+          const constellationCountry = hoverLiveRef.current?.country ?? p.selectedCountry;
+          if (p.showUnlockMap && p.unlockState && constellationCountry) {
+            const focusKey = `country:${constellationCountry.id}`;
+            const focusRec = p.unlockState.regions[focusKey];
+            const contribEntries = focusRec
+              ? STEM_ORDER.flatMap((s) => {
+                  const item = focusRec.contributions[s];
+                  return item ? [{ stemId: s, item }] : [];
+                })
+              : [];
+
+            if (contribEntries.length > 0) {
+              const originPt = projectGeo(constellationCountry.lon, constellationCountry.lat, 0.01);
+              if (originPt) {
+                fxCtx.save();
+
+                // Geodesic screen-space arcs connecting this illuminated region to other lit regions
+                for (const otherRec of Object.values(p.unlockState.regions)) {
+                  if (otherRec.regionKey === focusKey || !otherRec.regionKey.startsWith('country:')) {
+                    continue;
+                  }
+                  const hasAny = STEM_ORDER.some((s) => Boolean(otherRec.contributions[s]));
+                  if (!hasAny) continue;
+                  const otherCountry = p.countries.find(
+                    (cItem) => cItem.id === otherRec.regionKey.slice(8)
+                  );
+                  if (!otherCountry) continue;
+                  const targetPt = projectGeo(otherCountry.lon, otherCountry.lat, 0.01);
+                  if (!targetPt) continue;
+
+                  const midX = (originPt.x + targetPt.x) * 0.5;
+                  const distPx = Math.hypot(targetPt.x - originPt.x, targetPt.y - originPt.y);
+                  const midY = (originPt.y + targetPt.y) * 0.5 - Math.min(72, distPx * 0.24);
+
+                  fxCtx.beginPath();
+                  fxCtx.moveTo(originPt.x, originPt.y);
+                  fxCtx.quadraticCurveTo(midX, midY, targetPt.x, targetPt.y);
+                  fxCtx.strokeStyle = p.highContrast
+                    ? 'rgba(250, 204, 21, 0.7)'
+                    : 'rgba(56, 189, 248, 0.34)';
+                  fxCtx.lineWidth = 1.25;
+                  fxCtx.setLineDash([4, 4]);
+                  fxCtx.stroke();
+                  fxCtx.setLineDash([]);
+                }
+
+                // Ephemeral Contributor Constellation orbiting the region
+                const orbitRadius = 38;
+                const slowDrift = p.motionPaused ? 0 : nowMs * 0.00035;
+                const nodes: {
+                  x: number;
+                  y: number;
+                  initial: string;
+                  shortName: string;
+                  accentHex: string;
+                }[] = [];
+
+                contribEntries.forEach(({ stemId, item }, idx) => {
+                  const angle =
+                    -Math.PI * 0.5 +
+                    (idx / Math.max(1, contribEntries.length)) * Math.PI * 2 +
+                    slowDrift;
+                  const nx = originPt.x + Math.cos(angle) * orbitRadius;
+                  const ny = originPt.y + Math.sin(angle) * (orbitRadius * 0.84);
+                  const rawName = item.contributorName.trim();
+                  const firstWord = rawName.split(/[\s(]+/)[0] || rawName;
+                  nodes.push({
+                    x: nx,
+                    y: ny,
+                    initial: (rawName[0] ?? 'E').toUpperCase(),
+                    shortName: firstWord.slice(0, 10),
+                    accentHex: STEM_METAS[stemId].accentHex,
+                  });
+                });
+
+                // Constellation filaments (center -> nodes & ring polygon)
+                fxCtx.strokeStyle = p.highContrast
+                  ? 'rgba(255, 255, 255, 0.65)'
+                  : 'rgba(186, 230, 253, 0.35)';
+                fxCtx.lineWidth = 1;
+                for (let i = 0; i < nodes.length; i++) {
+                  const curr = nodes[i];
+                  const next = nodes[(i + 1) % nodes.length];
+                  fxCtx.beginPath();
+                  fxCtx.moveTo(originPt.x, originPt.y);
+                  fxCtx.lineTo(curr.x, curr.y);
+                  if (nodes.length > 1) {
+                    fxCtx.lineTo(next.x, next.y);
+                  }
+                  fxCtx.stroke();
+                }
+
+                // Translucent contributor avatar nodes
+                for (const node of nodes) {
+                  fxCtx.beginPath();
+                  fxCtx.arc(node.x, node.y, 9.5, 0, Math.PI * 2);
+                  fxCtx.fillStyle = p.highContrast ? '#000000' : 'rgba(6, 13, 28, 0.88)';
+                  fxCtx.fill();
+                  fxCtx.lineWidth = 1.6;
+                  fxCtx.strokeStyle = p.highContrast ? '#facc15' : node.accentHex;
+                  fxCtx.stroke();
+
+                  fxCtx.fillStyle = p.highContrast ? '#ffffff' : node.accentHex;
+                  fxCtx.font = '700 9.5px "Space Grotesk", sans-serif';
+                  fxCtx.textAlign = 'center';
+                  fxCtx.textBaseline = 'middle';
+                  fxCtx.fillText(node.initial, node.x, node.y + 0.5);
+
+                  // Subtle contributor tag
+                  fxCtx.font = '600 9px "Space Grotesk", sans-serif';
+                  fxCtx.fillStyle = p.highContrast ? '#facc15' : 'rgba(226, 232, 240, 0.9)';
+                  fxCtx.fillText(node.shortName, node.x, node.y + 16);
+                }
+                fxCtx.textAlign = 'start';
+                fxCtx.restore();
+              }
+            }
+          }
+
+          // 0a-3. Exclusive 5/5 Maestro Visual Trail Reward on Globe Hover
+          if (
+            (p.hasGoldenTrailReward || p.isCelebrating5of5) &&
+            !p.motionPaused &&
+            trailRef.current.length > 0
+          ) {
+            const activeTrail = trailRef.current.filter((pt) => nowMs - pt.bornMs < 620);
+            trailRef.current = activeTrail;
+            if (activeTrail.length > 0) {
+              fxCtx.save();
+              for (let i = 0; i < activeTrail.length; i++) {
+                const tItem = activeTrail[i];
+                const age01 = (nowMs - tItem.bornMs) / 620;
+                const proj = projectGeo(tItem.lon, tItem.lat, 0.012);
+                if (!proj) continue;
+                const alpha = (1 - age01) * 0.55;
+                const rad = 3 + (1 - age01) * 7;
+                fxCtx.beginPath();
+                fxCtx.arc(proj.x, proj.y, rad, 0, Math.PI * 2);
+                fxCtx.strokeStyle = `rgba(251, 191, 36, ${alpha.toFixed(2)})`;
+                fxCtx.lineWidth = 1.4;
+                fxCtx.stroke();
+              }
+              fxCtx.restore();
+            }
+          }
+
           // 0b. Radial Celebration Ripple when unlocking a collective voice
           if (p.unlockPulseNonce !== lastUnlockPulseRef.current.nonce) {
             lastUnlockPulseRef.current = { nonce: p.unlockPulseNonce, startedAtMs: nowMs };
@@ -1519,6 +1697,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       dom.removeEventListener('pointerdown', onPointerDown);
       dom.removeEventListener('pointermove', onPointerMove);
       dom.removeEventListener('pointerup', onPointerUp);
+      dom.removeEventListener('pointerleave', onPointerLeave);
       dom.removeEventListener('wheel', onWheel);
       dom.removeEventListener('dblclick', onDoubleClick);
       window.removeEventListener('resize', onResize);

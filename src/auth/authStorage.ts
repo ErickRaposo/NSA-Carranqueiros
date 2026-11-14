@@ -3,6 +3,7 @@ export interface UserAccount {
   email: string;
   username: string;
   password: string;
+  originCountryCode?: string;
   isGuest?: boolean;
 }
 
@@ -19,6 +20,7 @@ export const DEFAULT_ADMIN_USER: UserAccount = {
   email: 'admin@mineiro.space',
   username: 'admin',
   password: '12345',
+  originCountryCode: 'BR',
 };
 
 export const GUEST_USER: UserAccount = {
