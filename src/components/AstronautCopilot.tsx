@@ -1,8 +1,8 @@
 import React from 'react';
 import { AudioLines, Minimize2, Orbit, Volume2 } from 'lucide-react';
-import { EvaHelmetIcon } from './CartographicIcons';
+import { MineiroOrbIcon } from './CartographicIcons';
 import { CountryEntry } from '../geo/countries';
-import { Astronaut3D } from './Astronaut3D';
+import { Mineiro3D } from './Mineiro3D';
 
 interface AstronautCopilotProps {
   selectedCountry: CountryEntry | null;
@@ -30,20 +30,20 @@ export const AstronautCopilot: React.FC<AstronautCopilotProps> = ({
   return (
     <aside
       className="copilot-dock console-frame"
-      aria-label="Guia Astronauta 3D interativo"
+      aria-label="Guia 3D MINEIRØ interativo"
       data-testid="astronaut-copilot"
     >
       <div className="copilot-header">
         <span className="copilot-badge font-display">
-          <EvaHelmetIcon size={13} />
-          <span>EVA-01 // Guia</span>
+          <MineiroOrbIcon size={13} />
+          <span>MINEIRØ // Guia</span>
         </span>
         <button
           type="button"
           className="icon-btn-sm"
           onClick={onMinimize}
-          aria-label="Minimizar Guia Astronauta"
-          title="Minimizar Guia Astronauta"
+          aria-label="Minimizar Guia MINEIRØ"
+          title="Minimizar Guia MINEIRØ"
         >
           <Minimize2 size={13} aria-hidden="true" />
         </button>
@@ -51,7 +51,7 @@ export const AstronautCopilot: React.FC<AstronautCopilotProps> = ({
 
       <div className="copilot-body">
         <div className="copilot-stage">
-          <Astronaut3D
+          <Mineiro3D
             stepIndex={stepIndex}
             isExplaining={voiceEnabled || Boolean(selectedCountry)}
             size="compact"
@@ -94,7 +94,7 @@ export const AstronautCopilot: React.FC<AstronautCopilotProps> = ({
               type="button"
               className="copilot-btn"
               onClick={onReopenTour}
-              title="Abrir novamente o tour de introdução com o astronauta"
+              title="Abrir novamente o tour de introdução com o MINEIRØ"
             >
               <Orbit size={13} aria-hidden="true" />
               <span>Tour</span>

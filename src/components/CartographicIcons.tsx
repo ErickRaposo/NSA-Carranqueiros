@@ -48,6 +48,27 @@ export const SharpenKernelIcon: React.FC<IconProps> = ({ size = 14, className })
   </svg>
 );
 
+/** MINEIRØ ringed orb mascot silhouette */
+export const MineiroOrbIcon: React.FC<IconProps> = ({ size = 14, className }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+    className={className}
+  >
+    <circle cx="12" cy="12" r="6.5" />
+    <ellipse cx="12" cy="12" rx="11" ry="3.4" transform="rotate(-28 12 12)" />
+    <circle cx="10.2" cy="11.5" r="0.7" fill="currentColor" stroke="none" />
+    <circle cx="13.8" cy="11.5" r="0.7" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 /** Astronaut EVA helmet visor silhouette */
 export const EvaHelmetIcon: React.FC<IconProps> = ({ size = 14, className }) => (
   <svg

@@ -6,9 +6,15 @@ interface Mineiro3DProps {
   stepIndex: number;
   /** Whether MINEIRØ is actively speaking / explaining */
   isExplaining: boolean;
+  /** Layout size preset for onboarding vs floating HUD copilot */
+  size?: 'full' | 'compact';
 }
 
-export const Mineiro3D: React.FC<Mineiro3DProps> = ({ stepIndex, isExplaining }) => {
+export const Mineiro3D: React.FC<Mineiro3DProps> = ({
+  stepIndex,
+  isExplaining,
+  size = 'full',
+}) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const stepRef = useRef(stepIndex);
   const explainingRef = useRef(isExplaining);
@@ -304,7 +310,11 @@ export const Mineiro3D: React.FC<Mineiro3DProps> = ({ stepIndex, isExplaining })
   return (
     <div
       ref={mountRef}
-      className="h-[320px] w-full max-w-[360px] sm:h-[380px]"
+      className={
+        size === 'compact'
+          ? 'h-[148px] w-[132px]'
+          : 'h-[320px] w-full max-w-[360px] sm:h-[380px]'
+      }
       aria-label="Mascote 3D MINEIRØ flutuando e gesticulando enquanto explica o sistema"
     />
   );

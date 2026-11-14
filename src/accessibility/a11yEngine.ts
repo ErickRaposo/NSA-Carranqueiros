@@ -193,7 +193,7 @@ export function speakTextPt(
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'pt-BR';
     utterance.rate = 1.02;
-    const preferMale = Boolean(options?.maleVoice);
+    const preferMale = options?.maleVoice ?? true;
     utterance.pitch = preferMale ? 0.82 : 1.0;
 
     const selectedVoice = pickPortugueseVoice(preferMale);

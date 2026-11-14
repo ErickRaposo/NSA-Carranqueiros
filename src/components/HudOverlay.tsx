@@ -21,7 +21,7 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import {
-  EvaHelmetIcon,
+  MineiroOrbIcon,
   GraticuleIcon,
   IsothermIcon,
   LightningBoltIcon,
@@ -382,24 +382,24 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
 
           <span className="toolbar-divider" aria-hidden="true" />
 
-          <div className="session-controls" role="group" aria-label="Guia astronauta e sessão do usuário">
+          <div className="session-controls" role="group" aria-label="Guia MINEIRØ e sessão do usuário">
             <button
               type="button"
               className={`toggle-chip ${copilotOpen ? 'active' : ''}`}
               onClick={onToggleCopilot}
               aria-pressed={copilotOpen}
-              title="Mostrar ou ocultar o Guia Astronauta 3D"
+              title="Mostrar ou ocultar o Guia 3D MINEIRØ"
               data-testid="toggle-copilot-btn"
             >
-              <EvaHelmetIcon size={14} />
-              <span>Astronauta</span>
+              <MineiroOrbIcon size={14} />
+              <span>MINEIRØ</span>
             </button>
 
             <button
               type="button"
               className="toggle-chip"
               onClick={onReopenTour}
-              title="Reabrir introdução guiada pelo astronauta"
+              title="Reabrir introdução guiada pelo MINEIRØ"
               data-testid="reopen-tour-btn"
             >
               <Orbit size={14} aria-hidden="true" />
