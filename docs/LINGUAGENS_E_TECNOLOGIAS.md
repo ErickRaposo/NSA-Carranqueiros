@@ -35,6 +35,7 @@ Este documento lista de forma transparente todas as linguagens, APIs nativas do 
 - **Three.js (`three`, `@types/three`):** Globo 3D / Mapa 2D com `camera.setViewOffset`, filtro bicúbico/CAS em GLSL, **Astronauta 3D interativo** (`Astronaut3D.tsx`) e `StarfieldBackground`.
 - **Tailwind CSS v4 (`tailwindcss`, `@tailwindcss/vite`) + Fontes `Space Grotesk` / `Plus Jakarta Sans`:** Sistema de design unificado com `AuthLayout`, páginas de entrada e HUD acessível com alto contraste WCAG AAA.
 - **TopoJSON Client (`topojson-client`) + `world-atlas` (`countries-10m.json`):** Conversão de TopoJSON para GeoJSON (`feature`) em alta resolução e cálculo exato de fronteiras vizinhas (`neighbors`).
+- **Flag Icons (`flag-icons`, v7.6.0 · Licença MIT):** Coleção vetorial SVG 100% offline de bandeiras nacionais (`css/flag-icons.min.css`, `1x1` circular no Teto e `4x3` nos badges/seletores), Copyright (c) 2013 Panayiotis Lipiridis. Consulte o inventário completo em [REFERENCIAS_E_LICENCAS.md](REFERENCIAS_E_LICENCAS.md).
 - **Lucide React (`lucide-react`):** Iconografia vetorial acessível com `aria-hidden` / rótulos explícitos nos botões.
 - **Vite (`vite`, `@vitejs/plugin-react`):** Servidor de desenvolvimento rápido e empacotador de produção.
 - **Vitest (`vitest`):** Suíte de testes unitários para projeção geográfica, busca/vizinhança `10m`, máscara antimeridiano, logística, autenticação/sessão e leitura acessível.

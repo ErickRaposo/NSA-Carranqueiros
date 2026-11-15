@@ -49,24 +49,15 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         })}
       </nav>
 
-      {/* Atalhos externos exclusivos da barra lateral */}
+      {/* Atalho externo exclusivo da barra lateral */}
       <div className="hidden flex-col gap-1.5 border-t border-[#1e3a66]/45 pt-3 lg:flex">
         <a
-          href={buildViewUrl(null, 'simulator', { roomCode })}
+          href={buildViewUrl(null, 'demo', { roomCode })}
           target="_blank"
           rel="noreferrer"
           className={`flex min-h-[40px] items-center justify-between rounded-xl border border-[#1e3a66]/65 bg-[#060c1a] px-3 text-xs font-medium text-slate-200 transition hover:border-[#2563eb] hover:text-white ${ADMIN_FOCUS}`}
         >
-          <span>{isPt ? 'Simulador 3D' : '3D Simulator'}</span>
-          <ExternalLink size={12} className="text-slate-400" />
-        </a>
-        <a
-          href={buildViewUrl(null, 'controller', { roomCode })}
-          target="_blank"
-          rel="noreferrer"
-          className={`flex min-h-[40px] items-center justify-between rounded-xl border border-[#1e3a66]/65 bg-[#060c1a] px-3 text-xs font-medium text-slate-200 transition hover:border-[#2563eb] hover:text-white ${ADMIN_FOCUS}`}
-        >
-          <span>{isPt ? 'Controle Tablet' : 'Tablet View'}</span>
+          <span>{isPt ? 'Demo · Sala + Tablet' : 'Demo · Room + Tablet'}</span>
           <ExternalLink size={12} className="text-slate-400" />
         </a>
       </div>

@@ -1,11 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Award } from 'lucide-react';
+import { Award, Globe2, Rocket, RotateCcw } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import mineiroLogo from '../assets/mineiro-logo.png';
 import erickPhoto from '../assets/team/erick.jpeg';
 import samuelPhoto from '../assets/team/samuel.png';
 import shayenePhoto from '../assets/team/shayene.png';
-import { preloadPiperVoice, speakText, stopSpeech } from '../accessibility/a11yEngine';
+import {
+  pauseSpeech,
+  preloadPiperVoice,
+  resumeSpeech,
+  speakText,
+  stopSpeech,
+} from '../accessibility/a11yEngine';
 import {
   playBlastDoorSlamSfx,
   playCabinDissolveSfx,
@@ -15,6 +21,7 @@ import {
 } from '../audio/spaceAmbient';
 import { setSpatialMusicDucked } from '../audio/spatialAudioEngine';
 import { Mineiro3D } from '../components/Mineiro3D';
+import { MissionGameButton } from '../components/MissionGameButton';
 import { useExperience } from '../experience/ExperienceContext';
 import {
   LAYER_METAS,
@@ -23,6 +30,7 @@ import {
   VisualLayerId,
 } from '../experience/types';
 import { JukeboxStudioStage } from './JukeboxStudioStage';
+import { IdleStageRightWall } from './IdleStageRightWall';
 import { SpaceStarfield } from './SpaceStarfield';
 import { SpaceshipLaunchOverlay } from './SpaceshipLaunchOverlay';
 
@@ -38,7 +46,24 @@ const TEAM_CREDITS_ALPHABETICAL = [
  * `idle` -> `boarding` -> `countdown` (5..1) -> `zero_g` -> `exploring` -> `ended` (créditos NASA).
  */
 export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => {
-  const { country, lang, layers, missionPhase, playback, storyStep } = useExperience();
+  const {
+    audioSessionUnlocked,
+    country,
+    lang,
+    lastSpeechCommand,
+    layers,
+    missionPhase,
+    playback,
+    reportSpeechStatus,
+    speechCommandNonce,
+    speechStatus,
+    storyStep,
+    voiceAutoEnabled,
+  } = useExperience();
+  const isRobotSpeaking = speechStatus === 'speaking';
+  const speechStatusRef = useRef(speechStatus);
+  speechStatusRef.current = speechStatus;
+  const speechDelayTimerRef = useRef<number | null>(null);
   const isPt = lang === 'pt';
   const countryName = country
     ? isPt
@@ -49,14 +74,6 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
       : 'Earth';
 
   const activeStep = storyStep % 6;
-  const stepToLayerId: Partial<Record<number, VisualLayerId>> = {
-    1: 'melody',
-    2: 'chords',
-    3: 'temperature',
-    4: 'bass',
-    5: 'wind',
-  };
-  const stepLayerId = stepToLayerId[activeStep] ?? null;
   const enabledLayerIds = VISUAL_LAYER_ORDER.filter((id) => layers[id].enabled);
   const [focusedLayerId, setFocusedLayerId] = useState<VisualLayerId | null>(null);
   const prevLayerEnabledRef = useRef<Record<VisualLayerId, boolean>>({
@@ -82,10 +99,13 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
   }, [enabledLayerIds, focusedLayerId, layers]);
 
   const activeLayerForSpeech: VisualLayerId | null =
-    stepLayerId ??
-    (focusedLayerId && layers[focusedLayerId].enabled
-      ? focusedLayerId
-      : (enabledLayerIds[0] ?? null));
+    activeStep === 0 || enabledLayerIds.length === 0
+      ? null
+      : focusedLayerId && layers[focusedLayerId].enabled
+        ? focusedLayerId
+        : enabledLayerIds[0];
+  const onlyTemperatureEnabled =
+    enabledLayerIds.length === 1 && enabledLayerIds[0] === 'temperature';
   const activeLayerMeta = LAYER_METAS[activeLayerForSpeech ?? 'melody'];
 
   const lastSpokenKeyRef = useRef<string>('');
@@ -109,13 +129,18 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
     setEndedStage('reentry');
     setLandingBump(false);
 
+    let bumpResetTimer: number | null = null;
     const medalTimer = window.setTimeout(() => {
-      if (renderContext !== 'projector') {
+      if (
+        renderContext !== 'projector' &&
+        audioSessionUnlocked &&
+        document.visibilityState !== 'hidden'
+      ) {
         playLandingThudSfx();
       }
       setLandingBump(true);
       setEndedStage('medal');
-      window.setTimeout(() => setLandingBump(false), 420);
+      bumpResetTimer = window.setTimeout(() => setLandingBump(false), 420);
     }, 3200);
 
     const creditsTimer = window.setTimeout(() => {
@@ -125,8 +150,11 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
     return () => {
       window.clearTimeout(medalTimer);
       window.clearTimeout(creditsTimer);
+      if (bumpResetTimer !== null) {
+        window.clearTimeout(bumpResetTimer);
+      }
     };
-  }, [missionPhase, renderContext]);
+  }, [audioSessionUnlocked, missionPhase, renderContext]);
 
   // Contagem regressiva 5, 4, 3, 2, 1 durante a fase `countdown`
   useEffect(() => {
@@ -245,7 +273,28 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
           };
     }
 
-    // Fase `exploring`: comentário exclusivo por camada ativa (todas as 5 camadas) ou passo guiado
+    // Quadro 6 (`exploring-0`): escolha de país no Globo do tablet ou bandeiras no teto
+    if (activeStep === 0) {
+      return isPt
+        ? {
+            phrases: [
+              'Gire o Globo no tablet para escolher um país!',
+              'Se preferir, olhe para as bandeiras orbitando no teto acima.',
+            ],
+            spoken:
+              'Gire o Globo no tablet para escolher um país, ou olhe para as bandeiras orbitando no teto!',
+          }
+        : {
+            phrases: [
+              'Spin the Globe on the tablet to choose a country!',
+              'Or look up at the flags orbiting on the ceiling above.',
+            ],
+            spoken:
+              'Spin the Globe on the tablet to choose a country, or look up at the flags orbiting on the ceiling!',
+          };
+    }
+
+    // Fase `exploring`: comentário exclusivo por camada ativa (todas as 5 camadas)
     if (activeLayerForSpeech) {
       const layerComments: Record<
         VisualLayerId,
@@ -287,24 +336,43 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
             spoken: `Chords layer active over ${countryName}. Carbon monoxide levels are shaping the harmony in ${playback.activeChord}!`,
           },
         },
-        temperature: {
-          pt: {
-            phrases: [
-              `Temperatura na superfície de ${countryName}!`,
-              'O calor observado pela NASA aquece o timbre e o brilho do globo.',
-              `Agora soando em ${playback.keyRootPt} a ${playback.bpm} BPM.`,
-            ],
-            spoken: `Camada de Temperatura ativa sobre ${countryName}. Os dados térmicos da NASA estão aquecendo o timbre e o brilho do planeta!`,
-          },
-          en: {
-            phrases: [
-              `Surface temperature over ${countryName}!`,
-              'NASA thermal data warms the synth timbre and planet glow.',
-              `Now sounding in ${playback.keyRoot} at ${playback.bpm} BPM.`,
-            ],
-            spoken: `Temperature layer active over ${countryName}. NASA thermal observations are warming the timbre and planet glow!`,
-          },
-        },
+        temperature: onlyTemperatureEnabled
+          ? {
+              pt: {
+                phrases: [
+                  `Temperatura de ${countryName}: tom em ${playback.keyRootPt} a ${playback.bpm} BPM.`,
+                  'A Temperatura ajusta o ritmo e a afinação do país!',
+                  'Ligue Melodia, Acordes ou Baixo no tablet para ouvir as notas musicais.',
+                ],
+                spoken: `Camada de Temperatura ativa sobre ${countryName}, ajustando o tom para ${playback.keyRootPt} a ${playback.bpm} batidas por minuto. Ligue Melodia, Acordes ou Baixo no tablet para ouvir as notas musicais!`,
+              },
+              en: {
+                phrases: [
+                  `Temperature over ${countryName}: ${playback.keyRoot} at ${playback.bpm} BPM.`,
+                  'Temperature sets the country key and tempo!',
+                  'Turn on Melody, Chords, or Bass on the tablet to hear musical notes.',
+                ],
+                spoken: `Temperature layer active over ${countryName}, setting the key to ${playback.keyRoot} at ${playback.bpm} beats per minute. Turn on Melody, Chords, or Bass on the tablet to hear musical notes!`,
+              },
+            }
+          : {
+              pt: {
+                phrases: [
+                  `Temperatura na superfície de ${countryName}!`,
+                  'O calor observado pela NASA ajusta o tom e o ritmo do país.',
+                  `Agora soando em ${playback.keyRootPt} a ${playback.bpm} BPM.`,
+                ],
+                spoken: `Camada de Temperatura ativa sobre ${countryName}, ajustando a música para ${playback.keyRootPt} a ${playback.bpm} batidas por minuto!`,
+              },
+              en: {
+                phrases: [
+                  `Surface temperature over ${countryName}!`,
+                  'NASA thermal data sets the country key and tempo.',
+                  `Now sounding in ${playback.keyRoot} at ${playback.bpm} BPM.`,
+                ],
+                spoken: `Temperature layer active over ${countryName}, tuning the music to ${playback.keyRoot} at ${playback.bpm} beats per minute!`,
+              },
+            },
         bass: {
           pt: {
             phrases: [
@@ -345,81 +413,31 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
       return isPt ? layerComments[activeLayerForSpeech].pt : layerComments[activeLayerForSpeech].en;
     }
 
-    const exploringSteps = isPt
-      ? [
-          {
-            phrases: [
-              'Escolha qualquer país no tablet!',
-              'Se tiver dúvida, olhe para o teto e escolha um!',
-            ],
-            spoken: 'Escolha um país no tablet, ou olhe para o teto e escolha um!',
-          },
-          {
-            phrases: [
-              `Perfeito! Você escolheu ${countryName}.`,
-              `Ative uma camada no tablet, como ${activeLayerMeta.labelPt}...`,
-              'Cada dado da NASA vira música e acende no teto!',
-            ],
-            spoken: `Perfeito! Você escolheu ${countryName}. Ative uma camada no tablet para ouvir os dados da NASA virarem música.`,
-          },
-          {
-            phrases: [
-              `${playback.bpm} BPM em ${playback.keyRootPt} (${playback.activeChord}).`,
-              'Experimente ligar outra camada por cima...',
-              'Os sons vão se harmonizando juntos em tempo real!',
-            ],
-            spoken: `Agora experimente ativar outra camada por cima para ouvir os sons se harmonizando juntos sobre ${countryName}.`,
-          },
-          {
-            phrases: [
-              `Em ${countryName}, o vento sopra a ${playback.windMeanSpeed.toFixed(1)} m/s.`,
-              'Quer explorar outro lugar? Toque em outro país no tablet!',
-            ],
-            spoken: `Em ${countryName}, a atmosfera está soando em ${playback.bpm} batidas por minuto. Quer explorar outro país?`,
-          },
-        ]
-      : [
-          {
-            phrases: [
-              'Choose any country on the tablet!',
-              'If unsure, look up at the ceiling and pick one!',
-            ],
-            spoken: 'Choose any country on the tablet, or look up at the ceiling!',
-          },
-          {
-            phrases: [
-              `Great choice: ${countryName}!`,
-              `Enable a layer on the tablet, like ${activeLayerMeta.labelEn}...`,
-              'Each NASA dataset becomes music and lights up above!',
-            ],
-            spoken: `Great choice: ${countryName}. Enable a layer on the tablet to hear NASA data become music.`,
-          },
-          {
-            phrases: [
-              `${playback.bpm} BPM in ${playback.keyRoot} (${playback.activeChord}).`,
-              'Try stacking another layer on top...',
-              'The sounds harmonize together in real time!',
-            ],
-            spoken: `Try stacking another layer on top so the sounds harmonize together over ${countryName}.`,
-          },
-          {
-            phrases: [
-              `In ${countryName}, winds blow at ${playback.windMeanSpeed.toFixed(1)} m/s.`,
-              'Want another region? Tap any country on the tablet!',
-            ],
-            spoken: `In ${countryName}, the atmosphere is sounding at ${playback.bpm} beats per minute. Want to explore another country?`,
-          },
-        ];
-
-    return exploringSteps[activeStep] ?? exploringSteps[0];
+    // `exploring-ready` (Silêncio Intencional: país escolhido e todas as camadas desligadas)
+    return isPt
+      ? {
+          phrases: [
+            `${countryName} selecionado! Todas as camadas começam em silêncio.`,
+            'Toque nos botões do tablet para ligar sua 1ª camada...',
+            'Ouça a música e os dados da NASA acenderem no ambiente!',
+          ],
+          spoken: `${countryName} foi escolhido! Todas as camadas começam desligadas em silêncio. Clique nos botões do tablet para ligar uma camada e ouvir a música surgir no ambiente!`,
+        }
+      : {
+          phrases: [
+            `${countryName} selected! All layers start in silence.`,
+            'Tap the buttons on the tablet to switch on your 1st layer...',
+            'Hear the music and NASA data light up across the room!',
+          ],
+          spoken: `${countryName} has been chosen! All layers start turned off in silence. Tap the buttons on the tablet to switch on a layer and hear the music emerge in the room!`,
+        };
   }, [
     activeLayerForSpeech,
-    activeLayerMeta.labelEn,
-    activeLayerMeta.labelPt,
     activeStep,
     countryName,
     isPt,
     missionPhase,
+    onlyTemperatureEnabled,
     playback.activeChord,
     playback.bpm,
     playback.keyRoot,
@@ -439,6 +457,18 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
     if (!showTypewriter) return;
     const phrases = phaseSpeech.phrases;
     const activePhrase = phrases[phraseIdx] ?? phrases[0] ?? '';
+
+    if (speechStatus === 'paused') {
+      return;
+    }
+
+    if (speechStatus === 'stopped' || !voiceAutoEnabled) {
+      if (isErasing) setIsErasing(false);
+      if (charCount < activePhrase.length) {
+        setCharCount(activePhrase.length);
+      }
+      return;
+    }
 
     if (!isErasing && charCount < activePhrase.length) {
       const t = window.setTimeout(() => setCharCount((c) => c + 1), 34);
@@ -463,7 +493,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
       }, 180);
       return () => window.clearTimeout(t);
     }
-  }, [charCount, isErasing, phaseSpeech.phrases, phraseIdx, showTypewriter]);
+  }, [charCount, isErasing, phaseSpeech.phrases, phraseIdx, showTypewriter, speechStatus, voiceAutoEnabled]);
 
   const prevPhaseRef = useRef(missionPhase);
 
@@ -471,7 +501,14 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
   useEffect(() => {
     const prev = prevPhaseRef.current;
     prevPhaseRef.current = missionPhase;
-    if (renderContext === 'projector' || prev === missionPhase) return;
+    if (
+      renderContext === 'projector' ||
+      !audioSessionUnlocked ||
+      prev === missionPhase ||
+      (typeof document !== 'undefined' && document.visibilityState === 'hidden')
+    ) {
+      return;
+    }
 
     if (missionPhase === 'boarding') {
       playBlastDoorSlamSfx();
@@ -480,13 +517,16 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
     } else if (prev === 'zero_g' && missionPhase === 'exploring') {
       playCabinDissolveSfx();
     }
-  }, [missionPhase, renderContext]);
+  }, [audioSessionUnlocked, missionPhase, renderContext]);
 
-  // Pré-carrega a voz neural Piper do idioma ativo (en_US-bryce-medium / pt_BR-faber-medium)
+  // Pré-carrega a voz neural Piper apenas após sessão de áudio desbloqueada pelo usuário
   useEffect(() => {
-    if (renderContext === 'projector') return;
+    if (renderContext === 'projector' || !audioSessionUnlocked || !voiceAutoEnabled) return;
     preloadPiperVoice(lang);
-  }, [lang, renderContext]);
+  }, [audioSessionUnlocked, lang, renderContext, voiceAutoEnabled]);
+
+  const spokenTextRef = useRef(phaseSpeech.spoken);
+  spokenTextRef.current = phaseSpeech.spoken;
 
   // Fala no idioma selecionado interrompendo imediatamente qualquer fala anterior ao trocar país/camada/fase
   // + abaixa suavemente TODA a música (ambiente espacial e motor 8D dos países) enquanto o robô fala
@@ -496,11 +536,30 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
       setSpatialMusicDucked(ducked);
     };
 
-    if (missionPhase === 'idle' || renderContext === 'projector') {
+    if (speechDelayTimerRef.current !== null) {
+      window.clearTimeout(speechDelayTimerRef.current);
+      speechDelayTimerRef.current = null;
+    }
+
+    if (
+      missionPhase === 'idle' ||
+      renderContext === 'projector' ||
+      !audioSessionUnlocked ||
+      !voiceAutoEnabled
+    ) {
+      lastSpokenKeyRef.current = '';
       stopSpeech();
       setAllMusicDucked(false);
+      if (speechStatusRef.current === 'speaking') {
+        reportSpeechStatus('idle');
+      }
       return;
     }
+
+    if (speechStatusRef.current === 'paused' || speechStatusRef.current === 'stopped') {
+      return;
+    }
+
     const key = `${missionPhase}-${activeStep}-${activeLayerForSpeech ?? 'none'}-${country?.id ?? 'none'}-${lang}`;
     if (lastSpokenKeyRef.current === key) return;
     lastSpokenKeyRef.current = key;
@@ -512,19 +571,98 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
     // No briefing inicial, deixa a música espacial tocar antes do robô começar a falar
     const startDelayMs = missionPhase === 'briefing' ? 1400 : 180;
     const timer = window.setTimeout(() => {
-      speakText(phaseSpeech.spoken, lang, true, {
+      speechDelayTimerRef.current = null;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (speechStatusRef.current === 'paused' || speechStatusRef.current === 'stopped') return;
+      speakText(spokenTextRef.current, lang, true, {
         maleVoice: true,
-        onStart: () => setAllMusicDucked(true),
-        onEnd: () => setAllMusicDucked(false),
+        onStart: () => {
+          setAllMusicDucked(true);
+          reportSpeechStatus('speaking');
+        },
+        onEnd: () => {
+          setAllMusicDucked(false);
+          reportSpeechStatus('idle');
+        },
       });
     }, startDelayMs);
+    speechDelayTimerRef.current = timer;
 
     return () => {
+      if (speechDelayTimerRef.current === timer) {
+        speechDelayTimerRef.current = null;
+      }
       window.clearTimeout(timer);
       stopSpeech();
       setAllMusicDucked(false);
     };
-  }, [activeLayerForSpeech, activeStep, country?.id, lang, missionPhase, phaseSpeech.spoken, renderContext]);
+  }, [
+    activeLayerForSpeech,
+    activeStep,
+    audioSessionUnlocked,
+    country?.id,
+    lang,
+    missionPhase,
+    renderContext,
+    reportSpeechStatus,
+    voiceAutoEnabled,
+  ]);
+
+  // Responde imediatamente aos comandos de Pausa / Retomada / Interrupção vindos do Tablet
+  useEffect(() => {
+    if (renderContext === 'projector' || speechCommandNonce === 0 || !lastSpeechCommand) return;
+    const setAllMusicDucked = (ducked: boolean) => {
+      setSpaceAmbientDucked(ducked);
+      setSpatialMusicDucked(ducked);
+    };
+
+    if (speechDelayTimerRef.current !== null) {
+      window.clearTimeout(speechDelayTimerRef.current);
+      speechDelayTimerRef.current = null;
+    }
+
+    if (lastSpeechCommand === 'stop') {
+      stopSpeech();
+      setAllMusicDucked(false);
+      return;
+    }
+
+    if (lastSpeechCommand === 'pause') {
+      pauseSpeech();
+      setAllMusicDucked(false);
+      return;
+    }
+
+    if (lastSpeechCommand === 'resume') {
+      if (!audioSessionUnlocked || !voiceAutoEnabled || missionPhase === 'idle') return;
+      const outcome = resumeSpeech();
+      if (outcome === 'resumed-piper') {
+        setAllMusicDucked(true);
+        reportSpeechStatus('speaking');
+      } else {
+        speakText(spokenTextRef.current, lang, true, {
+          maleVoice: true,
+          onStart: () => {
+            setAllMusicDucked(true);
+            reportSpeechStatus('speaking');
+          },
+          onEnd: () => {
+            setAllMusicDucked(false);
+            reportSpeechStatus('idle');
+          },
+        });
+      }
+    }
+  }, [
+    audioSessionUnlocked,
+    lang,
+    lastSpeechCommand,
+    missionPhase,
+    renderContext,
+    reportSpeechStatus,
+    speechCommandNonce,
+    voiceAutoEnabled,
+  ]);
 
   const activePhrase = phaseSpeech.phrases[phraseIdx] ?? '';
   const visibleText = activePhrase.slice(0, charCount);
@@ -545,7 +683,11 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
       data-surface="rightWall"
       data-render-context={renderContext}
     >
-      <SpaceStarfield seedOffset={2} count={64} accentHex={activeLayerMeta.accentHex} />
+      <SpaceStarfield
+        seedOffset={2}
+        count={missionPhase === 'idle' ? 96 : 64}
+        accentHex={activeLayerMeta.accentHex}
+      />
 
       {/* Arco sutil na borda esquerda conectando com a Parede Esquerda */}
       <div
@@ -557,20 +699,111 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         aria-hidden="true"
       />
 
-      {/* Estado inicial antes de iniciar operação */}
+      {/* Estado inicial antes de iniciar operação (superfície 3D puramente ilustrativa) */}
       {missionPhase === 'idle' && (
-        <div className="pointer-events-none relative z-20 m-auto max-w-[74%] px-8 text-center">
-          <h1
-            className="font-bold tracking-[0.04em] text-slate-50 uppercase"
-            style={{
-              fontFamily: "'Orbitron', 'Poppins', system-ui, sans-serif",
-              fontSize: '56px',
-              lineHeight: 1.2,
-            }}
-          >
-            {isPt ? 'Vamos começar a sua imersão?' : 'Shall we begin your immersion?'}
-          </h1>
-        </div>
+        <IdleStageRightWall isPt={isPt} interactive={false} />
+      )}
+
+      {/* Tela 2 · Boas-vindas: Robô MINEIRØ 3D gigante solto no espaço + balão de conversa cinematográfico */}
+      {missionPhase === 'briefing' && (
+        <motion.div
+          key="briefing-hero-stage"
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+          className="pointer-events-none relative z-30 flex h-full w-full items-center justify-center gap-10 px-14"
+        >
+          {/* Robô 3D gigante solto no espaço #000000 com aura azul suave */}
+          <div className="relative flex shrink-0 items-center justify-center">
+            <motion.div
+              className="pointer-events-none absolute h-[420px] w-[420px] rounded-full blur-3xl mix-blend-screen"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(56,189,248,0.28) 0%, rgba(14,165,233,0.12) 45%, transparent 72%)',
+              }}
+              animate={{ scale: [0.95, 1.06, 0.95], opacity: [0.7, 0.95, 0.7] }}
+              transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+              aria-hidden="true"
+            />
+            <div className="relative z-10">
+              <Mineiro3D stepIndex={0} isExplaining={isRobotSpeaking} size="spotlight" />
+            </div>
+          </div>
+
+          {/* Painel de conversa amplo e legível ao lado */}
+          <div className="relative flex max-w-[600px] flex-1 flex-col gap-6 rounded-3xl border border-sky-400/35 bg-[#050d20]/84 px-10 py-8 shadow-[0_0_54px_rgba(14,165,233,0.18)] backdrop-blur-md">
+            {/* Cabeçalho + Barrinhas/Ondas de Voz Animadas */}
+            <div className="flex items-center justify-between gap-4 border-b border-sky-400/15 pb-4">
+              <span
+                className="text-[13px] font-semibold tracking-[0.22em] text-sky-300/85 uppercase"
+                style={{ fontFamily: "'Orbitron', 'Poppins', system-ui, sans-serif" }}
+              >
+                {isPt ? 'MINEIRØ · BOAS-VINDAS' : 'MINEIRØ · MISSION BRIEFING'}
+              </span>
+
+              <div className="flex h-5 items-center gap-1" aria-hidden="true">
+                {[0, 1, 2, 3, 4].map((barIdx) => (
+                  <motion.span
+                    key={`voice-bar-${barIdx}`}
+                    className={`w-[3px] rounded-full ${
+                      isRobotSpeaking ? 'bg-sky-300' : 'bg-slate-600/70'
+                    }`}
+                    animate={
+                      isRobotSpeaking
+                        ? {
+                            height: ['6px', `${14 + ((barIdx * 5) % 8)}px`, '6px'],
+                            opacity: [0.45, 1, 0.45],
+                          }
+                        : { height: '6px', opacity: 0.4 }
+                    }
+                    transition={
+                      isRobotSpeaking
+                        ? {
+                            duration: 0.75 + barIdx * 0.12,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                            delay: barIdx * 0.1,
+                          }
+                        : { duration: 0.2 }
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Texto de conversa bem grande */}
+            <p className="min-h-[145px] text-[34px] font-semibold leading-[1.32] tracking-tight text-slate-50">
+              {visibleText}
+              {speechStatus !== 'stopped' && speechStatus !== 'paused' && (
+                <span
+                  className="ml-1.5 inline-block h-8 w-[4px] animate-pulse bg-sky-300 align-middle"
+                  aria-hidden="true"
+                />
+              )}
+            </p>
+
+            {/* Indicador das frases + Placa visual Embarcar (controlada pelo Tablet) */}
+            <div className="flex items-center justify-between gap-4 pt-2">
+              <div className="flex items-center gap-2" aria-hidden="true">
+                {phaseSpeech.phrases.map((_, idx) => (
+                  <span
+                    key={`phrase-dot-${idx}`}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${
+                      idx === phraseIdx ? 'w-7 bg-sky-300' : 'w-2 bg-slate-600/70'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <MissionGameButton
+                label={isPt ? 'Embarcar na Nave' : 'Board Ship'}
+                icon={Rocket}
+                interactive={false}
+                size="md"
+              />
+            </div>
+          </div>
+        </motion.div>
       )}
 
       {/* Contagem regressiva durante a decolagem (5, 4, 3, 2, 1) */}
@@ -592,8 +825,103 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         </div>
       )}
 
-      {/* Fase Exploring: Palco Jukebox Studio + Partitura MIDI em Loop ocupando a Parede Direita */}
-      {missionPhase === 'exploring' && (
+      {/* Quadro 6 (`exploring-0`): Palco dedicado de Escolha de País com MINEIRØ 3D gigante no espaço #000000 */}
+      {missionPhase === 'exploring' && activeStep === 0 && (
+        <motion.div
+          key="exploring-0-hero-stage"
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+          className="pointer-events-none relative z-30 flex h-full w-full items-center justify-center gap-10 px-14"
+        >
+          <div className="relative flex shrink-0 items-center justify-center">
+            <motion.div
+              className="pointer-events-none absolute h-[420px] w-[420px] rounded-full blur-3xl mix-blend-screen"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(56,189,248,0.28) 0%, rgba(14,165,233,0.12) 45%, transparent 72%)',
+              }}
+              animate={{ scale: [0.95, 1.06, 0.95], opacity: [0.7, 0.95, 0.7] }}
+              transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+              aria-hidden="true"
+            />
+            <div className="relative z-10">
+              <Mineiro3D stepIndex={0} isExplaining={isRobotSpeaking} size="spotlight" />
+            </div>
+          </div>
+
+          <div className="relative flex max-w-[600px] flex-1 flex-col gap-6 rounded-3xl border border-sky-400/35 bg-[#050d20]/84 px-10 py-8 shadow-[0_0_54px_rgba(14,165,233,0.18)] backdrop-blur-md">
+            <div className="flex items-center justify-between gap-4 border-b border-sky-400/15 pb-4">
+              <span
+                className="text-[13px] font-semibold tracking-[0.22em] text-sky-300/85 uppercase"
+                style={{ fontFamily: "'Orbitron', 'Poppins', system-ui, sans-serif" }}
+              >
+                {isPt ? 'MINEIRØ · ESCOLHA SEU DESTINO' : 'MINEIRØ · CHOOSE DESTINATION'}
+              </span>
+
+              <div className="flex h-5 items-center gap-1" aria-hidden="true">
+                {[0, 1, 2, 3, 4].map((barIdx) => (
+                  <motion.span
+                    key={`pick-voice-bar-${barIdx}`}
+                    className={`w-[3px] rounded-full ${
+                      isRobotSpeaking ? 'bg-sky-300' : 'bg-slate-600/70'
+                    }`}
+                    animate={
+                      isRobotSpeaking
+                        ? {
+                            height: ['6px', `${14 + ((barIdx * 5) % 8)}px`, '6px'],
+                            opacity: [0.45, 1, 0.45],
+                          }
+                        : { height: '6px', opacity: 0.4 }
+                    }
+                    transition={
+                      isRobotSpeaking
+                        ? {
+                            duration: 0.75 + barIdx * 0.12,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                            delay: barIdx * 0.1,
+                          }
+                        : { duration: 0.2 }
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+
+            <p className="min-h-[145px] text-[34px] font-semibold leading-[1.32] tracking-tight text-slate-50">
+              {visibleText}
+              {speechStatus !== 'stopped' && speechStatus !== 'paused' && (
+                <span
+                  className="ml-1.5 inline-block h-8 w-[4px] animate-pulse bg-sky-300 align-middle"
+                  aria-hidden="true"
+                />
+              )}
+            </p>
+
+            <div className="flex items-center justify-between gap-4 pt-2">
+              <div className="flex items-center gap-2" aria-hidden="true">
+                {phaseSpeech.phrases.map((_, idx) => (
+                  <span
+                    key={`pick-phrase-dot-${idx}`}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${
+                      idx === phraseIdx ? 'w-7 bg-sky-300' : 'w-2 bg-slate-600/70'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <div className="inline-flex items-center gap-2 rounded-full border border-sky-400/35 bg-[#060c1a]/90 px-4 py-2 text-xs font-semibold tracking-[0.12em] text-sky-200 uppercase">
+                <Globe2 size={15} className="text-sky-300" aria-hidden="true" />
+                <span>{isPt ? 'Globo no Tablet · Bandeiras no Teto' : 'Tablet Globe · Ceiling Flags'}</span>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Fase Exploring (`storyStep > 0`): Palco Jukebox Studio + Partitura MIDI em Loop ocupando a Parede Direita */}
+      {missionPhase === 'exploring' && activeStep > 0 && (
         <JukeboxStudioStage
           renderContext={renderContext}
           storyStep={storyStep}
@@ -601,31 +929,59 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         />
       )}
 
-      {/* Robô MINEIRØ no círculo azul + barra conectada nas fases cinematográficas (exceto idle, exploring e ended) */}
-      {missionPhase !== 'idle' && missionPhase !== 'exploring' && missionPhase !== 'ended' && (
+      {/* Robô MINEIRØ no círculo azul + barra conectada nas fases com cabine/contagem (boarding, countdown, zero_g) */}
+      {(missionPhase === 'boarding' ||
+        missionPhase === 'countdown' ||
+        missionPhase === 'zero_g') && (
         <div
-          className="pointer-events-none absolute z-30 flex items-center transition-all duration-1000 ease-out"
+          className="pointer-events-none absolute z-30 flex flex-col items-start gap-4 transition-all duration-1000 ease-out"
           style={robotPositionStyle}
         >
-          <div className="relative z-10 flex h-[120px] w-[120px] shrink-0 items-center justify-center rounded-full border-2 border-sky-400/60 bg-sky-500/15 shadow-[0_0_48px_rgba(56,189,248,0.35)]">
-            <div className="h-[92px] w-[92px]">
-              <Mineiro3D
-                stepIndex={storyStep}
-                isExplaining={true}
-                size="avatar"
-              />
+          <div className="flex items-center">
+            <div className="relative z-10 flex h-[120px] w-[120px] shrink-0 items-center justify-center rounded-full border-2 border-sky-400/60 bg-sky-500/15 shadow-[0_0_48px_rgba(56,189,248,0.35)]">
+              <div className="h-[92px] w-[92px]">
+                <Mineiro3D
+                  stepIndex={storyStep}
+                  isExplaining={isRobotSpeaking}
+                  size="avatar"
+                />
+              </div>
+            </div>
+
+            <div className="-ml-5 flex min-h-[76px] max-w-[480px] items-center rounded-r-full border border-l-0 border-sky-400/40 bg-[#050d20]/90 py-3 pr-7 pl-8 shadow-[0_0_36px_rgba(14,165,233,0.18)]">
+              <p className="text-[21px] font-medium leading-snug tracking-tight text-slate-100">
+                {visibleText}
+                {speechStatus !== 'stopped' && speechStatus !== 'paused' && (
+                  <span
+                    className="ml-1 inline-block h-5 w-[3px] animate-pulse bg-sky-300 align-middle"
+                    aria-hidden="true"
+                  />
+                )}
+              </p>
             </div>
           </div>
 
-          <div className="-ml-5 flex min-h-[76px] max-w-[480px] items-center rounded-r-full border border-l-0 border-sky-400/40 bg-[#050d20]/90 py-3 pr-7 pl-8 shadow-[0_0_36px_rgba(14,165,233,0.18)]">
-            <p className="text-[21px] font-medium leading-snug tracking-tight text-slate-100">
-              {visibleText}
-              <span
-                className="ml-1 inline-block h-5 w-[3px] animate-pulse bg-sky-300 align-middle"
-                aria-hidden="true"
+          {missionPhase === 'boarding' && (
+            <div className="pl-28">
+              <MissionGameButton
+                label={isPt ? 'Autorizar Decolagem' : 'Authorize Liftoff'}
+                icon={Rocket}
+                interactive={false}
+                size="md"
               />
-            </p>
-          </div>
+            </div>
+          )}
+
+          {missionPhase === 'zero_g' && (
+            <div className="pl-28">
+              <MissionGameButton
+                label={isPt ? 'Escolher País' : 'Choose Country'}
+                icon={Globe2}
+                interactive={false}
+                size="md"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -653,7 +1009,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
                 <div className="flex items-center">
                   <div className="relative z-10 flex h-[112px] w-[112px] shrink-0 items-center justify-center rounded-full border-2 border-sky-400/60 bg-sky-500/15 shadow-[0_0_48px_rgba(56,189,248,0.35)]">
                     <div className="h-[88px] w-[88px]">
-                      <Mineiro3D stepIndex={storyStep} isExplaining={true} size="avatar" />
+                      <Mineiro3D stepIndex={storyStep} isExplaining={isRobotSpeaking} size="avatar" />
                     </div>
                   </div>
                   <div className="-ml-5 rounded-r-full border border-l-0 border-sky-400/40 bg-[#050d20]/92 py-3.5 pr-7 pl-8 text-left">
@@ -691,7 +1047,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
                 <div className="flex items-center">
                   <div className="relative z-10 flex h-[96px] w-[96px] shrink-0 items-center justify-center rounded-full border-2 border-sky-400/60 bg-sky-500/15 shadow-[0_0_40px_rgba(56,189,248,0.35)]">
                     <div className="h-[72px] w-[72px]">
-                      <Mineiro3D stepIndex={storyStep} isExplaining={true} size="avatar" />
+                      <Mineiro3D stepIndex={storyStep} isExplaining={isRobotSpeaking} size="avatar" />
                     </div>
                   </div>
                   <div className="-ml-4 rounded-r-full border border-l-0 border-amber-400/45 bg-[#050d20]/92 py-3 pr-7 pl-7 text-left">
@@ -711,16 +1067,22 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-                className="flex h-full w-full flex-col items-center justify-between py-10"
+                className="flex h-full w-full flex-col items-center justify-between py-6"
               >
-                <div className="my-auto flex flex-col items-center justify-center">
+                <div className="my-auto flex flex-col items-center justify-center gap-5">
                   <motion.img
                     src={mineiroLogo}
                     alt="MINEIRØ"
                     initial={{ y: 20, scale: 0.9, opacity: 0 }}
                     animate={{ y: 0, scale: 1, opacity: 1 }}
                     transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-                    className="h-[210px] w-auto object-contain drop-shadow-[0_0_42px_rgba(56,189,248,0.38)]"
+                    className="h-[165px] w-auto object-contain drop-shadow-[0_0_42px_rgba(56,189,248,0.38)]"
+                  />
+                  <MissionGameButton
+                    label={isPt ? 'Nova Missão' : 'New Mission'}
+                    icon={RotateCcw}
+                    interactive={false}
+                    size="md"
                   />
                 </div>
 
@@ -742,6 +1104,9 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
                       </div>
                     ))}
                   </div>
+                  <p className="mt-5 text-[12px] tracking-[0.06em] text-slate-500">
+                    NASA SVS (5011 · 5147 · 5148 · 5153 · 5154) · Natural Earth / world-atlas · flag-icons (MIT)
+                  </p>
                 </footer>
               </motion.div>
             )}

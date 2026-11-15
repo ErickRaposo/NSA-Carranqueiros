@@ -47,3 +47,4 @@ npm run build  # Verifica TypeScript e gera o bundle de produção
 
 - [DIARIO_TECNICO_E_TESTES.md](file:///Users/samuelamorim/Documents/projeto%20nasa/docs/DIARIO_TECNICO_E_TESTES.md) — Decisões arquiteturais, problemas corrigidos, testes unitários e validação E2E no Chrome.
 - [LINGUAGENS_E_TECNOLOGIAS.md](file:///Users/samuelamorim/Documents/projeto%20nasa/docs/LINGUAGENS_E_TECNOLOGIAS.md) — Inventário completo de linguagens, shaders GLSL, APIs nativas (WebGL, Web Speech, Web Audio, ARIA) e bibliotecas utilizadas.
+- [REFERENCIAS_E_LICENCAS.md](docs/REFERENCIAS_E_LICENCAS.md) — Fontes científicas NASA SVS, `flag-icons` (MIT), cartografia offline e texto completo de referências/créditos.

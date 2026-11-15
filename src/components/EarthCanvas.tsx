@@ -38,6 +38,10 @@ interface EarthCanvasProps {
   viewMode: '3d' | '2d';
   visualStyle?: VisualArtStyle;
   orbitAutoRotate?: boolean;
+  /** Angular rotation speed in degrees/sec when orbitAutoRotate is active (default 1.92) */
+  autoRotateSpeedDegPerSec?: number;
+  /** Extra blue atmospheric highlight intensity (0..1) around the 3D globe */
+  blueHighlightBoost?: number;
   showBorders: boolean;
   showGrid: boolean;
   showLabels: boolean;
@@ -54,6 +58,7 @@ interface EarthCanvasProps {
   selectedCountry: CountryEntry | null;
   jukeboxPlaying?: boolean;
   motionPaused?: boolean;
+  interactive?: boolean;
   flyTarget: CameraViewTarget | null;
   zoomCommand?: { delta: number; nonce: number } | null;
   panCommand?: { dLon: number; dLat: number; nonce: number } | null;
@@ -366,6 +371,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   viewMode,
   visualStyle = 'bioluminescent',
   orbitAutoRotate = true,
+  autoRotateSpeedDegPerSec = 1.92,
+  blueHighlightBoost = 0,
   onRegisterPosterCapture,
   showBorders,
   showGrid,
@@ -383,6 +390,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   selectedCountry,
   jukeboxPlaying = false,
   motionPaused = false,
+  interactive = true,
   flyTarget,
   zoomCommand,
   panCommand,
@@ -402,6 +410,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     viewMode,
     visualStyle,
     orbitAutoRotate,
+    autoRotateSpeedDegPerSec,
+    blueHighlightBoost,
     onRegisterPosterCapture,
     showBorders,
     showGrid,
@@ -427,6 +437,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     viewMode,
     visualStyle,
     orbitAutoRotate,
+    autoRotateSpeedDegPerSec,
+    blueHighlightBoost,
     onRegisterPosterCapture,
     showBorders,
     showGrid,
@@ -573,10 +585,15 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       50
     );
 
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      powerPreference: 'high-performance',
-    });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        powerPreference: 'high-performance',
+      });
+    } catch {
+      return;
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(container.clientWidth, container.clientHeight);
     container.appendChild(renderer.domElement);
@@ -994,12 +1011,15 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     };
 
     const dom = renderer.domElement;
-    dom.addEventListener('pointerdown', onPointerDown);
-    dom.addEventListener('pointermove', onPointerMove);
-    dom.addEventListener('pointerup', onPointerUp);
-    dom.addEventListener('pointerleave', onPointerLeave);
-    dom.addEventListener('wheel', onWheel, { passive: false });
-    dom.addEventListener('dblclick', onDoubleClick);
+    dom.style.pointerEvents = interactive ? 'auto' : 'none';
+    if (interactive) {
+      dom.addEventListener('pointerdown', onPointerDown);
+      dom.addEventListener('pointermove', onPointerMove);
+      dom.addEventListener('pointerup', onPointerUp);
+      dom.addEventListener('pointerleave', onPointerLeave);
+      dom.addEventListener('wheel', onWheel, { passive: false });
+      dom.addEventListener('dblclick', onDoubleClick);
+    }
     window.addEventListener('resize', onResize);
 
     (window as unknown as Record<string, unknown>).__NASA_EARTH_DEBUG__ = {
@@ -1050,7 +1070,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
         !p.selectedCountry &&
         nav.flatMix < 0.05
       ) {
-        nav.targetLon += 1.92 * dtSec;
+        nav.targetLon += (p.autoRotateSpeedDegPerSec ?? 1.92) * dtSec;
       }
 
       nav.lon += (nav.targetLon - nav.lon) * smoothPos;
@@ -1214,13 +1234,16 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
           }
         }
 
+        const boost = Math.max(0, Math.min(1, p.blueHighlightBoost ?? 0));
+        const idleBreath = boost > 0 && motionAllowed ? 0.5 + 0.5 * Math.sin(nowFrameMs * 0.0024) : 0;
         const haloTargetColor =
-          enabledLayerSet.size === 1 && firstActiveColor
+          enabledLayerSet.size === 1 && firstActiveColor && boost === 0
             ? firstActiveColor
             : new THREE.Color(0x38bdf8);
         haloMat.color.lerp(haloTargetColor, 0.08);
-        haloMesh.scale.setScalar(1 + pulseLevel * 0.035);
-        haloMat.opacity = enabledLayerSet.size === 0 ? 0.02 : 0.055 + pulseLevel * 0.08;
+        haloMesh.scale.setScalar(1 + pulseLevel * 0.035 + boost * (0.015 + idleBreath * 0.025));
+        const baseHaloOpacity = enabledLayerSet.size === 0 ? 0.02 : 0.055 + pulseLevel * 0.08;
+        haloMat.opacity = Math.max(baseHaloOpacity, boost * (0.18 + idleBreath * 0.1));
       }
 
       // Update projected HTML country labels with progressive area-based LOD & character-width collision avoidance
@@ -1371,12 +1394,14 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     return () => {
       cancelAnimationFrame(rafId);
       propsRef.current.onRegisterPosterCapture?.(null);
-      dom.removeEventListener('pointerdown', onPointerDown);
-      dom.removeEventListener('pointermove', onPointerMove);
-      dom.removeEventListener('pointerup', onPointerUp);
-      dom.removeEventListener('pointerleave', onPointerLeave);
-      dom.removeEventListener('wheel', onWheel);
-      dom.removeEventListener('dblclick', onDoubleClick);
+      if (interactive) {
+        dom.removeEventListener('pointerdown', onPointerDown);
+        dom.removeEventListener('pointermove', onPointerMove);
+        dom.removeEventListener('pointerup', onPointerUp);
+        dom.removeEventListener('pointerleave', onPointerLeave);
+        dom.removeEventListener('wheel', onWheel);
+        dom.removeEventListener('dblclick', onDoubleClick);
+      }
       window.removeEventListener('resize', onResize);
 
       earthGeo.dispose();
@@ -1410,15 +1435,29 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
         container.removeChild(dom);
       }
     };
-  }, [allRings, coastlineRings, countries, landBorderRings]);
+  }, [allRings, coastlineRings, countries, interactive, landBorderRings]);
+
+  const selectedCountryLabel = selectedCountry
+    ? lang === 'en'
+      ? selectedCountry.nameEn
+      : selectedCountry.namePt
+    : null;
 
   return (
     <div
       ref={containerRef}
       className="earth-canvas-root"
-      role="application"
-      tabIndex={0}
-      aria-label="Mapa interativo 3D e 2D da Terra com camadas da NASA. Use as setas do teclado para mover, mais e menos para zoom, Espaço para reproduzir ou pausar, J para Jukebox musical, E para explicação da música, V para narração por voz e R para ler os dados do local."
+      role={interactive ? 'application' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      style={interactive ? undefined : { pointerEvents: 'none' }}
+      aria-label={
+        interactive
+          ? lang === 'en'
+            ? `${selectedCountryLabel ? `Selected country: ${selectedCountryLabel}. ` : ''}Interactive 3D and 2D Earth map with NASA layers. Use arrow keys to move, plus and minus to zoom, Space to play or pause, J for musical Jukebox, E for music explanation, V for voice narration, and R to read location data.`
+            : `${selectedCountryLabel ? `País selecionado: ${selectedCountryLabel}. ` : ''}Mapa interativo 3D e 2D da Terra com camadas da NASA. Use as setas do teclado para mover, mais e menos para zoom, Espaço para reproduzir ou pausar, J para Jukebox musical, E para explicação da música, V para narração por voz e R para ler os dados do local.`
+          : undefined
+      }
+      aria-hidden={interactive ? undefined : true}
     >
       <canvas ref={fxOverlayRef} className="earth-fx-overlay" aria-hidden="true" />
       <div ref={labelsLayerRef} className="earth-labels-layer" aria-hidden="true" />

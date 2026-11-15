@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { stopSpeech, stopUiAudioTones } from './accessibility/a11yEngine';
+import { useA11yPreferences } from './accessibility/a11yPreferences';
+import { stopAllSpaceAudio } from './audio/spaceAmbient';
 import { EntryPortal } from './components/EntryPortal';
+import {
+  AccessibilityWidget,
+  shouldShowAccessibilityWidget,
+} from './components/AccessibilityWidget';
 import { RoomAccessGate } from './components/RoomAccessGate';
 import { ExperienceProvider } from './experience/ExperienceContext';
 import { ProjectorOutId, SpeakerNodeIndex, ViewRole } from './experience/types';
@@ -12,7 +19,6 @@ import { AudioNodeView } from './views/AudioNodeView';
 import { ProjectorView } from './views/ProjectorView';
 import { SetupView } from './views/SetupView';
 import { SetupWizardView } from './views/SetupWizardView';
-import { SimulatorView } from './views/SimulatorView';
 import { TabletControllerView } from './views/TabletControllerView';
 import { WebDemoView } from './views/WebDemoView';
 
@@ -28,10 +34,10 @@ export function parseRouteFromSearch(
   const normalizedPath = pathname.replace(/\/+$/, '').toLowerCase();
   const params = new URLSearchParams(search);
   const rawView = (params.get('view') ?? '').toLowerCase();
+  const normalizedView = rawView === 'simulator' ? 'demo' : rawView;
   const validViews: ViewRole[] = [
     'setup',
     'admin',
-    'simulator',
     'projector',
     'controller',
     'demo',
@@ -39,8 +45,8 @@ export function parseRouteFromSearch(
     'audio-node',
   ];
 
-  let view: ViewRole = validViews.includes(rawView as ViewRole)
-    ? (rawView as ViewRole)
+  let view: ViewRole = validViews.includes(normalizedView as ViewRole)
+    ? (normalizedView as ViewRole)
     : 'portal';
 
   if (!rawView && (normalizedPath === '/controle' || normalizedPath === '/controller')) {
@@ -98,6 +104,41 @@ export function App(): React.ReactElement {
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
+
+  useEffect(() => {
+    const stopAllTransientAudio = () => {
+      stopSpeech();
+      stopUiAudioTones();
+      stopAllSpaceAudio();
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        stopAllTransientAudio();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', stopAllTransientAudio);
+    window.addEventListener('beforeunload', stopAllTransientAudio);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', stopAllTransientAudio);
+      window.removeEventListener('beforeunload', stopAllTransientAudio);
+    };
+  }, []);
+
+  useEffect(() => {
+    stopSpeech();
+    stopUiAudioTones();
+    stopAllSpaceAudio();
+    return () => {
+      stopSpeech();
+      stopUiAudioTones();
+      stopAllSpaceAudio();
+    };
+  }, [route.view]);
 
   // Auto-gera código exclusivo de sala (?room=XXXXXX) ao entrar no Setup ou no Admin sem código
   useEffect(() => {
@@ -164,12 +205,57 @@ export function App(): React.ReactElement {
     [roomCode]
   );
 
-  const isDev = Boolean(
-    (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV
+  const {
+    highContrast,
+    fontScale,
+    reduceMotion,
+    announcement,
+    toggleHighContrast,
+    cycleFontScale,
+    toggleReduceMotion,
+  } = useA11yPreferences();
+
+  const a11yAnnouncer = (
+    <div
+      className="sr-only"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      data-testid="a11y-announcer"
+    >
+      {announcement}
+    </div>
   );
 
-  const [highContrast, setHighContrast] = useState(false);
-  const [fontScale, setFontScale] = useState(1);
+  const currentSearch = typeof window !== 'undefined' ? window.location.search : '';
+  const a11yWidget = shouldShowAccessibilityWidget(route.view, currentSearch) ? (
+    <AccessibilityWidget
+      highContrast={highContrast}
+      onToggleHighContrast={toggleHighContrast}
+      fontScale={fontScale}
+      onCycleFontScale={cycleFontScale}
+      reduceMotion={reduceMotion}
+      onToggleReduceMotion={toggleReduceMotion}
+    />
+  ) : null;
+
+  if (route.view === 'portal') {
+    return (
+      <>
+        {a11yAnnouncer}
+        <EntryPortal
+          highContrast={highContrast}
+          onToggleHighContrast={toggleHighContrast}
+          fontScale={fontScale}
+          onCycleFontScale={cycleFontScale}
+          onExploreEarth={() => navigateTo('demo')}
+          onOpenAuth={() => navigateTo('setup')}
+          onOpenRegister={() => navigateTo('controller')}
+        />
+        {a11yWidget}
+      </>
+    );
+  }
 
   return (
     <ExperienceProvider
@@ -177,6 +263,8 @@ export function App(): React.ReactElement {
       roomCode={roomCode}
       onRegenerateRoomCode={handleRegenerateRoomCode}
     >
+      {a11yAnnouncer}
+      {a11yWidget}
       {route.view === 'setup' && (
         <SetupWizardView
           onOpenAdmin={() => navigateTo('admin')}
@@ -186,7 +274,6 @@ export function App(): React.ReactElement {
       {route.view === 'admin' && (
         <SetupView onOpenSetupWizard={() => navigateTo('setup')} />
       )}
-      {route.view === 'simulator' && <SimulatorView />}
       {route.view === 'projector' && (
         <RoomAccessGate
           onJoinRoomCode={handleJoinRoomCode}
@@ -200,21 +287,15 @@ export function App(): React.ReactElement {
           onJoinRoomCode={handleJoinRoomCode}
           onGoToSetup={() => navigateTo('setup')}
         >
-          <TabletControllerView />
+          <TabletControllerView highContrast={highContrast} fontScale={fontScale} />
         </RoomAccessGate>
       )}
-      {route.view === 'demo' && <WebDemoView />}
-      {route.view === 'portal' && (
-        <EntryPortal
+      {route.view === 'demo' && (
+        <WebDemoView
           highContrast={highContrast}
-          onToggleHighContrast={() => setHighContrast((prev) => !prev)}
           fontScale={fontScale}
-          onCycleFontScale={() =>
-            setFontScale((prev) => (prev === 1 ? 1.15 : prev === 1.15 ? 1.3 : 1))
-          }
-          onExploreEarth={() => navigateTo('demo')}
-          onOpenAuth={() => navigateTo('setup')}
-          onOpenRegister={() => navigateTo('controller')}
+          onBackToHub={() => navigateTo('setup')}
+          onOpenSetup={() => navigateTo('admin')}
         />
       )}
       {route.view === 'audio-node' && (
@@ -227,73 +308,6 @@ export function App(): React.ReactElement {
             onChangeSpeakerIndex={(next) => navigateTo('audio-node', undefined, next)}
           />
         </RoomAccessGate>
-      )}
-
-      {/* Barra flutuante discreta APENAS em dev local */}
-      {isDev && route.view !== 'projector' && (
-        <nav
-          aria-label="Dev View Switcher"
-          className={`fixed z-50 flex items-center gap-1 rounded-full border border-slate-400/20 bg-[#060c1a]/92 p-1 text-[11px] font-medium text-slate-300 shadow-lg backdrop-blur-md ${
-            route.view === 'setup'
-              ? 'right-3 bottom-18'
-              : route.view === 'admin'
-                ? 'right-3 bottom-2.5'
-                : 'bottom-2.5 left-2.5'
-          }`}
-        >
-          {(
-            [
-              ['portal', 'Portal'],
-              ['demo', 'Demo'],
-              ['controller', 'Tablet'],
-              ['simulator', 'Simulator'],
-            ] as [ViewRole, string][]
-          ).map(([v, label]) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => navigateTo(v)}
-              className={`rounded-full px-2.5 py-1 transition ${
-                route.view === v ? 'bg-white/15 font-semibold text-white' : 'hover:text-white'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-          <span className="mx-0.5 h-3.5 w-px bg-slate-500/35" aria-hidden="true" />
-          <button
-            type="button"
-            onClick={() => navigateTo('setup')}
-            className={`rounded-full px-2.5 py-1 transition ${
-              route.view === 'setup'
-                ? 'bg-sky-400/20 font-semibold text-sky-200 ring-1 ring-sky-400/40'
-                : 'text-sky-300/90 hover:text-sky-200'
-            }`}
-            title="Setup Guiado (?view=setup)"
-          >
-            Setup
-          </button>
-          <button
-            type="button"
-            onClick={() => navigateTo('admin')}
-            className={`rounded-full px-2.5 py-1 transition ${
-              route.view === 'admin'
-                ? 'bg-sky-400/20 font-semibold text-sky-200 ring-1 ring-sky-400/40'
-                : 'text-slate-300 hover:text-white'
-            }`}
-            title="Show Control Admin para Desenvolvedores (?view=admin)"
-          >
-            Show Control
-          </button>
-          <button
-            type="button"
-            onClick={() => navigateTo('projector', 1)}
-            className="rounded-full px-2.5 py-1 text-slate-400 hover:text-white"
-            title="Abrir saída limpa do Projetor 1"
-          >
-            Out 1
-          </button>
-        </nav>
       )}
     </ExperienceProvider>
   );

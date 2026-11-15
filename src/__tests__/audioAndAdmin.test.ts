@@ -1,5 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parseRouteFromSearch, parseSpeakerIndexFromSearch } from '../App';
+import {
+  pauseSpeech,
+  resumeSpeech,
+  setSpeechGateOpen,
+  speakTextPt,
+  stopSpeech,
+} from '../accessibility/a11yEngine';
+import { stopAllSpaceAudio } from '../audio/spaceAmbient';
 import {
   computeVbap3Gains,
   createDefaultAudioCalibration,
@@ -283,6 +291,85 @@ describe('Show Control Admin (?view=admin), Matriz de Projetores Out 1..4, Nós 
       else g.window = prevWindow;
       if (prevMediaEl === undefined) delete g.HTMLMediaElement;
       else g.HTMLMediaElement = prevMediaEl;
+    }
+  });
+
+  it('encerra fala pendente, impede nova fala com aba oculta e descarta motor de áudio ao sair', () => {
+    const engine = new SpatialAudioEngine(createDefaultAudioCalibration());
+    engine.dispose();
+    expect(engine.ensureContext()).toBeNull();
+
+    const g = globalThis as Record<string, unknown>;
+    const prevWindow = g.window;
+    const prevDocument = g.document;
+    const prevUtterance = g.SpeechSynthesisUtterance;
+    const cancelSpy = vi.fn();
+    const speakSpy = vi.fn();
+    const onEndSpy = vi.fn();
+
+    try {
+      g.SpeechSynthesisUtterance = class {
+        text: string;
+        lang = '';
+        rate = 1;
+        volume = 1;
+        pitch = 1;
+        voice: unknown = null;
+        onstart: (() => void) | null = null;
+        onend: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        constructor(t: string) {
+          this.text = t;
+        }
+      };
+      g.window = {
+        speechSynthesis: {
+          cancel: cancelSpy,
+          speak: speakSpy,
+          getVoices: () => [],
+          paused: false,
+          pending: false,
+          speaking: false,
+        },
+        setTimeout,
+        clearTimeout,
+      };
+      g.document = { visibilityState: 'visible' };
+
+      speakTextPt('Olá explorador!', true, { onEnd: onEndSpy });
+      expect(speakSpy).toHaveBeenCalledTimes(1);
+
+      stopSpeech();
+      expect(cancelSpy).toHaveBeenCalled();
+      expect(onEndSpy).toHaveBeenCalledTimes(1);
+
+      // Com a aba oculta, nenhuma fala atrasada pode ser disparada
+      g.document = { visibilityState: 'hidden' };
+      speakTextPt('Fala fantasma em background', true);
+      expect(speakSpy).toHaveBeenCalledTimes(1);
+
+      // Volta para visible e valida pauseSpeech / resumeSpeech / setSpeechGateOpen(false)
+      g.document = { visibilityState: 'visible' };
+      speakTextPt('Segunda fala', true);
+      expect(speakSpy).toHaveBeenCalledTimes(2);
+      const pausedMode = pauseSpeech();
+      expect(pausedMode).toBe('webspeech');
+      expect(resumeSpeech()).toBe('needs-replay');
+
+      setSpeechGateOpen(false);
+      speakTextPt('Bloqueado pelo gate da sessão', true);
+      expect(speakSpy).toHaveBeenCalledTimes(2);
+      setSpeechGateOpen(true);
+
+      expect(() => stopAllSpaceAudio()).not.toThrow();
+    } finally {
+      setSpeechGateOpen(true);
+      if (prevWindow === undefined) delete g.window;
+      else g.window = prevWindow;
+      if (prevDocument === undefined) delete g.document;
+      else g.document = prevDocument;
+      if (prevUtterance === undefined) delete g.SpeechSynthesisUtterance;
+      else g.SpeechSynthesisUtterance = prevUtterance;
     }
   });
 });

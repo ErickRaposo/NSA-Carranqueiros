@@ -1,67 +1,286 @@
 import React, { useState } from 'react';
-import { Eye, Headphones, SlidersHorizontal } from 'lucide-react';
+import {
+  ArrowLeft,
+  Columns2,
+  Columns3,
+  Headphones,
+  SlidersHorizontal,
+  Tablet,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
+import symbollLogo from '../assets/symboll.png';
 import { useExperience } from '../experience/ExperienceContext';
-import { SimulatorView } from './SimulatorView';
+import { CameraPresetId, SimulatorView } from './SimulatorView';
 import { TabletControllerView } from './TabletControllerView';
+import { ADMIN_FOCUS } from './admin/adminMeta';
+
+export type DemoLayoutMode = 'split' | 'tablet' | 'room2d';
+
+interface WebDemoViewProps {
+  onBackToHub?: () => void;
+  onOpenSetup?: () => void;
+  highContrast?: boolean;
+  fontScale?: number;
+}
 
 /**
- * Experiência Web Pública Unificada (`?view=demo` e rota padrão `/` na Vercel):
- * Combina a Maquete 3D do Quarto Projetado com o Controle estilo Tablet + Áudio 8D Binaural.
+ * Experiência Web Unificada (`?view=demo`):
+ * Combina a Maquete 3D/2D do Quarto Projetado com o Controle estilo Tablet + Áudio 8D Binaural,
+ * em um único header alinhado à identidade visual do Painel Técnico.
  */
-export const WebDemoView: React.FC = () => {
-  const { lang } = useExperience();
+export const WebDemoView: React.FC<WebDemoViewProps> = ({
+  onBackToHub,
+  onOpenSetup,
+  highContrast = false,
+  fontScale = 1,
+}) => {
+  const { lang, setLang, voiceAutoEnabled, setVoiceAutoEnabled } = useExperience();
   const isPt = lang === 'pt';
-  const [showRoomPreview, setShowRoomPreview] = useState(true);
+  const [layoutMode, setLayoutMode] = useState<DemoLayoutMode>('split');
+  const [roomPreset, setRoomPreset] = useState<CameraPresetId>('overview');
+
+  const handleSelectLayout = (nextMode: DemoLayoutMode) => {
+    setLayoutMode(nextMode);
+    if (nextMode === 'room2d') {
+      setRoomPreset('flat');
+    } else if (nextMode === 'split' && roomPreset === 'flat') {
+      setRoomPreset('overview');
+    }
+  };
+
+  const handleBack = () => {
+    if (onBackToHub) {
+      onBackToHub();
+      return;
+    }
+    // TODO(erick): apontar para a tela intermediária do Erick quando entrar no repositório
+    if (typeof window !== 'undefined') {
+      window.location.search = '?view=hub';
+    }
+  };
+
+  const handleOpenSetup = () => {
+    if (onOpenSetup) {
+      onOpenSetup();
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      window.location.search = '?view=setup';
+    }
+  };
+
+  const showRoom = layoutMode !== 'tablet';
+  const showTablet = layoutMode !== 'room2d';
 
   return (
     <main
-      className="flex h-dvh w-screen flex-col overflow-hidden bg-[#060913] text-slate-50"
+      className={`flex h-dvh w-screen flex-col overflow-hidden bg-[#060913] font-['Poppins',system-ui,sans-serif] text-slate-50${
+        highContrast ? ' high-contrast' : ''
+      }`}
+      style={
+        fontScale !== 1
+          ? ({
+              fontSize: `${Math.round(fontScale * 100)}%`,
+              '--font-scale': fontScale,
+            } as React.CSSProperties)
+          : undefined
+      }
+      data-a11y-scaled={fontScale > 1 ? 'true' : undefined}
       data-testid="web-demo-view"
     >
-      {/* Faixa superior compacta para visitantes/jurados da Vercel */}
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-400/15 bg-[#080d19] px-4 py-2">
+      <a href="#demo-main-content" className="skip-link">
+        {isPt ? 'Pular para o conteúdo principal' : 'Skip to main content'}
+      </a>
+      {/* Header único alinhado à identidade visual do Painel Técnico (CockpitHeader) */}
+      <header className="flex min-h-[56px] shrink-0 flex-wrap items-center justify-between gap-2.5 border-b border-[#1e3a66]/55 bg-[#040b1a] px-3.5 py-2 lg:px-5">
+        {/* Esquerda: Seta Voltar (tela intermediária do Erick / Portal) + Marca + Áudio 8D */}
         <div className="flex items-center gap-2.5">
-          <span className="text-xs font-bold tracking-wider text-slate-100 uppercase">
-            Earth Jukebox
-          </span>
-          <span className="hidden items-center gap-1 rounded-full border border-sky-400/25 bg-sky-400/10 px-2.5 py-0.5 text-[11px] font-medium text-sky-300 sm:inline-flex">
-            <Headphones size={12} />
-            <span>
-              {isPt
-                ? 'Use fones para ouvir o Áudio 8D Espacial'
-                : 'Use headphones for 8D Spatial Audio'}
-            </span>
+          <button
+            type="button"
+            onClick={handleBack}
+            data-testid="demo-back-btn"
+            aria-label={
+              isPt
+                ? 'Voltar para seleção de painéis'
+                : 'Back to panel hub'
+            }
+            title={
+              isPt
+                ? 'Voltar para seleção de painéis'
+                : 'Back to panel hub'
+            }
+            className={`inline-flex min-h-[38px] min-w-[38px] cursor-pointer items-center justify-center rounded-full border border-[#1e3a66] bg-[#060c1a] text-slate-200 transition hover:border-[#2563eb] hover:text-white ${ADMIN_FOCUS}`}
+          >
+            <ArrowLeft size={16} aria-hidden="true" />
+          </button>
+
+          <img src={symbollLogo} alt="" className="h-7 w-7 object-contain" aria-hidden="true" />
+
+          <h1 className="text-sm font-bold tracking-[0.04em] text-slate-50">
+            {isPt ? 'Earth Jukebox · Demo' : 'Earth Jukebox · Demo'}
+          </h1>
+
+          <span className="hidden items-center gap-1.5 rounded-full border border-[#1e3a66] bg-[#060c1a] px-2.5 py-1 text-[11px] font-medium text-slate-300 lg:inline-flex">
+            <Headphones size={12} className="text-[#7dd3fc]" aria-hidden="true" />
+            <span>{isPt ? 'Fones · Áudio 8D' : 'Headphones · 8D'}</span>
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowRoomPreview((v) => !v)}
-          className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border border-slate-400/20 bg-white/[0.06] px-3 text-xs font-semibold text-slate-100 hover:bg-white/10"
+        {/* Centro: Modos de Visualização (Dividido / Estender Tablet / Estender Simulação 2D) */}
+        <div
+          role="group"
+          aria-label={isPt ? 'Modo de exibição da Demo' : 'Demo layout mode'}
+          className="inline-flex items-center gap-1 rounded-full border border-[#1e3a66] bg-[#060c1a] p-1"
         >
-          {showRoomPreview ? <SlidersHorizontal size={13} /> : <Eye size={13} />}
-          <span>
-            {showRoomPreview
-              ? isPt
-                ? 'Expandir Controle Tablet'
-                : 'Expand Tablet Controller'
-              : isPt
-                ? 'Mostrar Quarto 3D Projetado'
-                : 'Show 3D Projected Room'}
-          </span>
-        </button>
+          {(
+            [
+              {
+                id: 'split',
+                label: isPt ? 'Dividido' : 'Split',
+                ariaLabel: isPt
+                  ? 'Visualizar Quarto 3D Projetado e Controle do Tablet divididos'
+                  : 'Show 3D Projected Room and Tablet Controller split view',
+                Icon: Columns2,
+                testId: 'demo-mode-split',
+              },
+              {
+                id: 'tablet',
+                label: isPt ? 'Estender Tablet' : 'Full Tablet',
+                ariaLabel: isPt
+                  ? 'Visualizar apenas Controle do Tablet'
+                  : 'Show Tablet Controller only',
+                Icon: Tablet,
+                testId: 'demo-mode-tablet',
+              },
+              {
+                id: 'room2d',
+                label: isPt ? 'Simulação 2D' : '2D Simulation',
+                ariaLabel: isPt
+                  ? 'Visualizar Quarto 3D Projetado em Simulação 2D das 3 telas'
+                  : 'Show 3D Projected Room in 2D 3-screen simulation',
+                Icon: Columns3,
+                testId: 'demo-mode-room2d',
+              },
+            ] as const
+          ).map(({ id, label, ariaLabel, Icon, testId }) => {
+            const active = layoutMode === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                data-testid={testId}
+                aria-pressed={active}
+                aria-label={ariaLabel}
+                onClick={() => handleSelectLayout(id)}
+                className={`inline-flex min-h-[34px] cursor-pointer items-center gap-1.5 rounded-full border px-3 text-xs transition ${ADMIN_FOCUS} ${
+                  active
+                    ? 'border-[#2563eb]/65 bg-[#0c1a36] font-semibold text-white'
+                    : 'border-transparent text-slate-400 hover:text-slate-100'
+                }`}
+              >
+                <Icon size={13} className={active ? 'text-[#7dd3fc]' : ''} aria-hidden="true" />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Direita: Voz + Idioma + Painel Técnico */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setVoiceAutoEnabled(!voiceAutoEnabled)}
+            data-testid="demo-voice-toggle"
+            aria-pressed={voiceAutoEnabled}
+            aria-label={
+              voiceAutoEnabled
+                ? isPt
+                  ? 'Silenciar narração automática'
+                  : 'Mute auto narration'
+                : isPt
+                  ? 'Ativar narração automática'
+                  : 'Enable auto narration'
+            }
+            className={`inline-flex min-h-[38px] cursor-pointer items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition ${ADMIN_FOCUS} ${
+              voiceAutoEnabled
+                ? 'border-[#1e3a66] bg-[#060c1a] text-sky-200 hover:border-[#2563eb]'
+                : 'border-rose-400/40 bg-rose-500/15 text-rose-200 hover:border-rose-400/70'
+            }`}
+          >
+            {voiceAutoEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+            <span className="hidden sm:inline">
+              {voiceAutoEnabled
+                ? isPt
+                  ? 'Voz: ON'
+                  : 'Voice: ON'
+                : isPt
+                  ? 'Voz: OFF'
+                  : 'Voice: OFF'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setLang(isPt ? 'en' : 'pt')}
+            data-testid="demo-lang-toggle"
+            aria-label={isPt ? 'Mudar idioma para Inglês' : 'Switch language to Portuguese'}
+            className={`inline-flex min-h-[38px] min-w-[64px] cursor-pointer items-center justify-center rounded-full border border-[#1e3a66] bg-[#060c1a] px-3 text-xs font-semibold text-slate-200 transition hover:border-[#2563eb] hover:text-white ${ADMIN_FOCUS}`}
+          >
+            {isPt ? 'PT · BR' : 'EN · US'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleOpenSetup}
+            data-testid="demo-setup-btn"
+            aria-label={isPt ? 'Abrir Painel Técnico' : 'Open Control Desk'}
+            title={isPt ? 'Abrir Painel Técnico' : 'Open Control Desk'}
+            className={`inline-flex min-h-[38px] cursor-pointer items-center gap-1.5 rounded-full border border-[#1e3a66] bg-[#060c1a] px-3.5 text-xs font-semibold text-slate-200 transition hover:border-[#2563eb] hover:text-white ${ADMIN_FOCUS}`}
+          >
+            <SlidersHorizontal size={13} className="text-[#7dd3fc]" aria-hidden="true" />
+            <span>{isPt ? 'Painel Técnico' : 'Control Desk'}</span>
+          </button>
+        </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
-        {showRoomPreview && (
-          <div className="h-[42vh] shrink-0 border-b border-slate-400/15 xl:h-full xl:w-[60%] xl:border-r xl:border-b-0">
-            <SimulatorView embedded={true} />
-          </div>
+      <div id="demo-main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
+        {showRoom && (
+          <section
+            aria-label={isPt ? 'Visualização do Quarto 3D Projetado' : '3D Projected Room View'}
+            className={
+              layoutMode === 'room2d'
+                ? 'h-full min-h-0 w-full min-w-0 flex-1'
+                : 'h-1/2 min-h-0 w-full min-w-0 shrink-0 border-b border-[#1e3a66]/55 lg:h-full lg:w-1/2 lg:border-r lg:border-b-0'
+            }
+          >
+            <h2 className="sr-only">
+              {isPt ? 'Quarto 3D Projetado' : '3D Projected Room'}
+            </h2>
+            <SimulatorView
+              embedded={true}
+              preset={roomPreset}
+              onPresetChange={setRoomPreset}
+              hideBrandTitle={true}
+            />
+          </section>
         )}
 
-        <div className="min-h-0 flex-1">
-          <TabletControllerView embeddedInDemo={true} />
-        </div>
+        {showTablet && (
+          <section
+            aria-label={isPt ? 'Controle do Tablet' : 'Tablet Controller'}
+            className={
+              layoutMode === 'tablet'
+                ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
+                : 'flex h-1/2 min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden lg:h-full lg:w-1/2'
+            }
+          >
+            <h2 className="sr-only">
+              {isPt ? 'Controle do Tablet' : 'Tablet Controller'}
+            </h2>
+            <TabletControllerView embeddedInDemo={true} highContrast={highContrast} />
+          </section>
+        )}
       </div>
     </main>
   );

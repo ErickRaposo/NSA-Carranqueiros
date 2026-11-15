@@ -10,8 +10,58 @@ import { getActiveUnmutedAudioEngine, SpatialSfxTarget } from './spatialAudioEng
 let ambientTarget: SpatialSfxTarget | null = null;
 let ambientMaster: GainNode | null = null;
 let ambientNodes: AudioNode[] = [];
+let activeSfxNodes = new Set<AudioNode>();
 let ambientStarted = false;
-let unlockBound = false;
+let ambientSessionActive = false;
+let stopAmbientTimerId: number | null = null;
+let unlockHandler: (() => void) | null = null;
+
+function detachUnlockListeners(): void {
+  if (typeof window === 'undefined' || !unlockHandler) return;
+  window.removeEventListener('pointerdown', unlockHandler, true);
+  window.removeEventListener('keydown', unlockHandler, true);
+  unlockHandler = null;
+}
+
+function registerSfxSource(node: AudioScheduledSourceNode, extraNodes: AudioNode[] = []): void {
+  activeSfxNodes.add(node);
+  for (const extra of extraNodes) {
+    activeSfxNodes.add(extra);
+  }
+  node.onended = () => {
+    activeSfxNodes.delete(node);
+    for (const extra of extraNodes) {
+      activeSfxNodes.delete(extra);
+      try {
+        extra.disconnect();
+      } catch {
+        // ignore
+      }
+    }
+    try {
+      node.disconnect();
+    } catch {
+      // ignore
+    }
+  };
+}
+
+function stopAndDisconnectNodes(nodes: Iterable<AudioNode>): void {
+  for (const node of nodes) {
+    if ('stop' in node && typeof (node as OscillatorNode).stop === 'function') {
+      try {
+        (node as OscillatorNode).stop();
+      } catch {
+        // ignore
+      }
+    }
+    try {
+      node.disconnect();
+    } catch {
+      // ignore
+    }
+  }
+}
 
 function acquireSfxTarget(
   panX = 0,
@@ -106,6 +156,14 @@ function buildSpacePad(): void {
 
 export function startSpaceAmbient(): void {
   if (typeof window === 'undefined') return;
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+
+  if (stopAmbientTimerId !== null) {
+    window.clearTimeout(stopAmbientTimerId);
+    stopAmbientTimerId = null;
+  }
+  ambientSessionActive = true;
+
   try {
     if (!ambientStarted) {
       buildSpacePad();
@@ -115,21 +173,32 @@ export function startSpaceAmbient(): void {
       void ctx.resume().catch(() => {});
     }
 
-    if (!unlockBound && (!ctx || ctx.state === 'suspended')) {
-      unlockBound = true;
+    if (!unlockHandler && (!ctx || ctx.state === 'suspended')) {
       const unlock = () => {
+        if (!ambientSessionActive) {
+          detachUnlockListeners();
+          return;
+        }
         if (!ambientStarted) {
           buildSpacePad();
         }
         const activeCtx = ambientTarget?.ctx;
         if (activeCtx) {
-          void activeCtx.resume().catch(() => {});
-          if (activeCtx.state === 'running') {
-            window.removeEventListener('pointerdown', unlock, true);
-            window.removeEventListener('keydown', unlock, true);
-          }
+          void activeCtx
+            .resume()
+            .then(() => {
+              if (!ambientSessionActive) {
+                detachUnlockListeners();
+                return;
+              }
+              if (activeCtx.state === 'running') {
+                detachUnlockListeners();
+              }
+            })
+            .catch(() => {});
         }
       };
+      unlockHandler = unlock;
       window.addEventListener('pointerdown', unlock, { capture: true, passive: true });
       window.addEventListener('keydown', unlock, { capture: true, passive: true });
     }
@@ -138,8 +207,43 @@ export function startSpaceAmbient(): void {
   }
 }
 
+/**
+ * Interrompe imediatamente música espacial ambiente, todos os efeitos sonoros ativos/agendados
+ * e listeners globais de desbloqueio (ex.: ao sair da página, fechar/ocultar a aba ou trocar de rota).
+ */
+export function stopAllSpaceAudio(): void {
+  ambientSessionActive = false;
+  detachUnlockListeners();
+  if (stopAmbientTimerId !== null && typeof window !== 'undefined') {
+    window.clearTimeout(stopAmbientTimerId);
+    stopAmbientTimerId = null;
+  }
+
+  stopAndDisconnectNodes(activeSfxNodes);
+  activeSfxNodes.clear();
+  stopAndDisconnectNodes(ambientNodes);
+  ambientNodes = [];
+  ambientMaster = null;
+  ambientStarted = false;
+
+  if (ambientTarget) {
+    const targetToDisconnect = ambientTarget;
+    ambientTarget = null;
+    try {
+      targetToDisconnect.disconnect();
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export function stopSpaceAmbient(): void {
-  if (!ambientTarget || !ambientMaster) return;
+  ambientSessionActive = false;
+  detachUnlockListeners();
+  if (!ambientTarget || !ambientMaster) {
+    stopAllSpaceAudio();
+    return;
+  }
   const targetRef = ambientTarget;
   const masterRef = ambientMaster;
   const nodesRef = ambientNodes;
@@ -152,29 +256,31 @@ export function stopSpaceAmbient(): void {
     const now = targetRef.ctx.currentTime;
     masterRef.gain.cancelScheduledValues(now);
     masterRef.gain.setValueAtTime(Math.max(masterRef.gain.value, 0.0001), now);
-    masterRef.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
-    window.setTimeout(() => {
-      for (const node of nodesRef) {
-        if ('stop' in node && typeof (node as OscillatorNode).stop === 'function') {
-          try {
-            (node as OscillatorNode).stop();
-          } catch {
-            // ignore
-          }
-        }
-        try {
-          node.disconnect();
-        } catch {
-          // ignore
-        }
+    masterRef.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+    if (stopAmbientTimerId !== null) {
+      window.clearTimeout(stopAmbientTimerId);
+    }
+    stopAmbientTimerId = window.setTimeout(() => {
+      stopAmbientTimerId = null;
+      stopAndDisconnectNodes(nodesRef);
+      try {
+        targetRef.disconnect();
+      } catch {
+        // ignore
       }
-      targetRef.disconnect();
-    }, 500);
+    }, 380);
   } catch {
-    targetRef.disconnect();
+    try {
+      targetRef.disconnect();
+    } catch {
+      // ignore
+    }
   }
 }
 
+/**
+ * Abaixa suavemente a música espacial enquanto o robô fala e restaura depois.
+ */
 export function setSpaceAmbientDucked(ducked: boolean): void {
   if (!ambientTarget || !ambientMaster) return;
   try {
@@ -238,6 +344,8 @@ export function playLaunchThrust8D(durationSec = 10.0): void {
     subOsc.connect(subGain);
     subGain.connect(destination);
 
+    registerSfxSource(noise, [filter, thrustGain]);
+    registerSfxSource(subOsc, [subGain]);
     noise.start(now);
     noise.stop(now + durationSec + 0.05);
     subOsc.start(now);
@@ -284,6 +392,7 @@ export function playBlastDoorSlamSfx(): void {
     steam.connect(steamFilter);
     steamFilter.connect(steamGain);
     steamGain.connect(steamTarget.destination);
+    registerSfxSource(steam, [steamFilter, steamGain]);
     steam.start(now);
     steam.stop(now + 1.5);
 
@@ -312,6 +421,7 @@ export function playBlastDoorSlamSfx(): void {
       clangGain.gain.exponentialRampToValueAtTime(0.001, impactAt + 0.55);
       clang.connect(clangGain);
       clangGain.connect(clangTarget.destination);
+      registerSfxSource(clang, [clangGain]);
       clang.start(impactAt);
       clang.stop(impactAt + 0.6);
       if (typeof window !== 'undefined') {
@@ -343,6 +453,7 @@ export function playHatchEjectSfx(): void {
     latchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
     latch.connect(latchGain);
     latchGain.connect(destination);
+    registerSfxSource(latch, [latchGain]);
     latch.start(now);
     latch.stop(now + 0.95);
 
@@ -363,6 +474,7 @@ export function playHatchEjectSfx(): void {
     hiss.connect(lp);
     lp.connect(hg);
     hg.connect(destination);
+    registerSfxSource(hiss, [lp, hg]);
     hiss.start(now);
     hiss.stop(now + 1.4);
 
@@ -397,6 +509,7 @@ export function playCabinDissolveSfx(): void {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
       sweep.connect(gain);
       gain.connect(target.destination);
+      registerSfxSource(sweep, [gain]);
       sweep.start(now);
       sweep.stop(now + 1.55);
       scheduleSweepPan(target, 1.5, (t01) => [sx * (1 - t01), sy * (1 - t01)]);
@@ -426,6 +539,7 @@ export function playLandingThudSfx(): void {
     subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
     sub.connect(subGain);
     subGain.connect(destination);
+    registerSfxSource(sub, [subGain]);
     sub.start(now);
     sub.stop(now + 0.5);
 
@@ -445,6 +559,7 @@ export function playLandingThudSfx(): void {
     noise.connect(lp);
     lp.connect(ng);
     ng.connect(destination);
+    registerSfxSource(noise, [lp, ng]);
     noise.start(now);
     noise.stop(now + 0.25);
 

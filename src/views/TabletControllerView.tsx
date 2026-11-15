@@ -1,17 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
+  Check,
   Eye,
   EyeOff,
+  Globe2,
   Headphones,
   Info,
   Pause,
   Play,
+  Rocket,
   RotateCcw,
   Search,
   SkipBack,
-  Sparkles,
+  Square,
   Volume2,
+  VolumeX,
   X,
 } from 'lucide-react';
 import {
@@ -19,16 +23,21 @@ import {
   ALL_ISO_ALPHA2_CODES,
   CountryFlagIcon,
 } from '../components/CountryFlag';
+import { EarthCanvas } from '../components/EarthCanvas';
+import { MissionGameButton } from '../components/MissionGameButton';
 import { preloadPiperVoice } from '../accessibility/a11yEngine';
+import { playLaunchThrust8D, startSpaceAmbient } from '../audio/spaceAmbient';
 import { NasaDatasetCard } from '../components/NasaDatasetCard';
 import { DatasetId } from '../datasets/nasaDatasets';
 import { useExperience } from '../experience/ExperienceContext';
 import {
   GENERATED_COUNTRY_IDS,
   LAYER_METAS,
+  MissionPhase,
   PILOT_COUNTRY_IDS,
   SoloableLayerId,
   VISUAL_LAYER_ORDER,
+  VisualLayerId,
 } from '../experience/types';
 import { CountryEntry, loadWorldCountries, searchCountries } from '../geo/countries';
 import { JukeboxStudioStage } from '../scenes/JukeboxStudioStage';
@@ -36,9 +45,26 @@ import { COUNTRY_ID_TO_ALPHA2 } from '../scenes/studioGeometry';
 
 interface TabletControllerViewProps {
   embeddedInDemo?: boolean;
+  highContrast?: boolean;
+  fontScale?: number;
 }
 
 const PILOT_ID_SET = new Set<string>(PILOT_COUNTRY_IDS);
+
+const MISSION_JOURNEY_STEPS: ReadonlyArray<{
+  phase: MissionPhase;
+  order: number;
+  labelPt: string;
+  labelEn: string;
+}> = [
+  { phase: 'idle', order: 0, labelPt: 'Início', labelEn: 'Start' },
+  { phase: 'briefing', order: 1, labelPt: 'Briefing', labelEn: 'Briefing' },
+  { phase: 'boarding', order: 2, labelPt: 'Embarque', labelEn: 'Board' },
+  { phase: 'countdown', order: 3, labelPt: 'Decolagem', labelEn: 'Launch' },
+  { phase: 'zero_g', order: 4, labelPt: 'Zero-G', labelEn: 'Zero-G' },
+  { phase: 'exploring', order: 5, labelPt: 'Estúdio', labelEn: 'Studio' },
+  { phase: 'ended', order: 6, labelPt: 'Fim', labelEn: 'End' },
+];
 
 function normalizeLookupName(value: string): string {
   return value
@@ -51,6 +77,8 @@ function normalizeLookupName(value: string): string {
 
 export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
   embeddedInDemo = false,
+  highContrast = false,
+  fontScale = 1,
 }) => {
   const {
     country,
@@ -64,6 +92,8 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
     masterGain,
     masterDbFs,
     activeStudioSession,
+    voiceAutoEnabled,
+    speechStatus,
     selectCountry,
     toggleEye,
     setAllLayersEnabled,
@@ -80,6 +110,11 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
     setLang,
     setStoryStep,
     setMissionPhase,
+    unlockAudioSession,
+    unlockAudioContext,
+    setVoiceAutoEnabled,
+    stopRobotSpeech,
+    togglePauseRobotSpeech,
   } = useExperience();
 
   const isPt = lang === 'pt';
@@ -87,33 +122,33 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
 
   const [isPickingCountry, setIsPickingCountry] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [unavailableCountryNotice, setUnavailableCountryNotice] = useState<string | null>(null);
   const [inspectedDataset, setInspectedDataset] = useState<DatasetId | null>(null);
   const [countdownNum, setCountdownNum] = useState<number>(5);
+  const [visitedCountryIds, setVisitedCountryIds] = useState<string[]>([]);
+  const [activatedLayerIds, setActivatedLayerIds] = useState<VisualLayerId[]>([]);
+  const [globeRotationPaused, setGlobeRotationPaused] = useState<boolean>(false);
 
-  const ensureLayersAwakeForStudio = useCallback(() => {
-    const allSilent =
-      !layers.melody.enabled && !layers.chords.enabled && !layers.bass.enabled;
-    if (allSilent) {
-      setAllLayersEnabled(true);
-    }
-    if (!playback.isPlaying) {
-      togglePlay();
-    }
-  }, [
-    layers.bass.enabled,
-    layers.chords.enabled,
-    layers.melody.enabled,
-    playback.isPlaying,
-    setAllLayersEnabled,
-    togglePlay,
-  ]);
-
-  // Se o visitante escolheu um país pelo Teto ou já entrou em exploring com storyStep >= 1, abre direto o Mixer
   useEffect(() => {
-    if (missionPhase === 'exploring' && storyStep >= 1 && country) {
-      setIsPickingCountry(false);
-    }
-  }, [country, missionPhase, storyStep]);
+    if (!unavailableCountryNotice) return;
+    const timer = window.setTimeout(() => setUnavailableCountryNotice(null), 2500);
+    return () => window.clearTimeout(timer);
+  }, [unavailableCountryNotice]);
+
+  useEffect(() => {
+    if (missionPhase !== 'exploring' || !country) return;
+    setVisitedCountryIds((prev) => (prev.includes(country.id) ? prev : [...prev, country.id]));
+  }, [country, missionPhase]);
+
+  useEffect(() => {
+    if (missionPhase !== 'exploring') return;
+    const activeIds = VISUAL_LAYER_ORDER.filter((id) => layers[id].enabled);
+    if (activeIds.length === 0) return;
+    setActivatedLayerIds((prev) => {
+      const missing = activeIds.filter((id) => !prev.includes(id));
+      return missing.length > 0 ? [...prev, ...missing] : prev;
+    });
+  }, [layers, missionPhase]);
 
   // Contagem regressiva 5..1 -> subida lenta (10s) -> zero_g
   useEffect(() => {
@@ -130,19 +165,31 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
     return () => timers.forEach((t) => window.clearTimeout(t));
   }, [missionPhase, setMissionPhase]);
 
-  // Na gravidade zero, espera a fala completa + respiro (13.5s) antes de abrir a exploração
+  // Na gravidade zero, espera a fala completa + respiro (13.5s) antes de abrir o Quadro 6 (exploring-0)
   useEffect(() => {
     if (missionPhase !== 'zero_g') return;
     const timer = window.setTimeout(() => {
-      setStoryStep(1);
-      setAllLayersEnabled(true);
-      setIsPickingCountry(false);
+      unlockAudioSession();
+      void unlockAudioContext();
+      setAllLayersEnabled(false);
+      setStoryStep(0);
+      setIsPickingCountry(true);
       setMissionPhase('exploring');
     }, 13500);
     return () => window.clearTimeout(timer);
-  }, [missionPhase, setAllLayersEnabled, setMissionPhase, setStoryStep]);
+  }, [
+    missionPhase,
+    setAllLayersEnabled,
+    setMissionPhase,
+    setStoryStep,
+    unlockAudioContext,
+    unlockAudioSession,
+  ]);
 
   const handleStartOperation = useCallback(() => {
+    unlockAudioSession();
+    void unlockAudioContext();
+    startSpaceAmbient();
     preloadPiperVoice(lang);
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
@@ -153,56 +200,113 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
         // ignore
       }
     }
-    if (!playback.isPlaying) {
-      togglePlay();
-    }
     setAllLayersEnabled(false);
     setStoryStep(0);
-    setIsPickingCountry(true);
+    selectCountry(null);
+    setIsPickingCountry(false);
     setMissionPhase('briefing');
-  }, [lang, playback.isPlaying, setAllLayersEnabled, setMissionPhase, setStoryStep, togglePlay]);
+  }, [
+    lang,
+    selectCountry,
+    setAllLayersEnabled,
+    setMissionPhase,
+    setStoryStep,
+    unlockAudioContext,
+    unlockAudioSession,
+  ]);
 
   const handleEnterStudioDirectly = useCallback(() => {
-    ensureLayersAwakeForStudio();
+    unlockAudioSession();
+    void unlockAudioContext();
+    startSpaceAmbient();
+    setAllLayersEnabled(false);
     if (!country) {
       selectCountry('076');
     }
     setStoryStep(1);
     setIsPickingCountry(false);
     setMissionPhase('exploring');
-  }, [country, ensureLayersAwakeForStudio, selectCountry, setMissionPhase, setStoryStep]);
+    if (!playback.isPlaying) {
+      togglePlay();
+    }
+  }, [
+    country,
+    playback.isPlaying,
+    selectCountry,
+    setAllLayersEnabled,
+    setMissionPhase,
+    setStoryStep,
+    togglePlay,
+    unlockAudioContext,
+    unlockAudioSession,
+  ]);
 
   const handleBoardSpaceship = useCallback(() => {
+    unlockAudioSession();
     setMissionPhase('boarding');
-  }, [setMissionPhase]);
+  }, [setMissionPhase, unlockAudioSession]);
 
   const handleAuthorizeLiftoff = useCallback(() => {
+    unlockAudioSession();
+    playLaunchThrust8D(10.0);
     setMissionPhase('countdown');
-  }, [setMissionPhase]);
+  }, [setMissionPhase, unlockAudioSession]);
 
   const handleEnterExploringFromZeroG = useCallback(() => {
-    ensureLayersAwakeForStudio();
-    setStoryStep(1);
-    setIsPickingCountry(false);
+    unlockAudioSession();
+    void unlockAudioContext();
+    setAllLayersEnabled(false);
+    setStoryStep(0);
+    setIsPickingCountry(true);
     setMissionPhase('exploring');
-  }, [ensureLayersAwakeForStudio, setMissionPhase, setStoryStep]);
+  }, [
+    setAllLayersEnabled,
+    setMissionPhase,
+    setStoryStep,
+    unlockAudioContext,
+    unlockAudioSession,
+  ]);
 
   const handleEndMission = useCallback(() => {
+    unlockAudioSession();
+    setAllLayersEnabled(false);
+    if (playback.isPlaying) {
+      togglePlay();
+    }
+    setIsPickingCountry(false);
+    setUnavailableCountryNotice(null);
     setMissionPhase('ended');
     setInspectedDataset(null);
-  }, [setMissionPhase]);
+  }, [
+    playback.isPlaying,
+    setAllLayersEnabled,
+    setMissionPhase,
+    togglePlay,
+    unlockAudioSession,
+  ]);
 
   const handleResetNewMission = useCallback(() => {
     if (playback.isPlaying) {
       togglePlay();
     }
     setAllLayersEnabled(false);
+    selectCountry(null);
     setStoryStep(0);
     setIsPickingCountry(false);
     setInspectedDataset(null);
     setSearchQuery('');
+    setUnavailableCountryNotice(null);
+    setVisitedCountryIds([]);
+    setActivatedLayerIds([]);
     setMissionPhase('idle');
-  }, [playback.isPlaying, setAllLayersEnabled, setMissionPhase, setStoryStep, togglePlay]);
+  }, [
+    playback.isPlaying,
+    selectCountry,
+    setAllLayersEnabled,
+    setMissionPhase,
+    setStoryStep,
+    togglePlay,
+  ]);
 
   const alpha2ByName = useMemo(() => {
     const map = new Map<string, string>();
@@ -266,6 +370,11 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
     return searchCountries(trimmed, searchableCountries, searchableCountries.length);
   }, [searchQuery, searchableCountries]);
 
+  const selectedGeoEntry = useMemo(
+    () => (country ? world.countries.find((c) => c.id === country.id) ?? null : null),
+    [country, world.countries]
+  );
+
   const enabledDatasetIds = useMemo(
     () =>
       VISUAL_LAYER_ORDER.filter((id) => layers[id].enabled).map(
@@ -273,26 +382,69 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
       ),
     [layers]
   );
+  const enabledCount = enabledDatasetIds.length;
 
   const handlePickCountryEntry = useCallback(
     (entry: CountryEntry) => {
-      ensureLayersAwakeForStudio();
+      unlockAudioSession();
+      void unlockAudioContext();
+      startSpaceAmbient();
+      setAllLayersEnabled(false);
       selectCountry(entry.id);
-      if (storyStep === 0) {
-        setStoryStep(1);
+      setStoryStep(1);
+      if (!playback.isPlaying) {
+        togglePlay();
       }
       setSearchQuery('');
       setInspectedDataset(null);
+      setUnavailableCountryNotice(null);
       setIsPickingCountry(false);
     },
-    [ensureLayersAwakeForStudio, selectCountry, setStoryStep, storyStep]
+    [
+      playback.isPlaying,
+      selectCountry,
+      setAllLayersEnabled,
+      setStoryStep,
+      togglePlay,
+      unlockAudioContext,
+      unlockAudioSession,
+    ]
+  );
+
+  const handleGlobeCountrySelect = useCallback(
+    (clicked: CountryEntry | null) => {
+      if (!clicked) return;
+      if (availableCountryIds.has(clicked.id)) {
+        handlePickCountryEntry(clicked);
+        return;
+      }
+      const name = isPt ? clicked.namePt : clicked.nameEn;
+      setUnavailableCountryNotice(
+        isPt
+          ? `${name} em preparo — escolha um país iluminado, pesquise pelo nome ou use as sugestões abaixo.`
+          : `${name} in preparation — pick a highlighted country, search by name, or use the quick picks below.`
+      );
+    },
+    [availableCountryIds, handlePickCountryEntry, isPt]
   );
 
   const handleOpenCountrySearch = useCallback(() => {
+    if (playback.isPlaying) {
+      togglePlay();
+    }
     setInspectedDataset(null);
     setSearchQuery('');
+    setUnavailableCountryNotice(null);
     setIsPickingCountry(true);
-  }, []);
+  }, [playback.isPlaying, togglePlay]);
+
+  const handleBackToMixer = useCallback(() => {
+    setIsPickingCountry(false);
+    setUnavailableCountryNotice(null);
+    if (!playback.isPlaying) {
+      togglePlay();
+    }
+  }, [playback.isPlaying, togglePlay]);
 
   const selectedAlpha2 = country
     ? getAlpha2ForCountry(country.id, country.namePt, country.nameEn)
@@ -305,7 +457,8 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
     missionPhase === 'countdown' ||
     missionPhase === 'zero_g' ||
     missionPhase === 'ended';
-  const showSelectionScreen = isPickingCountry || !country;
+  const showSelectionScreen =
+    missionPhase === 'exploring' && (isPickingCountry || storyStep === 0 || !country);
 
   const melParams = activeStudioSession?.musicalParameters.melody;
   const chdParams = activeStudioSession?.musicalParameters.chords;
@@ -316,93 +469,213 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
   const anySolo = spkSolo || layers.melody.solo || layers.chords.solo || layers.bass.solo;
   const dbText = masterDbFs <= -60 ? '-∞ dBFS' : `${masterDbFs.toFixed(1)} dBFS`;
 
+  const activeJourneyOrder =
+    MISSION_JOURNEY_STEPS.find((s) => s.phase === missionPhase)?.order ?? 0;
+  const stageCardPadClass = embeddedInDemo
+    ? 'flex w-full max-w-md flex-col items-center gap-3 rounded-[18px] px-4 py-4 text-center backdrop-blur-xl sm:px-5 sm:py-5'
+    : 'flex w-full max-w-md flex-col items-center gap-6 rounded-[18px] px-6 py-8 text-center backdrop-blur-xl sm:px-8 sm:py-10';
+
   return (
     <div
-      className={`relative flex w-full flex-col overflow-hidden bg-[#060913] font-['Poppins',system-ui,sans-serif] text-slate-50 ${
+      className={`relative flex w-full min-w-0 flex-col overflow-hidden bg-[#060913] font-['Poppins',system-ui,sans-serif] text-slate-50 ${
         embeddedInDemo ? 'h-full' : 'h-dvh'
-      }`}
-      style={{ overscrollBehavior: 'none' }}
+      }${highContrast ? ' high-contrast' : ''}`}
+      style={{
+        overscrollBehavior: 'none',
+        ...(!embeddedInDemo && fontScale !== 1
+          ? ({
+              fontSize: `${Math.round(fontScale * 100)}%`,
+              '--font-scale': fontScale,
+            } as React.CSSProperties)
+          : {}),
+      }}
+      data-a11y-scaled={!embeddedInDemo && fontScale > 1 ? 'true' : undefined}
       data-testid="tablet-controller-view"
     >
-      {/* Barra superior permanente: Idioma + Encerrar Missão (ou Nova Missão) */}
-      <div className="z-30 flex shrink-0 items-center justify-between border-b border-slate-400/15 bg-[#060913]/95 px-4 py-2 backdrop-blur-md">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold tracking-[0.06em] text-slate-200 uppercase">
-            EARTH JUKEBOX
-          </span>
-          <span className="hidden rounded-full border border-slate-400/20 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-slate-400 sm:inline-block">
-            {isPt ? 'Controle Studio' : 'Studio Controller'}
-          </span>
+      {!embeddedInDemo && (
+        <a href="#tablet-main-content" className="skip-link">
+          {isPt ? 'Pular para o controle principal' : 'Skip to main controller'}
+        </a>
+      )}
+      {/* Barra superior permanente: exibida no Tablet físico (?view=controller); na Demo é absorvida pelo header unificado */}
+      {!embeddedInDemo && (
+        <div className="z-30 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#1e3a66]/45 bg-[#040b1a]/95 px-3.5 py-2 backdrop-blur-md">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="text-xs font-bold tracking-[0.06em] text-slate-100 uppercase">
+              EARTH JUKEBOX
+            </span>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setVoiceAutoEnabled(!voiceAutoEnabled)}
+              data-testid="tablet-voice-toggle"
+              aria-pressed={voiceAutoEnabled}
+              aria-label={
+                voiceAutoEnabled
+                  ? isPt
+                    ? 'Silenciar narração automática'
+                    : 'Mute auto narration'
+                  : isPt
+                    ? 'Ativar narração automática'
+                    : 'Enable auto narration'
+              }
+              className={`inline-flex min-h-[36px] min-w-[44px] cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold transition active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
+                voiceAutoEnabled
+                  ? 'border-[#1e3a66] bg-[#060c1a] text-sky-200 hover:border-[#2563eb]'
+                  : 'border-rose-400/40 bg-rose-500/15 text-rose-200 hover:border-rose-400/70'
+              }`}
+            >
+              {voiceAutoEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+              <span>{voiceAutoEnabled ? (isPt ? 'Voz: ON' : 'Voice: ON') : isPt ? 'Voz: OFF' : 'Voice: OFF'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setLang(isPt ? 'en' : 'pt')}
+              className="inline-flex min-h-[36px] min-w-[58px] cursor-pointer items-center justify-center rounded-full border border-[#1e3a66] bg-[#060c1a] px-2.5 text-xs font-semibold text-slate-200 transition hover:border-[#2563eb] hover:text-white active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
+              aria-label={isPt ? 'Mudar idioma para Inglês' : 'Switch language to Portuguese'}
+            >
+              {isPt ? 'PT · BR' : 'EN · US'}
+            </button>
+
+            {missionPhase !== 'ended' ? (
+              <button
+                type="button"
+                onClick={handleEndMission}
+                className="inline-flex min-h-[36px] cursor-pointer items-center gap-1.5 rounded-full border border-rose-400/40 bg-rose-500/15 px-3 text-xs font-semibold text-rose-100 transition hover:border-rose-400/75 hover:bg-rose-500/25 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
+              >
+                <span>{isPt ? 'Encerrar Missão' : 'End Mission'}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleResetNewMission}
+                className="inline-flex min-h-[36px] cursor-pointer items-center gap-1.5 rounded-full border border-sky-400/50 bg-sky-500/15 px-3 text-xs font-semibold text-sky-100 transition hover:border-sky-300/80 hover:bg-sky-500/25 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
+              >
+                <span>{isPt ? 'Nova Missão' : 'New Mission'}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Etapas da Missão sincronizadas com a sala */}
+      <nav
+        aria-label={isPt ? 'Etapas da missão' : 'Mission stages'}
+        data-testid="mission-progress-bar"
+        className="z-20 flex min-h-[46px] shrink-0 items-center justify-between gap-2 overflow-x-auto border-b border-[#1e3a66]/45 bg-[#040b1a]/95 px-3.5 py-1.5"
+      >
+        <div className="flex shrink-0 flex-nowrap items-center gap-1">
+          {MISSION_JOURNEY_STEPS.map((step, idx) => {
+            const isDone = activeJourneyOrder > step.order || (missionPhase === 'ended' && step.phase === 'ended');
+            const isCurrent = activeJourneyOrder === step.order && !(missionPhase === 'ended' && step.phase === 'ended');
+            return (
+              <React.Fragment key={step.phase}>
+                <span
+                  aria-current={isCurrent ? 'step' : undefined}
+                  className={`inline-flex min-h-[30px] shrink-0 items-center gap-1 rounded-full border px-2.5 text-[11px] font-semibold tracking-tight transition [font-variant-numeric:tabular-nums] ${
+                    isCurrent
+                      ? 'border-[#2563eb]/75 bg-[#0c1a36] text-white'
+                      : isDone
+                        ? 'border-sky-400/35 bg-sky-500/10 text-sky-200'
+                        : 'border-[#1e3a66]/55 bg-[#060c1a] text-slate-400'
+                  }`}
+                >
+                  {isDone ? (
+                    <Check size={11} className="shrink-0 text-[#7dd3fc]" aria-hidden="true" />
+                  ) : (
+                    <span>{idx + 1}.</span>
+                  )}
+                  <span>{isPt ? step.labelPt : step.labelEn}</span>
+                </span>
+                {idx < MISSION_JOURNEY_STEPS.length - 1 && (
+                  <span
+                    className={`h-px w-1.5 shrink-0 ${
+                      isDone ? 'bg-sky-400/45' : 'bg-[#1e3a66]/65'
+                    }`}
+                    aria-hidden="true"
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setLang(isPt ? 'en' : 'pt')}
-            className="inline-flex min-h-[38px] min-w-[62px] cursor-pointer items-center justify-center rounded-full border border-slate-400/20 bg-[#060c1a]/85 px-3 text-xs font-semibold text-slate-100 transition hover:border-slate-300/40 active:scale-95"
-            aria-label={isPt ? 'Mudar idioma para Inglês' : 'Switch language to Portuguese'}
-          >
-            {isPt ? 'PT · BR' : 'EN · US'}
-          </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {(visitedCountryIds.length > 0 || activatedLayerIds.length > 0) && (
+            <span className="inline-flex min-h-[30px] shrink-0 items-center rounded-full border border-[#1e3a66]/55 bg-[#060c1a] px-2.5 text-[11px] font-medium text-slate-300 [font-variant-numeric:tabular-nums]">
+              {visitedCountryIds.length} {isPt ? 'país(es)' : 'country(ies)'} ·{' '}
+              {activatedLayerIds.length}/5 NASA
+            </span>
+          )}
 
-          {missionPhase !== 'ended' ? (
-            <button
-              type="button"
-              onClick={handleEndMission}
-              className="inline-flex min-h-[38px] cursor-pointer items-center gap-1.5 rounded-full border border-rose-400/40 bg-rose-500/15 px-3.5 text-xs font-semibold text-rose-100 transition hover:border-rose-400/75 hover:bg-rose-500/25 active:scale-95"
-            >
-              <span>{isPt ? 'Encerrar Missão' : 'End Mission'}</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleResetNewMission}
-              className="inline-flex min-h-[38px] cursor-pointer items-center gap-1.5 rounded-full border border-sky-400/50 bg-sky-500/20 px-3.5 text-xs font-semibold text-sky-100 transition hover:border-sky-400/80 hover:bg-sky-500/30 active:scale-95"
-            >
-              <span>{isPt ? 'Nova Missão' : 'New Mission'}</span>
-            </button>
+          {embeddedInDemo && missionPhase !== 'idle' && (
+            missionPhase !== 'ended' ? (
+              <button
+                type="button"
+                onClick={handleEndMission}
+                className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center rounded-full border border-rose-400/40 bg-rose-500/15 px-3 text-[11px] font-semibold text-rose-100 transition hover:border-rose-400/75 hover:bg-rose-500/25 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
+              >
+                {isPt ? 'Encerrar Missão' : 'End Mission'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleResetNewMission}
+                className="inline-flex min-h-[30px] shrink-0 cursor-pointer items-center rounded-full border border-sky-400/50 bg-sky-500/15 px-3 text-[11px] font-semibold text-sky-100 transition hover:border-sky-300/80 hover:bg-sky-500/25 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
+              >
+                {isPt ? 'Nova Missão' : 'New Mission'}
+              </button>
+            )
           )}
         </div>
-      </div>
+      </nav>
 
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div id="tablet-main-content" tabIndex={-1} className="min-h-0 min-w-0 flex-1 overflow-hidden">
         {showIntroScreen ? (
           /* =====================================================================
              TELA 0 — INICIAL (INICIAR EXPEDIÇÃO OU ABRIR ESTÚDIO DIRETO)
              ===================================================================== */
-          <div className="mx-auto flex h-full w-full max-w-2xl flex-col px-4 py-4 sm:px-6 sm:py-6">
-            <main className="flex flex-1 flex-col items-center justify-center py-6">
-              <div className="flex w-full max-w-md flex-col items-center gap-6 rounded-[18px] border border-slate-400/15 bg-[#080d19]/95 px-6 py-8 text-center backdrop-blur-xl sm:px-8 sm:py-10">
-                <span className="inline-flex items-center gap-2 rounded-full border border-slate-400/20 bg-[#060c1a]/85 px-3.5 py-1.5 text-[11px] font-medium tracking-wide text-slate-300">
+          <div className="mx-auto flex h-full w-full min-w-0 max-w-2xl flex-col overflow-y-auto px-4 py-3 sm:px-6 sm:py-5">
+            <main className="my-auto flex w-full flex-col items-center py-2">
+              <div className={`${stageCardPadClass} border border-[#1e3a66]/55 bg-[#080d19]/95`}>
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#1e3a66]/65 bg-[#060c1a]/90 px-3.5 py-1 text-[11px] font-medium tracking-wide text-slate-300">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#7dd3fc]" />
                   {isPt ? 'Quarto Projetado · Áudio 8D' : 'Projected Room · 8D Audio'}
                 </span>
 
-                <div className="space-y-2.5">
-                  <h1 className="text-xl font-bold tracking-tight text-slate-50 sm:text-2xl">
-                    {isPt ? 'Pronto para a expedição?' : 'Ready for the expedition?'}
-                  </h1>
-                  <p className="text-sm leading-relaxed text-slate-400">
+                <div className="space-y-2">
+                  {embeddedInDemo ? (
+                    <h2 className="text-lg font-bold tracking-tight text-slate-50 sm:text-2xl">
+                      {isPt ? 'Pronto para a expedição?' : 'Ready for the expedition?'}
+                    </h2>
+                  ) : (
+                    <h1 className="text-lg font-bold tracking-tight text-slate-50 sm:text-2xl">
+                      {isPt ? 'Pronto para a expedição?' : 'Ready for the expedition?'}
+                    </h1>
+                  )}
+                  <p className="text-xs leading-relaxed text-slate-400 sm:text-sm">
                     {isPt
-                      ? 'Embarque na nave com o Mineiro ou abra diretamente o Jukebox Studio para mixar os dados da NASA em tempo real.'
-                      : 'Board the spacecraft with Mineiro or jump straight into the Jukebox Studio to mix real NASA data.'}
+                      ? 'Embarque na nave com o MINEIRØ ou abra diretamente o Jukebox Studio para explorar os sons da Terra.'
+                      : 'Board the spacecraft with MINEIRØ or jump straight into the Jukebox Studio to explore Earth data.'}
                   </p>
                 </div>
 
                 <div className="flex w-full flex-col items-center gap-3">
-                  <button
-                    type="button"
+                  <MissionGameButton
+                    label={isPt ? 'Iniciar' : 'Start'}
+                    icon={Play}
+                    size="lg"
                     onClick={handleStartOperation}
-                    className="inline-flex min-h-[50px] w-full max-w-[260px] cursor-pointer items-center justify-center gap-2.5 rounded-full bg-white px-7 text-sm font-semibold text-[#060913] transition hover:bg-slate-100 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#7dd3fc]"
-                  >
-                    <Play size={18} className="fill-current" />
-                    <span>{isPt ? 'Iniciar Operação' : 'Start Operation'}</span>
-                  </button>
+                    testId="tablet-start-mission-btn"
+                  />
 
                   <button
                     type="button"
                     onClick={handleEnterStudioDirectly}
-                    className="inline-flex min-h-[46px] w-full max-w-[260px] cursor-pointer items-center justify-center gap-2 rounded-full border border-slate-400/25 bg-[#060c1a]/85 px-6 text-xs font-semibold text-slate-200 transition hover:border-sky-400/50 hover:text-white active:scale-95"
+                    className="inline-flex min-h-[44px] w-full max-w-[260px] cursor-pointer items-center justify-center gap-2 rounded-full border border-[#1e3a66]/65 bg-[#060c1a]/90 px-6 text-xs font-semibold text-slate-300 transition hover:border-[#2563eb] hover:text-white active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
                   >
                     <span>
                       {isPt ? 'Abrir Jukebox Studio Direto' : 'Open Jukebox Studio Directly'}
@@ -416,66 +689,65 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
           /* =====================================================================
              FASES DA EXPEDIÇÃO: EMBARQUE -> DECOLAGEM -> GRAVIDADE ZERO -> FIM
              ===================================================================== */
-          <div className="mx-auto flex h-full w-full max-w-2xl flex-col px-4 py-4 sm:px-6 sm:py-6">
-            <main className="flex flex-1 flex-col items-center justify-center py-6">
+          <div className="mx-auto flex h-full w-full min-w-0 max-w-2xl flex-col overflow-y-auto px-4 py-3 sm:px-6 sm:py-5">
+            <main className="my-auto flex w-full flex-col items-center py-2">
+              {!embeddedInDemo && (
+                <h1 className="sr-only">
+                  {isPt ? 'Etapa da expedição espacial' : 'Space expedition stage'}
+                </h1>
+              )}
               {missionPhase === 'briefing' ? (
-                <div className="flex w-full max-w-md flex-col items-center gap-6 rounded-[18px] border border-sky-400/25 bg-[#080d19]/95 px-6 py-8 text-center backdrop-blur-xl sm:px-8 sm:py-10">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/30 bg-sky-500/10 px-3.5 py-1.5 text-[11px] font-semibold tracking-wide text-sky-200">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />
-                    {isPt ? 'Briefing da Missão · MINEIRØ' : 'Mission Briefing · MINEIRØ'}
+                <div className={`${stageCardPadClass} border border-[#1e3a66]/55 bg-[#080d19]/95`}>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#1e3a66]/65 bg-[#060c1a] px-3.5 py-1 text-[11px] font-semibold tracking-wide text-[#7dd3fc]">
+                    {isPt ? 'Briefing · MINEIRØ' : 'Briefing · MINEIRØ'}
                   </span>
 
-                  <div className="space-y-2.5">
-                    <h2 className="text-xl font-bold tracking-tight text-slate-50">
+                  <div className="space-y-2">
+                    <h2 className="text-lg font-bold tracking-tight text-slate-50 sm:text-xl">
                       {isPt ? 'Embarcar na Nave' : 'Board the Spacecraft'}
                     </h2>
-                    <p className="text-sm leading-relaxed text-slate-400">
+                    <p className="text-xs leading-relaxed text-slate-400 sm:text-sm">
                       {isPt
-                        ? 'Ouça o astronauta MINEIRØ na parede à sua frente e toque abaixo para fechar as comportas de metal e embarcar.'
-                        : 'Listen to astronaut MINEIRØ on the front wall and tap below to seal the blast doors and board.'}
+                        ? 'Ouça o astronauta MINEIRØ na parede à sua frente e toque abaixo para fechar as comportas e embarcar.'
+                        : 'Listen to astronaut MINEIRØ on the wall ahead and tap below to seal the blast doors and board.'}
                     </p>
                   </div>
 
-                  <button
-                    type="button"
+                  <MissionGameButton
+                    label={isPt ? 'Embarcar na Nave' : 'Board Ship'}
+                    icon={Rocket}
+                    size="md"
                     onClick={handleBoardSpaceship}
-                    className="inline-flex min-h-[54px] min-w-[230px] cursor-pointer items-center justify-center gap-2.5 rounded-full bg-white px-8 text-sm font-bold text-[#060913] transition hover:bg-slate-100 active:scale-95"
-                  >
-                    <Play size={18} className="fill-current" />
-                    <span>{isPt ? 'Embarcar na Nave' : 'Board Spacecraft'}</span>
-                  </button>
+                  />
                 </div>
               ) : missionPhase === 'boarding' ? (
-                <div className="flex w-full max-w-md flex-col items-center gap-6 rounded-[18px] border border-amber-400/30 bg-[#080d19]/95 px-6 py-8 text-center backdrop-blur-xl sm:px-8 sm:py-10">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-500/10 px-3.5 py-1.5 text-[11px] font-semibold tracking-wide text-amber-200">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                <div className={`${stageCardPadClass} border border-[#1e3a66]/55 bg-[#080d19]/95`}>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#1e3a66]/65 bg-[#060c1a] px-3.5 py-1 text-[11px] font-semibold tracking-wide text-[#7dd3fc]">
                     {isPt ? 'Portas Lacradas · Cabine Ativa' : 'Doors Sealed · Cabin Active'}
                   </span>
 
-                  <div className="space-y-2.5">
-                    <h2 className="text-xl font-bold tracking-tight text-slate-50">
+                  <div className="space-y-2">
+                    <h2 className="text-lg font-bold tracking-tight text-slate-50 sm:text-xl">
                       {isPt ? 'Autorizar Decolagem' : 'Authorize Liftoff'}
                     </h2>
-                    <p className="text-sm leading-relaxed text-slate-400">
+                    <p className="text-xs leading-relaxed text-slate-400 sm:text-sm">
                       {isPt
                         ? 'Olhe pela vigia metálica à esquerda: o campo de lançamento está pronto. Toque abaixo para iniciar a contagem 5, 4, 3, 2, 1.'
                         : 'Look through the metal porthole on your left: the launch field is ready. Tap below to start the 5, 4, 3, 2, 1 countdown.'}
                     </p>
                   </div>
 
-                  <button
-                    type="button"
+                  <MissionGameButton
+                    label={isPt ? 'Autorizar Decolagem' : 'Authorize Liftoff'}
+                    icon={Rocket}
+                    size="md"
                     onClick={handleAuthorizeLiftoff}
-                    className="inline-flex min-h-[54px] min-w-[230px] cursor-pointer items-center justify-center gap-2.5 rounded-full bg-sky-400 px-8 text-sm font-bold text-[#060913] shadow-[0_0_24px_rgba(56,189,248,0.45)] transition hover:bg-sky-300 active:scale-95"
-                  >
-                    <Play size={18} className="fill-current" />
-                    <span>{isPt ? 'Autorizar Decolagem' : 'Authorize Liftoff'}</span>
-                  </button>
+                  />
                 </div>
               ) : missionPhase === 'countdown' ? (
-                <div className="flex w-full max-w-md flex-col items-center gap-6 rounded-[18px] border border-amber-400/30 bg-[#080d19]/95 px-6 py-10 text-center backdrop-blur-xl">
-                  <div className="relative flex h-24 w-24 items-center justify-center rounded-full border border-amber-400/40 bg-amber-500/10">
-                    <span className="text-4xl font-extrabold text-amber-300 [font-variant-numeric:tabular-nums]">
+                <div className={`${stageCardPadClass} border border-[#1e3a66]/55 bg-[#080d19]/95`}>
+                  <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-[#1e3a66] bg-[#060c1a] sm:h-24 sm:w-24">
+                    <span className="text-3xl font-extrabold text-[#7dd3fc] [font-variant-numeric:tabular-nums] sm:text-4xl">
                       {countdownNum > 0 ? countdownNum : '🚀'}
                     </span>
                   </div>
@@ -498,101 +770,302 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                   </div>
                 </div>
               ) : missionPhase === 'zero_g' ? (
-                <div className="flex w-full max-w-md flex-col items-center gap-6 rounded-[18px] border border-sky-400/25 bg-[#080d19]/95 px-6 py-10 text-center backdrop-blur-xl">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/30 bg-sky-500/10 px-3.5 py-1.5 text-[11px] font-semibold tracking-wide text-sky-200">
+                <div className={`${stageCardPadClass} border border-[#1e3a66]/55 bg-[#080d19]/95`}>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#1e3a66]/65 bg-[#060c1a] px-3.5 py-1 text-[11px] font-semibold tracking-wide text-[#7dd3fc]">
                     {isPt ? 'Órbita Alcançada · Gravidade Zero' : 'Orbit Reached · Zero Gravity'}
                   </span>
 
                   <div className="space-y-2">
-                    <p className="text-lg font-bold text-slate-100">
+                    <p className="text-base font-bold text-slate-100 sm:text-lg">
                       {isPt ? 'Você está no comando' : 'You are in command'}
                     </p>
                     <p className="text-xs leading-relaxed text-slate-400">
                       {isPt
-                        ? 'Olhe para o globo à esquerda e o Jukebox Studio à direita: este tablet comanda todas as camadas da NASA.'
-                        : 'Look at the globe on your left and the Jukebox Studio on your right: this tablet commands every NASA layer.'}
+                        ? 'Olhe para o globo à esquerda e o espaço à direita: escolha um país no tablet para começar a ouvir a Terra.'
+                        : 'Look at the globe on your left and open space on your right: pick a country on the tablet to start listening to Earth.'}
                     </p>
                   </div>
 
-                  <button
-                    type="button"
+                  <MissionGameButton
+                    label={isPt ? 'Escolher País' : 'Choose Country'}
+                    icon={Globe2}
+                    size="md"
                     onClick={handleEnterExploringFromZeroG}
-                    className="inline-flex min-h-[46px] cursor-pointer items-center justify-center rounded-full bg-white px-7 text-xs font-bold text-[#060913] transition hover:bg-slate-100 active:scale-95"
-                  >
-                    {isPt ? 'Abrir Jukebox Studio' : 'Open Jukebox Studio'}
-                  </button>
+                  />
                 </div>
               ) : (
-                <div className="flex w-full max-w-md flex-col items-center gap-6 rounded-[18px] border border-emerald-400/30 bg-[#080d19]/95 px-6 py-9 text-center backdrop-blur-xl">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/35 bg-emerald-500/10 px-3.5 py-1.5 text-[11px] font-semibold tracking-wide text-emerald-200">
-                    {isPt ? 'Missão Concluída · NASA Tribute' : 'Mission Complete · NASA Tribute'}
+                <div className={`${stageCardPadClass} border border-[#1e3a66]/55 bg-[#080d19]/95`}>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#1e3a66]/65 bg-[#060c1a] px-3.5 py-1 text-[11px] font-semibold tracking-wide text-[#7dd3fc]">
+                    {isPt ? 'Expedição Mineira · MINEIRØ' : 'Mineiro Expedition · MINEIRØ'}
                   </span>
 
                   <div className="space-y-2">
-                    <h2 className="text-xl font-bold text-slate-50">
-                      {isPt ? 'Obrigado pelos seus serviços!' : 'Thank you for your service!'}
+                    <h2 className="text-lg font-bold text-slate-50 sm:text-xl">
+                      {isPt ? 'Obrigado por explorar a Terra conosco!' : 'Thank you for exploring Earth with us!'}
                     </h2>
                     <p className="text-xs leading-relaxed text-slate-300">
                       {isPt
-                        ? 'Os dados coletados durante sua expedição foram relevantes para compreender o nosso planeta.'
-                        : 'The data collected during your expedition was vital to understanding our planet.'}
+                        ? 'Os dados coletados da NASA ajudaram a transformar os sinais do nosso planeta em música pelo quarto.'
+                        : 'Real NASA observations helped transform our planet’s signals into music across the room.'}
                     </p>
-                    <p className="pt-2 text-xs font-semibold tracking-wider text-sky-300 uppercase">
-                      Expedição Mineira · MINEIRØ
-                    </p>
-                    <p className="text-[11px] text-slate-400">
-                      by Erick Raposo · Samuel Amorim · Shayene Figueredo
-                    </p>
+                    {(visitedCountryIds.length > 0 || activatedLayerIds.length > 0) && (
+                      <p className="pt-1 text-xs font-medium text-slate-300 [font-variant-numeric:tabular-nums]">
+                        {isPt
+                          ? `${visitedCountryIds.length} país(es) ouvido(s) · ${activatedLayerIds.length}/5 camadas exploradas`
+                          : `${visitedCountryIds.length} country(ies) heard · ${activatedLayerIds.length}/5 layers explored`}
+                      </p>
+                    )}
                   </div>
+
+                  <MissionGameButton
+                    label={isPt ? 'Nova Missão' : 'New Mission'}
+                    icon={RotateCcw}
+                    size="md"
+                    onClick={handleResetNewMission}
+                  />
+                </div>
+              )}
+
+              {/* Controles de Voz do MINEIRØ sincronizados com a sala (Pausar / Retomar / Interromper) */}
+              <div
+                data-testid="tablet-stage-speech-bar"
+                className="mt-3 flex w-full max-w-md flex-wrap items-center justify-between gap-2 rounded-[18px] border border-[#1e3a66]/45 bg-[#080d19]/95 px-3.5 py-2.5 backdrop-blur-xl"
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      !voiceAutoEnabled || speechStatus === 'stopped'
+                        ? 'bg-slate-500'
+                        : speechStatus === 'paused'
+                          ? 'bg-amber-400'
+                          : speechStatus === 'speaking'
+                            ? 'animate-pulse bg-sky-400'
+                            : 'bg-[#7dd3fc]/80'
+                    }`}
+                  />
+                  <span className="text-xs font-semibold text-slate-200">
+                    {!voiceAutoEnabled
+                      ? isPt
+                        ? 'Voz silenciada'
+                        : 'Voice muted'
+                      : speechStatus === 'paused'
+                        ? isPt
+                          ? 'Fala pausada'
+                          : 'Speech paused'
+                        : speechStatus === 'stopped'
+                          ? isPt
+                            ? 'Fala interrompida'
+                            : 'Speech stopped'
+                          : speechStatus === 'speaking'
+                            ? isPt
+                              ? 'MINEIRØ falando'
+                              : 'MINEIRØ speaking'
+                            : isPt
+                              ? 'Narração MINEIRØ'
+                              : 'MINEIRØ narration'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={togglePauseRobotSpeech}
+                    data-testid="tablet-speech-pause"
+                    aria-pressed={speechStatus === 'paused'}
+                    className={`inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
+                      speechStatus === 'paused'
+                        ? 'border-[#2563eb]/65 bg-[#0c1a36] text-sky-100'
+                        : 'border-[#1e3a66]/55 bg-[#060c1a] text-slate-200 hover:border-[#2563eb]'
+                    }`}
+                  >
+                    {speechStatus === 'paused' ? <Play size={14} className="fill-current" /> : <Pause size={14} />}
+                    <span>
+                      {speechStatus === 'paused'
+                        ? isPt
+                          ? 'Retomar'
+                          : 'Resume'
+                        : isPt
+                          ? 'Pausar'
+                          : 'Pause'}
+                    </span>
+                  </button>
 
                   <button
                     type="button"
-                    onClick={handleResetNewMission}
-                    className="inline-flex min-h-[48px] min-w-[200px] cursor-pointer items-center justify-center rounded-full bg-white px-7 text-sm font-semibold text-[#060913] transition hover:bg-slate-100 active:scale-95"
+                    onClick={stopRobotSpeech}
+                    data-testid="tablet-speech-stop"
+                    disabled={!voiceAutoEnabled || speechStatus === 'stopped'}
+                    className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center gap-1.5 rounded-xl border border-rose-400/40 bg-rose-500/15 px-3 text-xs font-semibold text-rose-100 transition hover:border-rose-400/70 hover:bg-rose-500/25 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
                   >
-                    {isPt ? 'Nova Missão' : 'New Mission'}
+                    <Square size={13} className="fill-current" />
+                    <span>{isPt ? 'Parar' : 'Stop'}</span>
                   </button>
                 </div>
-              )}
+              </div>
             </main>
           </div>
-        ) : showSelectionScreen ? (
+        ) : showSelectionScreen || !country ? (
           /* =====================================================================
-             TELA 1 — PESQUISA & SELEÇÃO LIMPA DE PAÍS (APENAS PAÍSES GERADOS)
+             TELA 1 — GLOBO 3D + SUGESTÕES + PESQUISA DE PAÍS (QUADRO 6 / TROCA)
              ===================================================================== */
-          <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-3.5 px-4 py-4 sm:px-6 sm:py-5">
+          <div className="mx-auto flex h-full w-full min-w-0 max-w-3xl flex-col gap-3 overflow-y-auto px-4 py-3.5 sm:px-6 sm:py-4">
             <header className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <h1 className="truncate text-lg font-bold tracking-tight text-slate-50">
-                  {isPt ? 'Escolher País no Estúdio' : 'Select Studio Country'}
-                </h1>
+                {embeddedInDemo ? (
+                  <h2 className="truncate text-lg font-bold tracking-tight text-slate-50">
+                    {isPt ? 'Escolher País' : 'Choose Country'}
+                  </h2>
+                ) : (
+                  <h1 className="truncate text-lg font-bold tracking-tight text-slate-50">
+                    {isPt ? 'Escolher País' : 'Choose Country'}
+                  </h1>
+                )}
                 <p className="text-xs text-slate-400">
                   {isPt
-                    ? 'Pacotes reais NASA pré-gerados (5 PNGs + 16 Stems + Partitura MIDI)'
-                    : 'Pre-generated real NASA packages (5 PNGs + 16 Stems + MIDI Score)'}
+                    ? 'Gire o globo, pesquise pelo nome ou escolha um destaque para começar.'
+                    : 'Spin the globe, search by name, or pick a featured destination to begin.'}
                 </p>
               </div>
 
-              {country && (
+              {country && storyStep >= 1 && (
                 <button
                   type="button"
-                  onClick={() => setIsPickingCountry(false)}
-                  className="inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-slate-400/20 bg-[#060c1a]/85 px-3.5 text-xs font-semibold text-slate-200 transition hover:border-slate-300/40 active:scale-95"
+                  onClick={handleBackToMixer}
+                  className="inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-[#1e3a66] bg-[#060c1a] px-3.5 text-xs font-semibold text-slate-200 transition hover:border-[#2563eb] hover:text-white active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
                 >
                   <ArrowLeft size={14} />
-                  <span>{isPt ? 'Voltar ao Mixer' : 'Back to Mixer'}</span>
+                  <span>{isPt ? 'Voltar ao Controle' : 'Back to Mixer'}</span>
                 </button>
               )}
             </header>
 
+            {/* Globo 3D Interativo Leve (desmonta automaticamente ao fechar a aba de seleção) */}
+            <section
+              className="relative shrink-0 overflow-hidden rounded-[18px] border border-[#1e3a66]/55 bg-[#040b1a]"
+              aria-label={isPt ? 'Globo 3D interativo para escolher país' : 'Interactive 3D globe country picker'}
+            >
+              <div
+                className={`relative w-full ${
+                  embeddedInDemo ? 'h-[210px] sm:h-[250px]' : 'h-[250px] sm:h-[300px]'
+                }`}
+                style={{ touchAction: 'none' }}
+              >
+                {typeof window !== 'undefined' && (
+                  <EarthCanvas
+                    videoElements={{}}
+                    layers={[]}
+                    viewMode="3d"
+                    visualStyle="bioluminescent"
+                    backgroundHex="#040b1a"
+                    showGrid={false}
+                    showBorders={true}
+                    showLabels={true}
+                    highContrast={true}
+                    availableCountryIds={availableCountryIds}
+                    countries={world.countries}
+                    allRings={world.allRings}
+                    landBorderRings={world.landBorderRings}
+                    coastlineRings={world.coastlineRings}
+                    selectedCountry={selectedGeoEntry}
+                    orbitAutoRotate={!globeRotationPaused}
+                    interactive={true}
+                    jukeboxPlaying={false}
+                    lang={lang}
+                    flyTarget={null}
+                    onHoverChange={() => {}}
+                    onCameraDistanceChange={() => {}}
+                    onSelectCountry={handleGlobeCountrySelect}
+                  />
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setGlobeRotationPaused((prev) => !prev)}
+                  data-testid="tablet-globe-rotation-toggle"
+                  aria-pressed={globeRotationPaused}
+                  aria-label={
+                    globeRotationPaused
+                      ? isPt
+                        ? 'Retomar rotação do globo 3D'
+                        : 'Resume 3D globe rotation'
+                      : isPt
+                        ? 'Pausar rotação do globo 3D'
+                        : 'Pause 3D globe rotation'
+                  }
+                  className="absolute top-2.5 right-2.5 z-10 inline-flex min-h-[34px] cursor-pointer items-center gap-1.5 rounded-full border border-[#1e3a66]/80 bg-[#060c1a]/90 px-3 py-1 text-[11px] font-semibold text-slate-200 backdrop-blur-md transition hover:border-[#2563eb] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
+                >
+                  {globeRotationPaused ? (
+                    <Play size={12} aria-hidden="true" />
+                  ) : (
+                    <Pause size={12} aria-hidden="true" />
+                  )}
+                  <span>
+                    {globeRotationPaused
+                      ? isPt
+                        ? 'Retomar globo'
+                        : 'Resume globe'
+                      : isPt
+                        ? 'Pausar globo'
+                        : 'Pause globe'}
+                  </span>
+                </button>
+
+                <div className="pointer-events-none absolute bottom-2.5 left-3 rounded-full border border-[#1e3a66]/70 bg-[#060c1a]/85 px-3 py-1 text-[11px] font-medium text-slate-300 backdrop-blur-md">
+                  {isPt ? 'Toque em um país iluminado no globo' : 'Tap any highlighted country on the globe'}
+                </div>
+              </div>
+
+              {unavailableCountryNotice && (
+                <div
+                  role="status"
+                  className="border-t border-[#1e3a66]/55 bg-[#080d19]/95 px-3.5 py-2 text-xs font-medium text-sky-200"
+                >
+                  {unavailableCountryNotice}
+                </div>
+              )}
+            </section>
+
+            {/* Sugestões para explorar (Presets para indecisos) */}
+            <section className="flex flex-col gap-1.5" aria-label={isPt ? 'Sugestões para explorar' : 'Quick picks'}>
+              <span className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
+                {isPt ? 'Sugestões para explorar' : 'Quick picks'}
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {quickPresetCountries.slice(0, 8).map((preset) => {
+                  const active = country?.id === preset.id;
+                  const pAlpha2 = getAlpha2ForCountry(preset.id, preset.namePt, preset.nameEn);
+                  const shortName = isPt ? preset.namePt : preset.nameEn;
+                  return (
+                    <button
+                      key={`quick-pick-${preset.id}`}
+                      type="button"
+                      onClick={() => handlePickCountryEntry(preset)}
+                      aria-pressed={active}
+                      aria-label={isPt ? `Selecionar país ${shortName}` : `Select country ${shortName}`}
+                      className={`inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-xs font-semibold transition active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
+                        active
+                          ? 'border-[#2563eb]/75 bg-[#0c1a36] text-white'
+                          : 'border-[#1e3a66]/65 bg-[#060c1a] text-slate-200 hover:border-[#2563eb]/65 hover:text-white'
+                      }`}
+                    >
+                      <span className="inline-flex h-4 w-5 shrink-0 items-center justify-center overflow-hidden rounded-[3px]">
+                        <CountryFlagIcon code={pAlpha2} />
+                      </span>
+                      <span>{shortName}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
             {/* Barra de pesquisa */}
-            <div className="flex min-h-[48px] items-center gap-2.5 rounded-xl border border-slate-400/20 bg-[#0c1a36]/80 px-3.5 transition-colors focus-within:border-sky-400/50">
-              <Search size={18} className="shrink-0 text-slate-400" />
+            <div className="flex min-h-[48px] shrink-0 items-center gap-2.5 rounded-xl border border-[#1e3a66]/60 bg-[#0c1a36] px-3.5 transition-colors focus-within:border-[#7dd3fc] focus-within:ring-2 focus-within:ring-[#7dd3fc]">
+              <Search size={18} className="shrink-0 text-slate-400" aria-hidden="true" />
               <input
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={isPt ? 'Pesquisar país...' : 'Search country...'}
+                placeholder={isPt ? 'Pesquisar país pelo nome...' : 'Search country by name...'}
                 className="w-full bg-transparent text-sm text-slate-50 placeholder:text-slate-400 focus:outline-none"
                 aria-label={isPt ? 'Pesquisar país' : 'Search country'}
               />
@@ -600,21 +1073,21 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="inline-flex min-h-[44px] min-w-[44px] -mr-2 items-center justify-center rounded-lg text-slate-400 transition hover:text-slate-100"
+                  className="inline-flex min-h-[44px] min-w-[44px] -mr-2 items-center justify-center rounded-lg text-slate-400 transition hover:text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
                   aria-label={isPt ? 'Limpar pesquisa' : 'Clear search'}
                 >
-                  <X size={16} />
+                  <X size={16} aria-hidden="true" />
                 </button>
               )}
             </div>
 
             <section
-              className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[18px] border border-slate-400/15 bg-[#080d19]/95 backdrop-blur-xl"
+              className="flex min-h-[190px] flex-1 flex-col overflow-hidden rounded-[18px] border border-[#1e3a66]/50 bg-[#080d19]/95 backdrop-blur-xl"
               aria-label={isPt ? 'Lista de países disponíveis' : 'Available countries list'}
             >
-              <div className="flex items-center justify-between border-b border-slate-400/15 px-4 py-2.5 text-[11px] font-medium text-slate-400">
+              <div className="flex items-center justify-between border-b border-[#1e3a66]/45 px-4 py-2.5 text-[11px] font-medium text-slate-400">
                 <span>
-                  {isPt ? 'Países com pacote NASA gerado' : 'Countries with NASA package'}
+                  {isPt ? 'Países disponíveis' : 'Available countries'}
                 </span>
                 <span className="[font-variant-numeric:tabular-nums]">
                   {filteredCountries.length}
@@ -622,13 +1095,13 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
               </div>
 
               {filteredCountries.length === 0 ? (
-                <div className="flex flex-1 items-center justify-center px-4 text-center text-sm text-slate-400">
+                <div className="flex flex-1 items-center justify-center px-4 py-6 text-center text-sm text-slate-400">
                   {isPt
                     ? 'Nenhum país encontrado para esta pesquisa.'
                     : 'No countries found for this search.'}
                 </div>
               ) : (
-                <ul className="flex-1 divide-y divide-slate-400/10 overflow-y-auto p-1.5">
+                <ul className="flex-1 divide-y divide-[#1e3a66]/30 overflow-y-auto p-1.5">
                   {filteredCountries.map((item) => {
                     const isPilot = PILOT_ID_SET.has(item.id);
                     const isCurrent = country?.id === item.id;
@@ -640,14 +1113,14 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                         <button
                           type="button"
                           onClick={() => handlePickCountryEntry(item)}
-                          className={`flex min-h-[48px] w-full cursor-pointer items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition ${
+                          className={`flex min-h-[48px] w-full cursor-pointer items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
                             isCurrent
-                              ? 'bg-white/[0.09] ring-1 ring-slate-300/25'
-                              : 'hover:bg-white/[0.05] active:bg-white/[0.08]'
+                              ? 'bg-[#0c1a36] ring-1 ring-[#2563eb]/60'
+                              : 'hover:bg-white/[0.04] active:bg-white/[0.08]'
                           }`}
                         >
                           <div className="flex min-w-0 items-center gap-3">
-                            <span className="inline-flex h-6 w-7 shrink-0 items-center justify-center rounded-md border border-slate-400/15 bg-white/[0.03]">
+                            <span className="inline-flex h-6 w-7 shrink-0 items-center justify-center rounded-md border border-[#1e3a66]/50 bg-[#060c1a]">
                               <CountryFlagIcon code={alpha2} />
                             </span>
                             <div className="min-w-0">
@@ -660,16 +1133,11 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                             </div>
                           </div>
 
-                          <div className="flex shrink-0 items-center gap-2">
-                            {isPilot && (
-                              <span className="rounded-full border border-slate-400/25 bg-white/[0.06] px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-slate-200">
-                                {isPt ? 'Destaque' : 'Featured'}
-                              </span>
-                            )}
-                            <span className="text-[11px] text-slate-500 [font-variant-numeric:tabular-nums]">
-                              #{item.id}
+                          {isPilot && (
+                            <span className="shrink-0 rounded-full border border-[#1e3a66] bg-[#060c1a] px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-slate-300">
+                              {isPt ? 'Destaque' : 'Featured'}
                             </span>
-                          </div>
+                          )}
                         </button>
                       </li>
                     );
@@ -682,23 +1150,29 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
           /* =====================================================================
              TELA 2 — CONTROLE COMPLETO DO JUKEBOX STUDIO NO TABLET
              ===================================================================== */
-          <div className="mx-auto flex h-full w-full max-w-3xl flex-col gap-2.5 overflow-y-auto px-3.5 py-3 sm:px-5 sm:py-4">
-            {/* 1. Barra de Presets Rápidos de Países + Botão Pesquisar */}
+          <div className="mx-auto flex h-full w-full min-w-0 max-w-3xl flex-col gap-2.5 overflow-x-hidden overflow-y-auto px-3.5 py-3 sm:px-5 sm:py-4">
+            {/* 1. Cabeçalho do País Ativo + Botão Ir para outro país */}
             <section
-              className="flex flex-col gap-2 rounded-[18px] border border-slate-400/15 bg-[#080d19]/95 p-2.5 backdrop-blur-xl"
-              aria-label={isPt ? 'Seleção rápida de país' : 'Quick country presets'}
+              className="flex min-w-0 max-w-full flex-col gap-2 rounded-[18px] border border-[#1e3a66]/50 bg-[#080d19]/95 p-2.5 backdrop-blur-xl"
+              aria-label={isPt ? 'País selecionado' : 'Selected country'}
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2.5 pl-1">
-                  <span className="inline-flex h-7 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-400/20 bg-white/[0.04]">
+                  <span className="inline-flex h-7 w-8 shrink-0 items-center justify-center rounded-lg border border-[#1e3a66]/55 bg-[#060c1a]">
                     <CountryFlagIcon code={selectedAlpha2} />
                   </span>
                   <div className="min-w-0">
-                    <h1 className="truncate text-sm font-bold text-slate-50 sm:text-base">
-                      {isPt ? country.namePt : country.nameEn}
-                    </h1>
-                    <p className="truncate text-[11px] text-slate-400 [font-variant-numeric:tabular-nums]">
-                      #{country.id} · {isPt ? country.regionPt : country.regionEn}
+                    {embeddedInDemo ? (
+                      <h2 className="truncate text-sm font-bold text-slate-50 sm:text-base">
+                        {isPt ? country.namePt : country.nameEn}
+                      </h2>
+                    ) : (
+                      <h1 className="truncate text-sm font-bold text-slate-50 sm:text-base">
+                        {isPt ? country.namePt : country.nameEn}
+                      </h1>
+                    )}
+                    <p className="truncate text-[11px] text-slate-400">
+                      {isPt ? country.regionPt : country.regionEn}
                     </p>
                   </div>
                 </div>
@@ -706,15 +1180,16 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                 <button
                   type="button"
                   onClick={handleOpenCountrySearch}
-                  className="inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-slate-400/20 bg-[#060c1a]/90 px-3.5 text-xs font-semibold text-slate-100 transition hover:border-slate-300/40 active:scale-95"
+                  data-testid="tablet-switch-country-btn"
+                  className="inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-2 rounded-full border border-[#1e3a66] bg-[#060c1a] px-4 text-xs font-semibold text-slate-100 transition hover:border-[#2563eb] hover:text-white active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
                 >
-                  <Search size={14} />
-                  <span>{isPt ? 'Pesquisar país' : 'Search country'}</span>
+                  <Globe2 size={15} className="text-[#7dd3fc]" aria-hidden="true" />
+                  <span>{isPt ? 'Ir para outro país' : 'Switch Country'}</span>
                 </button>
               </div>
 
-              {/* Pílulas Horizontais dos Países Pré-Gerados */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]">
+              {/* Pílulas Horizontais de Troca Rápida */}
+              <div className="flex min-w-0 max-w-full items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]">
                 {quickPresetCountries.map((preset) => {
                   const active = preset.id === country.id;
                   const pAlpha2 = getAlpha2ForCountry(preset.id, preset.namePt, preset.nameEn);
@@ -724,10 +1199,12 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                       key={preset.id}
                       type="button"
                       onClick={() => handlePickCountryEntry(preset)}
-                      className={`inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition active:scale-95 ${
+                      aria-pressed={active}
+                      aria-label={isPt ? `Selecionar país ${shortName}` : `Select country ${shortName}`}
+                      className={`inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
                         active
-                          ? 'border-slate-200/40 bg-white/[0.12] text-white'
-                          : 'border-slate-400/15 bg-white/[0.03] text-slate-300 hover:bg-white/[0.07]'
+                          ? 'border-[#2563eb]/75 bg-[#0c1a36] text-white'
+                          : 'border-[#1e3a66]/55 bg-[#060c1a] text-slate-300 hover:border-[#2563eb]/65 hover:text-white'
                       }`}
                     >
                       <span className="inline-flex h-4 w-5 shrink-0 items-center justify-center overflow-hidden rounded-[3px]">
@@ -742,18 +1219,33 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
 
             {/* 2. Palco Jukebox Studio Ao Vivo (5 Vídeos NASA + Partitura MIDI Interativa) + Transporte */}
             <section
-              className="flex flex-col gap-2 rounded-[18px] border border-slate-400/15 bg-[#080d19]/95 p-2.5 backdrop-blur-xl"
+              className="flex min-w-0 max-w-full flex-col gap-2 rounded-[18px] border border-[#1e3a66]/50 bg-[#080d19]/95 p-2.5 backdrop-blur-xl"
               aria-label={isPt ? 'Estúdio Jukebox Ao Vivo' : 'Live Jukebox Studio'}
             >
+              {embeddedInDemo ? (
+                <h3 className="sr-only">
+                  {isPt ? 'Estúdio Jukebox Ao Vivo' : 'Live Jukebox Studio'}
+                </h3>
+              ) : (
+                <h2 className="sr-only">
+                  {isPt ? 'Estúdio Jukebox Ao Vivo' : 'Live Jukebox Studio'}
+                </h2>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2 px-1">
                 <div className="flex items-center gap-2">
                   {/* Play / Pause */}
                   <button
                     type="button"
                     onClick={togglePlay}
-                    className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-[#060913] shadow-sm transition hover:bg-slate-100 active:scale-95"
+                    className="inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-[#060913] shadow-sm transition hover:bg-slate-100 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
                     aria-label={
-                      playback.isPlaying ? (isPt ? 'Pausar' : 'Pause') : isPt ? 'Tocar' : 'Play'
+                      playback.isPlaying
+                        ? isPt
+                          ? `Pausar sonificação de ${country.namePt}`
+                          : `Pause sonification of ${country.nameEn}`
+                        : isPt
+                          ? `Tocar sonificação de ${country.namePt}`
+                          : `Play sonification of ${country.nameEn}`
                     }
                   >
                     {playback.isPlaying ? (
@@ -767,7 +1259,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                   <button
                     type="button"
                     onClick={restartLoop}
-                    className="inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-xl border border-slate-400/20 bg-[#060c1a]/85 px-3 text-xs font-semibold text-slate-200 transition hover:border-slate-300/40 active:scale-95"
+                    className="inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-xl border border-[#1e3a66]/55 bg-[#060c1a] px-3 text-xs font-semibold text-slate-200 transition hover:border-[#2563eb] hover:text-white active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
                     title={isPt ? 'Voltar ao início' : 'Restart from start'}
                   >
                     <SkipBack size={15} />
@@ -779,11 +1271,11 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                 <button
                   type="button"
                   onClick={resetMixerGains}
-                  className="inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-xl border border-slate-400/20 bg-[#060c1a]/85 px-3 text-xs font-semibold text-slate-300 transition hover:border-slate-300/40 hover:text-white active:scale-95"
+                  className="inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-xl border border-[#1e3a66]/55 bg-[#060c1a] px-3 text-xs font-semibold text-slate-300 transition hover:border-[#2563eb] hover:text-white active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
                   title={
                     isPt
-                      ? 'Restaurar volumes salvos e religar camadas'
-                      : 'Reset mixer gains and re-enable layers'
+                      ? 'Restaurar volumes salvos do estúdio'
+                      : 'Reset studio mixer gains'
                   }
                 >
                   <RotateCcw size={14} />
@@ -791,17 +1283,46 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                 </button>
               </div>
 
-              <div className="h-[320px] w-full overflow-hidden rounded-2xl border border-slate-400/20 bg-black sm:h-[400px]">
+              <div
+                className={`w-full overflow-hidden rounded-2xl border border-[#1e3a66]/45 bg-black ${
+                  embeddedInDemo ? 'h-[240px] sm:h-[290px]' : 'h-[320px] sm:h-[400px]'
+                }`}
+              >
                 <JukeboxStudioStage renderContext="controller" hideRobot />
               </div>
             </section>
 
+            {/* Banner de Silêncio Intencional quando todas as 5 camadas estão desligadas */}
+            {enabledCount === 0 && (
+              <div
+                role="status"
+                data-testid="tablet-mixer-silence-banner"
+                className="flex items-center gap-2.5 rounded-[18px] border border-[#1e3a66]/70 bg-[#040b1a] px-3.5 py-2.5 text-xs font-medium text-sky-100"
+              >
+                <span className="h-2 w-2 shrink-0 rounded-full bg-[#7dd3fc]" aria-hidden="true" />
+                <span>
+                  {isPt
+                    ? 'Nenhuma camada ativa — toque abaixo para acender os dados da NASA e ouvir a música surgir no ambiente.'
+                    : 'No layers active — tap below to light up NASA data and hear the music emerge in the room.'}
+                </span>
+              </div>
+            )}
+
             {/* 3. Mixer das 5 Camadas NASA Estilo Photoshop + Sub-camada Tempestade */}
             <section
-              className="flex flex-col gap-2"
+              className="flex min-w-0 max-w-full flex-col gap-2"
               role="group"
               aria-label={isPt ? 'Mixer das 5 camadas NASA' : 'NASA 5-layer mixer'}
             >
+              {embeddedInDemo ? (
+                <h3 className="sr-only">
+                  {isPt ? 'Mixer das 5 camadas NASA' : 'NASA 5-layer mixer'}
+                </h3>
+              ) : (
+                <h2 className="sr-only">
+                  {isPt ? 'Mixer das 5 camadas NASA' : 'NASA 5-layer mixer'}
+                </h2>
+              )}
               {VISUAL_LAYER_ORDER.map((layerId) => {
                 const meta = LAYER_METAS[layerId];
                 const isEnabled = layers[layerId].enabled;
@@ -852,11 +1373,11 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                     className="flex flex-col gap-2 rounded-[18px] border p-3 transition"
                     style={{
                       borderColor: isAudible
-                        ? `color-mix(in srgb, ${meta.accentHex} 45%, rgba(148,163,184,0.16))`
-                        : 'rgba(148, 163, 184, 0.14)',
+                        ? `color-mix(in srgb, ${meta.accentHex} 45%, rgba(30,58,102,0.45))`
+                        : 'rgba(30, 58, 102, 0.45)',
                       background: isAudible
-                        ? `color-mix(in srgb, ${meta.accentHex} 8%, rgba(8, 13, 25, 0.92))`
-                        : 'rgba(8, 13, 25, 0.62)',
+                        ? `color-mix(in srgb, ${meta.accentHex} 7%, rgba(8, 13, 25, 0.95))`
+                        : 'rgba(8, 13, 25, 0.85)',
                     }}
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -864,11 +1385,17 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                       <button
                         type="button"
                         onClick={() => toggleEye(layerId)}
-                        className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl border border-slate-400/20 bg-black/35 text-slate-100 transition active:scale-95"
+                        className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl border border-[#1e3a66]/55 bg-[#060c1a] text-slate-100 transition active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
                         aria-pressed={isEnabled}
-                        aria-label={`${isPt ? 'Alternar camada' : 'Toggle layer'} ${
-                          isPt ? meta.labelPt : meta.labelEn
-                        }`}
+                        aria-label={
+                          isEnabled
+                            ? isPt
+                              ? `Ocultar camada ${meta.labelPt}`
+                              : `Hide ${meta.labelEn} layer`
+                            : isPt
+                              ? `Visualizar camada ${meta.labelPt}`
+                              : `Show ${meta.labelEn} layer`
+                        }
                       >
                         {isEnabled ? (
                           <Eye size={18} style={{ color: meta.accentHex }} />
@@ -886,14 +1413,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                           <span className="truncate text-sm font-semibold text-slate-50">
                             {isPt ? meta.labelPt : meta.labelEn}
                           </span>
-                          <span
-                            className="inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wide"
-                            style={{
-                              borderColor: `color-mix(in srgb, ${meta.accentHex} 50%, transparent)`,
-                              backgroundColor: `color-mix(in srgb, ${meta.accentHex} 14%, transparent)`,
-                              color: meta.accentHex,
-                            }}
-                          >
+                          <span className="inline-flex shrink-0 items-center rounded-full border border-[#1e3a66]/55 bg-[#060c1a] px-2 py-0.5 text-[10px] font-medium text-slate-300">
                             {isPt ? meta.phenomenonPt : meta.phenomenonEn}
                           </span>
                         </div>
@@ -907,13 +1427,18 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                         <button
                           type="button"
                           onClick={() => toggleSolo(layerId as SoloableLayerId)}
-                          className={`min-h-[44px] min-w-[44px] cursor-pointer rounded-xl border text-xs font-bold transition active:scale-95 ${
+                          className={`min-h-[44px] min-w-[44px] cursor-pointer rounded-xl border text-xs font-bold transition active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
                             layers[layerId as SoloableLayerId].solo
                               ? 'border-amber-300 bg-amber-400 text-slate-950'
-                              : 'border-slate-400/20 bg-black/30 text-slate-300 hover:text-white'
+                              : 'border-[#1e3a66]/55 bg-[#060c1a] text-slate-300 hover:text-white'
                           }`}
                           title="Solo"
-                          aria-label={`Solo ${isPt ? meta.labelPt : meta.labelEn}`}
+                          aria-pressed={layers[layerId as SoloableLayerId].solo}
+                          aria-label={
+                            isPt
+                              ? `Ouvir apenas som de ${meta.labelPt}`
+                              : `Listen only to ${meta.labelEn} sound`
+                          }
                         >
                           S
                         </button>
@@ -922,7 +1447,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                       <button
                         type="button"
                         onClick={() => setInspectedDataset(meta.datasetId)}
-                        className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl border border-slate-400/15 bg-black/25 text-slate-300 transition hover:text-white active:scale-95"
+                        className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl border border-[#1e3a66]/50 bg-[#060c1a] text-slate-300 transition hover:border-[#2563eb] hover:text-white active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
                         title={isPt ? 'Escala científica NASA' : 'NASA scientific scale'}
                         aria-label={`${isPt ? 'Escala científica NASA' : 'NASA scientific scale'} ${
                           isPt ? meta.labelPt : meta.labelEn
@@ -946,9 +1471,11 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                             }
                             style={{ touchAction: 'none', accentColor: meta.accentHex }}
                             className="h-10 min-w-[120px] flex-1 cursor-pointer"
-                            aria-label={`${isPt ? 'Volume' : 'Gain'} ${
-                              isPt ? meta.labelPt : meta.labelEn
-                            }`}
+                            aria-label={
+                              isPt
+                                ? `Volume para ouvir som de ${meta.labelPt}`
+                                : `Volume to listen to ${meta.labelEn} sound`
+                            }
                           />
                           <span className="w-14 text-right text-xs font-semibold text-slate-200 [font-variant-numeric:tabular-nums]">
                             {Math.round(layers[layerId as SoloableLayerId].gain * 100)}%
@@ -970,21 +1497,34 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
 
                     {/* Sub-camada Indentada sob Melodia: ↳ Tempestade (5ª/8ª + Brilho) */}
                     {layerId === 'melody' && (
-                      <div className="mt-1 ml-3 flex flex-col gap-1.5 rounded-xl border border-dashed border-cyan-400/30 bg-black/35 p-2.5">
+                      <div className="mt-1 ml-3 flex flex-col gap-1.5 rounded-xl border border-[#1e3a66]/55 bg-white/[0.025] p-2.5">
+                        {embeddedInDemo ? (
+                          <h4 className="sr-only">
+                            {isPt ? 'Sub-camada Tempestade' : 'Storm Sparkle sub-layer'}
+                          </h4>
+                        ) : (
+                          <h3 className="sr-only">
+                            {isPt ? 'Sub-camada Tempestade' : 'Storm Sparkle sub-layer'}
+                          </h3>
+                        )}
                         <div className="flex items-center justify-between gap-2">
                           <button
                             type="button"
                             onClick={toggleSparkle}
-                            className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl border border-slate-400/20 bg-black/40 text-slate-100 transition active:scale-95"
+                            className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl border border-[#1e3a66]/55 bg-[#060c1a] text-slate-100 transition active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
                             aria-pressed={layers.melody.sparkleEnabled}
                             aria-label={
-                              isPt
-                                ? 'Alternar sub-camada Tempestade'
-                                : 'Toggle Storm Sparkle sub-layer'
+                              layers.melody.sparkleEnabled
+                                ? isPt
+                                  ? 'Ocultar camada Tempestade'
+                                  : 'Hide Storm Sparkle layer'
+                                : isPt
+                                  ? 'Visualizar camada Tempestade'
+                                  : 'Show Storm Sparkle layer'
                             }
                           >
                             {layers.melody.sparkleEnabled ? (
-                              <Sparkles size={17} className="text-[#67f3ff]" />
+                              <Eye size={17} className="text-[#67f3ff]" />
                             ) : (
                               <EyeOff size={17} className="text-slate-500" />
                             )}
@@ -993,10 +1533,10 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
                               <span className="h-2 w-2 shrink-0 rounded-full bg-[#67f3ff]" />
-                              <span className="truncate text-xs font-semibold text-cyan-100">
+                              <span className="truncate text-xs font-semibold text-slate-100">
                                 {isPt
-                                  ? '↳ Tempestade · 5ª/8ª + Cintilação'
-                                  : '↳ Storm · 5th/8ve + Crystal Sparkle'}
+                                  ? 'Tempestade · 5ª/8ª + Cintilação'
+                                  : 'Storm · 5th/8ve + Crystal Sparkle'}
                               </span>
                             </div>
                             <div className="truncate text-[11px] text-slate-400 [font-variant-numeric:tabular-nums]">
@@ -1013,13 +1553,18 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                           <button
                             type="button"
                             onClick={toggleSparkleSolo}
-                            className={`min-h-[44px] min-w-[44px] cursor-pointer rounded-xl border text-xs font-bold transition active:scale-95 ${
+                            className={`min-h-[44px] min-w-[44px] cursor-pointer rounded-xl border text-xs font-bold transition active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
                               layers.melody.sparkleSolo
                                 ? 'border-cyan-300 bg-[#67f3ff] text-slate-950'
-                                : 'border-slate-400/20 bg-black/30 text-slate-300 hover:text-white'
+                                : 'border-[#1e3a66]/55 bg-[#060c1a] text-slate-300 hover:text-white'
                             }`}
                             title={isPt ? 'Solo apenas Tempestade' : 'Solo Storm Sparkle only'}
-                            aria-label={isPt ? 'Solo Tempestade' : 'Solo Storm Sparkle'}
+                            aria-pressed={layers.melody.sparkleSolo}
+                            aria-label={
+                              isPt
+                                ? 'Ouvir apenas som de Tempestade'
+                                : 'Listen only to Storm Sparkle sound'
+                            }
                           >
                             S
                           </button>
@@ -1034,9 +1579,13 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                             onChange={(e) => setSparkleGain(Number(e.target.value) / 100)}
                             style={{ touchAction: 'none', accentColor: '#67f3ff' }}
                             className="h-10 min-w-[110px] flex-1 cursor-pointer"
-                            aria-label={isPt ? 'Ganho da Tempestade' : 'Storm Sparkle Gain'}
+                            aria-label={
+                              isPt
+                                ? 'Volume para ouvir som de Tempestade'
+                                : 'Volume to listen to Storm Sparkle sound'
+                            }
                           />
-                          <span className="w-14 text-right text-xs font-semibold text-cyan-200 [font-variant-numeric:tabular-nums]">
+                          <span className="w-14 text-right text-xs font-semibold text-slate-200 [font-variant-numeric:tabular-nums]">
                             {layers.melody.sparkleGain.toFixed(2)}×
                           </span>
                         </div>
@@ -1085,15 +1634,15 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
 
                     {/* Regente Temperatura: Clima Real (REGION) vs Base Neutra (90 BPM) */}
                     {meta.roleKind === 'conductor' && (
-                      <div className="flex min-h-[42px] items-center justify-between rounded-xl bg-black/30 px-3 py-2 text-xs text-slate-200 [font-variant-numeric:tabular-nums]">
+                      <div className="flex min-h-[42px] items-center justify-between rounded-xl border border-[#1e3a66]/35 bg-white/[0.025] px-3 py-2 text-xs text-slate-200 [font-variant-numeric:tabular-nums]">
                         <span>
                           {layers.temperature.enabled
                             ? isPt
-                              ? `Clima Real ativo (REGION): ${playback.keyRootPt} · ${playback.bpm} BPM`
-                              : `Real Climate active (REGION): ${playback.keyRoot} · ${playback.bpm} BPM`
+                              ? `Clima Real ativo: ${playback.keyRootPt} · ${playback.bpm} BPM`
+                              : `Real Climate active: ${playback.keyRoot} · ${playback.bpm} BPM`
                             : isPt
-                              ? 'Olhinho desligado → Terra Neutra (BASE: Lá · 90 BPM)'
-                              : 'Eye off → Neutral Earth (BASE: A · 90 BPM)'}
+                              ? 'Olhinho desligado → Base Neutra (Lá · 90 BPM)'
+                              : 'Eye off → Neutral Base (A · 90 BPM)'}
                         </span>
                       </div>
                     )}
@@ -1102,9 +1651,9 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
               })}
             </section>
 
-            {/* 4. Rodapé Master Bus (0–160% + VU + dBFS) + Etapa da Fala na Parede Direita */}
+            {/* 4. Rodapé Master Bus (0–160% + VU + dBFS) + Controle de Narração */}
             <footer className="mt-auto flex flex-col gap-2 pb-1">
-              <div className="flex flex-col gap-1.5 rounded-[18px] border border-slate-400/15 bg-[#080d19]/95 px-3.5 py-2.5">
+              <div className="flex flex-col gap-1.5 rounded-[18px] border border-[#1e3a66]/50 bg-[#080d19]/95 px-3.5 py-2.5">
                 <div className="flex items-center gap-3">
                   <Volume2 size={18} className="shrink-0 text-slate-300" />
                   <span className="text-xs font-semibold text-slate-200">Master</span>
@@ -1121,10 +1670,10 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                   <span className="w-12 text-right text-xs font-semibold text-slate-100 [font-variant-numeric:tabular-nums]">
                     {Math.round(masterGain * 100)}%
                   </span>
-                  <span className="inline-flex min-h-[30px] items-center rounded-lg border border-slate-400/20 bg-black/40 px-2 text-[11px] font-semibold text-slate-200 [font-variant-numeric:tabular-nums]">
+                  <span className="inline-flex min-h-[30px] items-center rounded-lg border border-[#1e3a66]/55 bg-[#060c1a] px-2 text-[11px] font-semibold text-slate-200 [font-variant-numeric:tabular-nums]">
                     {dbText}
                   </span>
-                  <span className="hidden min-h-[30px] items-center gap-1 rounded-full border border-sky-400/25 bg-sky-400/10 px-2.5 text-[11px] font-medium text-sky-300 sm:inline-flex">
+                  <span className="hidden min-h-[30px] items-center gap-1 rounded-full border border-[#1e3a66] bg-[#060c1a] px-2.5 text-[11px] font-medium text-[#7dd3fc] sm:inline-flex">
                     <Headphones size={12} />
                     <span>8D</span>
                   </span>
@@ -1142,26 +1691,71 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-2 rounded-[18px] border border-slate-400/15 bg-white/[0.025] px-3.5 py-2">
-                <span className="text-xs font-medium text-slate-300">
-                  {isPt ? 'Fala do Mineiro (Parede Dir.)' : 'Mineiro Commentary (Right Wall)'}
-                </span>
-                <div className="flex items-center gap-1.5">
-                  {[0, 1, 2, 3].map((idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setStoryStep(idx)}
-                      className={`min-h-[44px] min-w-[44px] cursor-pointer rounded-xl text-xs font-semibold transition [font-variant-numeric:tabular-nums] ${
-                        storyStep === idx
-                          ? 'border border-sky-400/50 bg-sky-400/20 text-sky-200'
-                          : 'bg-black/30 text-slate-400 hover:text-white'
-                      }`}
-                      aria-label={`${isPt ? 'Etapa da história' : 'Story step'} ${idx + 1}`}
-                    >
-                      {idx + 1}
-                    </button>
-                  ))}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-[18px] border border-[#1e3a66]/45 bg-white/[0.025] px-3.5 py-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      !voiceAutoEnabled || speechStatus === 'stopped'
+                        ? 'bg-slate-500'
+                        : speechStatus === 'paused'
+                          ? 'bg-amber-400'
+                          : speechStatus === 'speaking'
+                            ? 'animate-pulse bg-sky-400'
+                            : 'bg-[#7dd3fc]/80'
+                    }`}
+                  />
+                  <span className="text-xs font-medium text-slate-300">
+                    {!voiceAutoEnabled
+                      ? isPt
+                        ? 'Narração MINEIRØ silenciada'
+                        : 'MINEIRØ narration muted'
+                      : speechStatus === 'paused'
+                        ? isPt
+                          ? 'Narração pausada'
+                          : 'Narration paused'
+                        : speechStatus === 'stopped'
+                          ? isPt
+                            ? 'Fala interrompida'
+                            : 'Speech stopped'
+                          : isPt
+                            ? 'Narração MINEIRØ'
+                            : 'MINEIRØ Narration'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={togglePauseRobotSpeech}
+                    data-testid="tablet-speech-pause"
+                    aria-pressed={speechStatus === 'paused'}
+                    className={`inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
+                      speechStatus === 'paused'
+                        ? 'border-[#2563eb]/65 bg-[#0c1a36] text-sky-100'
+                        : 'border-[#1e3a66]/55 bg-[#060c1a] text-slate-200 hover:border-[#2563eb] hover:text-white'
+                    }`}
+                  >
+                    {speechStatus === 'paused' ? <Play size={14} className="fill-current" /> : <Pause size={14} />}
+                    <span>
+                      {speechStatus === 'paused'
+                        ? isPt
+                          ? 'Retomar'
+                          : 'Resume'
+                        : isPt
+                          ? 'Pausar fala'
+                          : 'Pause speech'}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={stopRobotSpeech}
+                    data-testid="tablet-speech-stop"
+                    disabled={!voiceAutoEnabled || speechStatus === 'stopped'}
+                    className="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center gap-1.5 rounded-xl border border-rose-400/35 bg-rose-500/15 px-3 text-xs font-semibold text-rose-100 transition hover:border-rose-400/70 hover:bg-rose-500/25 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
+                  >
+                    <Square size={13} className="fill-current" />
+                    <span>{isPt ? 'Interromper fala' : 'Stop speech'}</span>
+                  </button>
                 </div>
               </div>
             </footer>

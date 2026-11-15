@@ -119,6 +119,9 @@ export const RoomAccessGate: React.FC<RoomAccessGateProps> = ({
         className="flex min-h-dvh w-screen flex-col items-center justify-center bg-[#060913] px-4 text-slate-100 select-none"
         style={{ fontFamily: "'Poppins', sans-serif" }}
       >
+        <h1 className="sr-only">
+          {isPt ? 'Verificação de acesso à sala' : 'Room access verification'}
+        </h1>
         <div className="flex flex-col items-center gap-3 text-center">
           <Loader2 size={28} className="animate-spin text-[#7dd3fc]" />
           <p className="text-sm font-medium text-slate-200 [font-variant-numeric:tabular-nums]">

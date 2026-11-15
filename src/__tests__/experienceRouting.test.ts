@@ -11,9 +11,9 @@ describe('Earth Jukebox ?view= routing & 5-layer Photoshop mixer contract', () =
     expect(parseRouteFromSearch('?view=demo')).toEqual({ view: 'demo', outId: 1 });
   });
 
-  it('parses all 5 official views and projector outputs 1..3', () => {
+  it('parses official views, redirects ?view=simulator to demo, and handles projector outputs 1..3', () => {
     expect(parseRouteFromSearch('?view=setup').view).toBe('setup');
-    expect(parseRouteFromSearch('?view=simulator').view).toBe('simulator');
+    expect(parseRouteFromSearch('?view=simulator').view).toBe('demo');
     expect(parseRouteFromSearch('?view=controller').view).toBe('controller');
     expect(parseRouteFromSearch('?view=projector&out=2')).toEqual({
       view: 'projector',

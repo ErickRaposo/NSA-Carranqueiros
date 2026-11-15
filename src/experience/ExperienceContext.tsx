@@ -8,10 +8,13 @@ import React, {
   useState,
 } from 'react';
 import {
+  pauseSpeech,
   preloadPiperVoice,
+  setSpeechGateOpen,
   setSpeechVolume,
   speakText,
   stopSpeech,
+  stopUiAudioTones,
 } from '../accessibility/a11yEngine';
 import {
   playBlastDoorSlamSfx,
@@ -21,6 +24,7 @@ import {
   playLaunchThrust8D,
   setSpaceAmbientDucked,
   startSpaceAmbient,
+  stopAllSpaceAudio,
   stopSpaceAmbient,
 } from '../audio/spaceAmbient';
 import {
@@ -112,6 +116,8 @@ import {
   ProjectorOutId,
   RoomDimensions,
   SoloableLayerId,
+  SpeechCommandType,
+  SpeechPlaybackStatus,
   STUDIO_SAVED_GAINS,
   StudioSessionData,
   SurfaceId,
@@ -314,6 +320,10 @@ interface SyncPayload {
   isPlaying: boolean;
   progress01: number;
   roomDimensions: RoomDimensions;
+  voiceAutoEnabled?: boolean;
+  speechStatus?: SpeechPlaybackStatus;
+  speechCommandNonce?: number;
+  lastSpeechCommand?: SpeechCommandType | null;
 }
 
 function buildSyncStateSignature(p: SyncPayload): string {
@@ -333,6 +343,10 @@ function buildSyncStateSignature(p: SyncPayload): string {
     ly: p.layers,
     pl: p.isPlaying,
     rd: p.roomDimensions,
+    vae: p.voiceAutoEnabled ?? true,
+    ss: p.speechStatus ?? 'idle',
+    scn: p.speechCommandNonce ?? 0,
+    lsc: p.lastSpeechCommand ?? null,
   });
 }
 
@@ -441,6 +455,9 @@ const ZERO_VU: AudioLevelsMap = {
 
 export interface ExperienceProviderProps {
   activeView?: ViewRole;
+  routeView?: ViewRole;
+  initialMissionPhase?: MissionPhase;
+  initialStoryStep?: number;
   roomCode?: string | null;
   onRegenerateRoomCode?: () => string;
   children: React.ReactNode;
@@ -448,10 +465,14 @@ export interface ExperienceProviderProps {
 
 export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   activeView,
+  routeView,
+  initialMissionPhase = 'idle',
+  initialStoryStep = 0,
   roomCode: propRoomCode,
   onRegenerateRoomCode,
   children,
 }) => {
+  const resolvedRouteView = activeView ?? routeView;
   const senderIdRef = useRef<string>(`node-${Math.random().toString(36).slice(2, 9)}`);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const transportRef = useRef<RoomSyncTransportHandle | null>(null);
@@ -469,7 +490,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   const effectiveRoomCode =
     propRoomCode !== undefined ? normalizeRoomCode(propRoomCode) : fallbackRoomCode;
 
-  const effectiveView: ViewRole = activeView ?? detectCurrentView();
+  const effectiveView: ViewRole = resolvedRouteView ?? detectCurrentView();
 
   const forceCloud = useMemo(() => {
     if (typeof window === 'undefined') return false;
@@ -546,6 +567,11 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   const [realAudioRms01, setRealAudioRms01] = useState<number>(0);
   const [audioSourceKind, setAudioSourceKind] = useState<'stems' | 'meta-synth'>('stems');
   const [lanConnected, setLanConnected] = useState<boolean>(false);
+  const [audioSessionUnlocked, setAudioSessionUnlocked] = useState<boolean>(false);
+  const [voiceAutoEnabled, setVoiceAutoEnabledState] = useState<boolean>(true);
+  const [speechStatus, setSpeechStatusState] = useState<SpeechPlaybackStatus>('idle');
+  const [speechCommandNonce, setSpeechCommandNonce] = useState<number>(0);
+  const [lastSpeechCommand, setLastSpeechCommand] = useState<SpeechCommandType | null>(null);
   const [lanClients, setLanClients] = useState<LanPeerInfo[]>([]);
 
   const [projectionState, setProjectionState] =
@@ -640,8 +666,8 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
 
   const [selectedCountryId, setSelectedCountryId] = useState<string | null>('076');
   const [lang, setLangState] = useState<Lang>('pt');
-  const [storyStep, setStoryStepState] = useState<number>(0);
-  const [missionPhase, setMissionPhaseState] = useState<MissionPhase>('idle');
+  const [storyStep, setStoryStepState] = useState<number>(initialStoryStep);
+  const [missionPhase, setMissionPhaseState] = useState<MissionPhase>(initialMissionPhase);
   const [sceneReplayKey, setSceneReplayKey] = useState<number>(0);
   const [barLoop, setBarLoopState] = useState<BarLoopRange>(null);
   const [compareCountries, setCompareCountriesState] = useState<CompareCountriesState>({
@@ -1009,6 +1035,75 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     []
   );
 
+  const prevRouteViewRef = useRef<ViewRole | undefined>(resolvedRouteView);
+  const currentRouteViewRef = useRef<ViewRole | undefined>(resolvedRouteView);
+  currentRouteViewRef.current = resolvedRouteView;
+
+  // Silencia imediatamente fala, efeitos e música ao desmontar, trocar de página SPA ou sair/ocultar a aba
+  useEffect(() => {
+    const prevView = prevRouteViewRef.current;
+    prevRouteViewRef.current = resolvedRouteView;
+
+    if (resolvedRouteView === 'projector') {
+      setLocalAudioMutedState(true);
+    } else if (prevView === 'projector' && resolvedRouteView) {
+      setLocalAudioMutedState(false);
+    }
+
+    if (prevView && resolvedRouteView && prevView !== resolvedRouteView) {
+      stopSpeech();
+      stopAllSpaceAudio();
+      stopUiAudioTones();
+      if (
+        resolvedRouteView === 'projector' ||
+        resolvedRouteView === 'setup' ||
+        resolvedRouteView === 'admin' ||
+        resolvedRouteView === 'audio-node'
+      ) {
+        setIsPlaying(false);
+        audioEngineRef.current?.suspendForPageExit();
+      }
+    }
+  }, [resolvedRouteView]);
+
+  useEffect(() => {
+    const haltAllAudio = (pausePlayback: boolean) => {
+      stopSpeech();
+      stopAllSpaceAudio();
+      stopUiAudioTones();
+      audioEngineRef.current?.suspendForPageExit();
+      if (pausePlayback) {
+        setIsPlaying(false);
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        const activeRole = currentRouteViewRef.current ?? detectCurrentRole();
+        haltAllAudio(activeRole !== 'audio-node');
+      }
+    };
+
+    const onPageHide = () => {
+      haltAllAudio(true);
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('beforeunload', onPageHide);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('beforeunload', onPageHide);
+      stopSpeech();
+      stopAllSpaceAudio();
+      stopUiAudioTones();
+      audioEngineRef.current?.dispose();
+      audioEngineRef.current = null;
+    };
+  }, []);
+
   // Loop 60fps sincronizado com o relógio sample-accurate Web Audio (ou relógio sincronizado LAN/Broadcast)
   useEffect(() => {
     if (!isPlaying) {
@@ -1273,6 +1368,33 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
         setSeekSyncNonce((n) => n + 1);
       }
     }
+
+    if (typeof data.voiceAutoEnabled === 'boolean') {
+      setVoiceAutoEnabledState(data.voiceAutoEnabled);
+      if (!data.voiceAutoEnabled) {
+        stopSpeech();
+        setSpaceAmbientDucked(false);
+        setSpatialMusicDucked(false);
+      }
+    }
+    if (data.speechStatus) {
+      setSpeechStatusState(data.speechStatus);
+      if (data.speechStatus === 'paused') {
+        pauseSpeech();
+        setSpaceAmbientDucked(false);
+        setSpatialMusicDucked(false);
+      } else if (data.speechStatus === 'stopped') {
+        stopSpeech();
+        setSpaceAmbientDucked(false);
+        setSpatialMusicDucked(false);
+      }
+    }
+    if (data.lastSpeechCommand !== undefined) {
+      setLastSpeechCommand(data.lastSpeechCommand);
+    }
+    if (typeof data.speechCommandNonce === 'number') {
+      setSpeechCommandNonce(data.speechCommandNonce);
+    }
   }, []);
 
   const applyRemoteCalibSignal = useCallback((cmd: RemoteCalibSignalCommand) => {
@@ -1326,9 +1448,11 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   latestProjectionRef.current = projectionState;
   latestSpeakerCalibRef.current = speakerCalibration;
 
+  const isUnifiedDemoMode = effectiveView === 'demo' && !effectiveRoomCode;
+
   // Multi-tab 1-PC sync via BroadcastChannel (escopado por ?room= para isolar salas diferentes e a Demo pública)
   useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
+    if (isUnifiedDemoMode || typeof BroadcastChannel === 'undefined') return;
     // Visitante público isolado não compartilha BroadcastChannel com salas de instalação
     const scopeSuffix = effectiveRoomCode ? `room-${effectiveRoomCode}` : 'isolated';
 
@@ -1369,10 +1493,11 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       calibBroadcastRef.current = null;
       projBroadcastRef.current = null;
     };
-  }, [applyIncomingSync, applyRemoteCalibSignal, effectiveRoomCode]);
+  }, [applyIncomingSync, applyRemoteCalibSignal, effectiveRoomCode, isUnifiedDemoMode]);
 
   // Barramento Unificado Multi-Sala: Isolado vs LAN Local (/ws-earth-sync) vs Sala Online (Supabase Realtime)
   useEffect(() => {
+    if (isUnifiedDemoMode) return;
     const role = detectCurrentRole(effectiveView);
     const transport = createRoomSyncTransport({
       mode: syncNetworkMode,
@@ -1436,6 +1561,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     applyRemoteCalibSignal,
     effectiveRoomCode,
     effectiveView,
+    isUnifiedDemoMode,
     syncNetworkMode,
   ]);
 
@@ -1461,6 +1587,10 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       isPlaying,
       progress01: liveProgressRef.current,
       roomDimensions,
+      voiceAutoEnabled,
+      speechStatus,
+      speechCommandNonce,
+      lastSpeechCommand,
     };
     latestSyncSnapshotRef.current = payload;
 
@@ -1483,6 +1613,8 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       return;
     }
 
+    if (isUnifiedDemoMode) return;
+
     lastRemoteSignatureRef.current = null;
     try {
       channelRef.current?.postMessage(payload);
@@ -1497,7 +1629,9 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     compareCountries,
     effectiveView,
     isPlaying,
+    isUnifiedDemoMode,
     lang,
+    lastSpeechCommand,
     layers,
     loopSingleBar,
     masterGain,
@@ -1506,13 +1640,16 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     sceneReplayKey,
     seekSyncNonce,
     selectedCountryId,
+    speechCommandNonce,
+    speechStatus,
     storyStep,
+    voiceAutoEnabled,
     voiceVolume,
   ]);
 
   // Heartbeat leve de sincronia temporal durante reprodução para manter outros PCs travados no compasso
   useEffect(() => {
-    if (!isPlaying || syncNetworkMode === 'isolated') return;
+    if (!isPlaying || syncNetworkMode === 'isolated' || isUnifiedDemoMode) return;
     const isPrimaryHost = effectiveView === 'setup' || effectiveView === 'admin';
     const timer = window.setInterval(() => {
       const hasPrimaryHostOnline = lanClientsRef.current.some(
@@ -1641,6 +1778,10 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
 
   const activateMissionFrame = useCallback(
     (phase: MissionPhase, nextStoryStep?: number, focusLayer?: VisualLayerId) => {
+      setAudioSessionUnlocked(true);
+      setSpeechGateOpen(true);
+      setSpeechStatusState('idle');
+      setLastSpeechCommand(null);
       setMissionPhaseState(phase);
       if (typeof nextStoryStep === 'number') {
         const normalized =
@@ -1666,6 +1807,10 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   );
 
   const replayActiveFrame = useCallback(() => {
+    setAudioSessionUnlocked(true);
+    setSpeechGateOpen(true);
+    setSpeechStatusState('idle');
+    setLastSpeechCommand(null);
     setSceneReplayKey((k) => k + 1);
   }, []);
 
@@ -1874,15 +2019,90 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     return () => window.clearInterval(timer);
   }, [refreshAudioTelemetry]);
 
+  const unlockAudioSession = useCallback(() => {
+    setAudioSessionUnlocked(true);
+  }, []);
+
+  useEffect(() => {
+    const shouldAllowSpeech =
+      audioSessionUnlocked &&
+      voiceAutoEnabled &&
+      speechStatus !== 'paused' &&
+      speechStatus !== 'stopped';
+    setSpeechGateOpen(shouldAllowSpeech);
+    return () => {
+      setSpeechGateOpen(true);
+    };
+  }, [audioSessionUnlocked, voiceAutoEnabled, speechStatus]);
+
+  const setVoiceAutoEnabled = useCallback((enabled: boolean) => {
+    setAudioSessionUnlocked(true);
+    setVoiceAutoEnabledState(enabled);
+    if (!enabled) {
+      setSpeechGateOpen(false);
+      stopSpeech();
+      setSpaceAmbientDucked(false);
+      setSpatialMusicDucked(false);
+      setSpeechStatusState('stopped');
+      setLastSpeechCommand('stop');
+      setSpeechCommandNonce((n) => n + 1);
+    } else {
+      setSpeechGateOpen(true);
+      setSpeechStatusState('idle');
+      setLastSpeechCommand(null);
+    }
+  }, []);
+
+  const stopRobotSpeech = useCallback(() => {
+    setAudioSessionUnlocked(true);
+    setSpeechGateOpen(false);
+    stopSpeech();
+    setSpaceAmbientDucked(false);
+    setSpatialMusicDucked(false);
+    setSpeechStatusState('stopped');
+    setLastSpeechCommand('stop');
+    setSpeechCommandNonce((n) => n + 1);
+  }, []);
+
+  const togglePauseRobotSpeech = useCallback(() => {
+    setAudioSessionUnlocked(true);
+    setSpeechStatusState((prev) => {
+      if (prev === 'paused') {
+        setVoiceAutoEnabledState(true);
+        setSpeechGateOpen(true);
+        setLastSpeechCommand('resume');
+        setSpeechCommandNonce((n) => n + 1);
+        return 'speaking';
+      }
+      pauseSpeech();
+      setSpaceAmbientDucked(false);
+      setSpatialMusicDucked(false);
+      setLastSpeechCommand('pause');
+      setSpeechCommandNonce((n) => n + 1);
+      return 'paused';
+    });
+  }, []);
+
+  const reportSpeechStatus = useCallback((status: SpeechPlaybackStatus) => {
+    setSpeechStatusState((prev) => {
+      if ((prev === 'paused' || prev === 'stopped') && status === 'idle') {
+        return prev;
+      }
+      return status;
+    });
+  }, []);
+
   const unlockAudioContext = useCallback(async (): Promise<
     AudioContextState | 'uninitialized'
   > => {
+    setAudioSessionUnlocked(true);
     const state = (await audioEngineRef.current?.ensureUnlocked()) ?? 'uninitialized';
     setAudioContextState(state);
     return state;
   }, []);
 
   const togglePlay = useCallback(() => {
+    setAudioSessionUnlocked(true);
     if (!localAudioMuted) {
       void unlockAudioContext();
     }
@@ -1890,6 +2110,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   }, [localAudioMuted, unlockAudioContext]);
 
   const playWithAudibleLayers = useCallback(() => {
+    setAudioSessionUnlocked(true);
     void unlockAudioContext();
     setLocalAudioMutedState(false);
     setLayers((prev) => {
@@ -1910,6 +2131,10 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     audioEngineRef.current?.stopCalibrationSignal();
     audioEngineRef.current?.stopStemPlayback();
     stopSpeech();
+    setSpaceAmbientDucked(false);
+    setSpatialMusicDucked(false);
+    setSpeechStatusState('idle');
+    setLastSpeechCommand(null);
     setMasterGainState(0.9);
     audioEngineRef.current?.setMasterGain(0.9);
     setVoiceVolumeState(1.0);
@@ -2621,6 +2846,8 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   }, []);
 
   const setMissionPhase = useCallback((phase: MissionPhase) => {
+    setSpeechStatusState((prev) => (prev === 'stopped' || prev === 'paused' ? 'idle' : prev));
+    setLastSpeechCommand(null);
     setMissionPhaseState(phase);
   }, []);
 
@@ -2818,6 +3045,16 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       prevStoryStep,
       setRoomDimensions,
       resetExperienceToDefault,
+      audioSessionUnlocked,
+      voiceAutoEnabled,
+      speechStatus,
+      speechCommandNonce,
+      lastSpeechCommand,
+      unlockAudioSession,
+      setVoiceAutoEnabled,
+      stopRobotSpeech,
+      togglePauseRobotSpeech,
+      reportSpeechStatus,
     }),
     [
       activateMissionFrame,
@@ -2827,6 +3064,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       audioLevels,
       audioMode,
       audioOwner,
+      audioSessionUnlocked,
       audioSourceKind,
       availableCountryIds,
       barLoop,
@@ -2838,6 +3076,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       lanClients,
       lanConnected,
       lang,
+      lastSpeechCommand,
       layers,
       liveEvents,
       liveMetersState.masterDbFs,
@@ -2855,6 +3094,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       realAudioRms01,
       regenerateRoomCode,
       replayActiveFrame,
+      reportSpeechStatus,
       resetExperienceToDefault,
       resetMixerGains,
       restartLoop,
@@ -2879,19 +3119,26 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       setRoomDimensions,
       setSparkleGain,
       setStoryStep,
+      setVoiceAutoEnabled,
       setVoiceVolume,
       setWindWetMix,
       speakerLiveLevels,
+      speechCommandNonce,
+      speechStatus,
       stepBeat,
+      stopRobotSpeech,
       storyStep,
       studioData,
       swapCompareCountries,
       syncNetworkMode,
       toggleEye,
+      togglePauseRobotSpeech,
       togglePlay,
       toggleSolo,
       toggleSparkle,
       unlockAudioContext,
+      unlockAudioSession,
+      voiceAutoEnabled,
       voiceVolume,
       toggleSparkleSolo,
     ]

@@ -24,11 +24,14 @@ import { CeilingScene } from '../scenes/CeilingScene';
 import { LeftWallScene } from '../scenes/LeftWallScene';
 import { RightWallScene } from '../scenes/RightWallScene';
 
+export type CameraPresetId = 'overview' | 'visitor' | 'ceiling' | 'flat';
+
 interface SimulatorViewProps {
   embedded?: boolean;
+  preset?: CameraPresetId;
+  onPresetChange?: (preset: CameraPresetId) => void;
+  hideBrandTitle?: boolean;
 }
-
-type CameraPresetId = 'overview' | 'visitor' | 'ceiling' | 'flat';
 
 const LOGICAL_SCENE_HEIGHT = 960;
 
@@ -89,7 +92,12 @@ const PILOT_LABELS: Record<string, { flag: string; pt: string; en: string }> = {
   '818': { flag: '🇪🇬', pt: 'Egito', en: 'Egypt' },
 };
 
-export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }) => {
+export const SimulatorView: React.FC<SimulatorViewProps> = ({
+  embedded = false,
+  preset: controlledPreset,
+  onPresetChange,
+  hideBrandTitle = embedded,
+}) => {
   const {
     country,
     roomDimensions,
@@ -110,12 +118,14 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
   } = useExperience();
 
   const isPt = lang === 'pt';
-  const [preset, setPreset] = useState<CameraPresetId>('overview');
+  const [internalPreset, setInternalPreset] = useState<CameraPresetId>('overview');
+  const preset = controlledPreset ?? internalPreset;
   const [yawDeg, setYawDeg] = useState<number>(-45);
   const [pitchDeg, setPitchDeg] = useState<number>(-16);
-  const [zoomScale, setZoomScale] = useState<number>(1.0);
+  const [zoomScale, setZoomScale] = useState<number>(1.32);
   const [showSeamGuides, setShowSeamGuides] = useState<boolean>(true);
   const [showControlDock, setShowControlDock] = useState<boolean>(!embedded);
+  const [globeRotationPaused, setGlobeRotationPaused] = useState<boolean>(false);
 
   const dragStateRef = useRef<{
     startX: number;
@@ -124,21 +134,34 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
     startPitch: number;
   } | null>(null);
 
-  const applyPreset = (id: CameraPresetId) => {
-    setPreset(id);
+  const applyCameraForPreset = (id: CameraPresetId) => {
     if (id === 'overview') {
       setYawDeg(-45);
       setPitchDeg(-16);
-      setZoomScale(1.0);
+      setZoomScale(1.32);
     } else if (id === 'visitor') {
       setYawDeg(-45);
       setPitchDeg(8);
-      setZoomScale(1.42);
+      setZoomScale(1.58);
     } else if (id === 'ceiling') {
       setYawDeg(-45);
       setPitchDeg(48);
-      setZoomScale(1.22);
+      setZoomScale(1.38);
     }
+  };
+
+  useEffect(() => {
+    if (controlledPreset) {
+      applyCameraForPreset(controlledPreset);
+    }
+  }, [controlledPreset]);
+
+  const applyPreset = (id: CameraPresetId) => {
+    if (controlledPreset === undefined) {
+      setInternalPreset(id);
+    }
+    onPresetChange?.(id);
+    applyCameraForPreset(id);
   };
 
   const leftAspect = roomDimensions.leftWall.widthCm / Math.max(1, roomDimensions.leftWall.heightCm);
@@ -155,7 +178,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
     roomDimensions.ceiling.widthCm,
     100
   );
-  const pxPerCm = (embedded ? 250 : 310) / maxCm;
+  const pxPerCm = (embedded ? 300 : 335) / maxCm;
 
   const leftW = Math.round(roomDimensions.leftWall.widthCm * pxPerCm);
   const leftH = Math.round(roomDimensions.leftWall.heightCm * pxPerCm);
@@ -173,47 +196,99 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
       }`}
       data-testid="simulator-view"
     >
-      {/* Top Header & Camera Presets */}
-      <div className="z-20 flex flex-wrap items-center justify-between gap-2 border-b border-slate-400/15 bg-[#080d19]/95 px-3.5 py-2">
-        <div className="flex items-center gap-2.5">
-          <Compass size={15} className="text-sky-400" />
-          <span className="text-xs font-semibold text-slate-100">
-            {isPt ? 'Simulador 3D do Quarto' : '3D Corner Room Simulator'}
+      {/* Camera Presets Bar (alinhada em altura, espaçamento e circunferência com a barra do Tablet) */}
+      <div
+        className={`z-20 flex min-h-[46px] shrink-0 items-center gap-2 overflow-x-auto border-b border-[#1e3a66]/45 bg-[#040b1a]/95 px-3.5 py-1.5 ${
+          hideBrandTitle ? 'justify-between' : 'justify-between'
+        }`}
+      >
+        {!hideBrandTitle ? (
+          <div className="flex shrink-0 items-center gap-2.5">
+            <Compass size={15} className="text-sky-400" />
+            <span className="text-xs font-semibold text-slate-100">
+              {isPt ? 'Simulador 3D do Quarto' : '3D Corner Room Simulator'}
+            </span>
+          </div>
+        ) : (
+          <span className="hidden shrink-0 text-[11px] font-medium text-slate-400 2xl:inline">
+            {preset === 'flat'
+              ? isPt
+                ? 'Projeção 2D'
+                : '2D Projection'
+              : isPt
+                ? 'Maquete 3D'
+                : '3D Room'}
           </span>
-        </div>
+        )}
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex shrink-0 flex-nowrap items-center gap-1.5">
           {(
             [
-              ['overview', isPt ? 'Canto 3D' : '3D Corner', Box],
-              ['visitor', isPt ? 'Visão Visitante' : 'Visitor POV', Maximize2],
-              ['ceiling', isPt ? 'Olhar p/ Teto' : 'Look at Ceiling', ArrowUp],
-              ['flat', isPt ? 'Planificar 3 Telas' : 'Unfold 3 Screens', Columns3],
+              ['overview', isPt ? 'Canto 3D' : '3D Corner', isPt ? 'Visualizar Quarto 3D Projetado — Canto 3D' : 'Show 3D Projected Room — 3D Corner', Box],
+              ['visitor', isPt ? 'Visão Visitante' : 'Visitor POV', isPt ? 'Visualizar Quarto 3D Projetado — Visão do Visitante' : 'Show 3D Projected Room — Visitor POV', Maximize2],
+              ['ceiling', isPt ? 'Olhar p/ Teto' : 'Look at Ceiling', isPt ? 'Visualizar Quarto 3D Projetado — Olhar para o Teto' : 'Show 3D Projected Room — Look at Ceiling', ArrowUp],
+              ['flat', isPt ? '2D · 3 Telas' : '2D · 3 Screens', isPt ? 'Visualizar Quarto Projetado em 2D — 3 Telas' : 'Show Projected Room in 2D — 3 Screens', Columns3],
             ] as const
-          ).map(([id, label, Icon]) => (
+          ).map(([id, label, ariaLabel, Icon]) => (
             <button
               key={id}
               type="button"
               onClick={() => applyPreset(id)}
-              className={`inline-flex min-h-[34px] items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-semibold transition ${
+              aria-pressed={preset === id}
+              aria-label={ariaLabel}
+              className={`inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-semibold tracking-tight transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
                 preset === id
-                  ? 'border-sky-400/60 bg-sky-400/15 text-sky-200'
-                  : 'border-slate-400/20 bg-white/[0.04] text-slate-300 hover:bg-white/[0.09]'
+                  ? 'border-[#2563eb]/75 bg-[#0c1a36] text-white'
+                  : 'border-[#1e3a66]/65 bg-[#060c1a] text-slate-300 hover:border-[#2563eb]/60 hover:text-white'
               }`}
             >
-              <Icon size={13} />
+              <Icon size={12} aria-hidden="true" />
               <span>{label}</span>
             </button>
           ))}
+
+          <button
+            type="button"
+            onClick={() => setGlobeRotationPaused((v) => !v)}
+            data-testid="simulator-globe-rotation-toggle"
+            aria-pressed={globeRotationPaused}
+            aria-label={
+              globeRotationPaused
+                ? isPt
+                  ? 'Retomar rotação do globo 3D'
+                  : 'Resume 3D globe rotation'
+                : isPt
+                  ? 'Pausar rotação do globo 3D'
+                  : 'Pause 3D globe rotation'
+            }
+            title={
+              globeRotationPaused
+                ? isPt
+                  ? 'Retomar rotação do globo 3D'
+                  : 'Resume 3D globe rotation'
+                : isPt
+                  ? 'Pausar rotação do globo 3D'
+                  : 'Pause 3D globe rotation'
+            }
+            className={`inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1 rounded-full border px-2.5 text-[11px] font-semibold tracking-tight transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
+              globeRotationPaused
+                ? 'border-amber-400/50 bg-amber-400/15 text-amber-200'
+                : 'border-[#1e3a66]/65 bg-[#060c1a] text-slate-300 hover:border-[#2563eb]/60 hover:text-white'
+            }`}
+          >
+            {globeRotationPaused ? <Play size={11} aria-hidden="true" /> : <Pause size={11} aria-hidden="true" />}
+            <span>{isPt ? (globeRotationPaused ? 'Globo Pausado' : 'Pausar Globo') : globeRotationPaused ? 'Globe Paused' : 'Pause Globe'}</span>
+          </button>
 
           {preset !== 'flat' && (
             <button
               type="button"
               onClick={() => setShowSeamGuides((v) => !v)}
-              className={`min-h-[34px] rounded-full border px-2.5 text-[11px] font-medium transition ${
+              aria-pressed={showSeamGuides}
+              className={`min-h-[30px] shrink-0 cursor-pointer rounded-full border px-2.5 text-[11px] font-semibold tracking-tight transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
                 showSeamGuides
-                  ? 'border-slate-400/30 bg-white/[0.07] text-slate-200'
-                  : 'border-slate-400/15 bg-transparent text-slate-400'
+                  ? 'border-[#1e3a66]/65 bg-[#060c1a] text-slate-200 hover:border-[#2563eb]/60'
+                  : 'border-[#1e3a66]/45 bg-transparent text-slate-400 hover:text-slate-200'
               }`}
               title={
                 isPt
@@ -229,7 +304,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
             <button
               type="button"
               onClick={() => setShowControlDock((v) => !v)}
-              className={`inline-flex min-h-[34px] items-center gap-1 rounded-full border px-2.5 text-[11px] font-semibold transition ${
+              className={`inline-flex min-h-[30px] shrink-0 items-center gap-1 rounded-full border px-2.5 text-[11px] font-semibold transition ${
                 showControlDock
                   ? 'border-amber-400/50 bg-amber-400/15 text-amber-200'
                   : 'border-slate-400/20 bg-white/[0.04] text-slate-300'
@@ -244,14 +319,15 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
 
       {/* Main Viewport: Flat 3-Screen Inspection OR Interactive 3D Joined Corner */}
       {preset === 'flat' ? (
-        <div className="grid flex-1 grid-cols-1 gap-3 overflow-auto p-4 lg:grid-cols-3">
+        <div className="@container flex-1 overflow-auto">
+          <div className="grid min-h-full grid-cols-1 content-center gap-3 p-3 @[880px]:grid-cols-3 @[880px]:gap-4 @[880px]:p-4">
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] font-medium text-sky-300 [font-variant-numeric:tabular-nums]">
               1 · {isPt ? 'Parede Esquerda — Globo' : 'Left Wall — Globe'} ·{' '}
               {roomDimensions.leftWall.widthCm}×{roomDimensions.leftWall.heightCm} cm
             </span>
             <div
-              className="w-full overflow-hidden rounded-lg border border-slate-400/25 bg-black"
+              className="pointer-events-none w-full overflow-hidden rounded-lg border border-slate-400/25 bg-black select-none"
               style={{ aspectRatio: String(leftAspect) }}
             >
               <LogicalSceneViewport aspectRatio={leftAspect}>
@@ -261,6 +337,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
                   heightCm={roomDimensions.leftWall.heightCm}
                   aspectRatio={leftAspect}
                   renderContext={embedded ? 'demo' : 'simulator'}
+                  globeRotationPaused={globeRotationPaused}
                 />
               </LogicalSceneViewport>
             </div>
@@ -272,7 +349,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
               {roomDimensions.rightWall.widthCm}×{roomDimensions.rightWall.heightCm} cm
             </span>
             <div
-              className="w-full overflow-hidden rounded-lg border border-slate-400/25 bg-black"
+              className="pointer-events-none w-full overflow-hidden rounded-lg border border-slate-400/25 bg-black select-none"
               style={{ aspectRatio: String(rightAspect) }}
             >
               <LogicalSceneViewport aspectRatio={rightAspect}>
@@ -293,7 +370,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
               {roomDimensions.ceiling.widthCm}×{roomDimensions.ceiling.heightCm} cm
             </span>
             <div
-              className="w-full overflow-hidden rounded-lg border border-slate-400/25 bg-black"
+              className="pointer-events-none w-full overflow-hidden rounded-lg border border-slate-400/25 bg-black select-none"
               style={{ aspectRatio: String(ceilingAspect) }}
             >
               <LogicalSceneViewport aspectRatio={ceilingAspect}>
@@ -306,6 +383,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
                 />
               </LogicalSceneViewport>
             </div>
+          </div>
           </div>
         </div>
       ) : (
@@ -336,7 +414,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
             dragStateRef.current = null;
           }}
           onWheel={(e) => {
-            const next = Math.max(0.62, Math.min(1.85, zoomScale - e.deltaY * 0.0008));
+            const next = Math.max(0.62, Math.min(2.4, zoomScale - e.deltaY * 0.0008));
             setZoomScale(Number(next.toFixed(3)));
           }}
         >
@@ -355,7 +433,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
           >
             {/* 1. Parede Esquerda (x = 0, z ∈ [0, leftW], voltada para +X dentro da sala) */}
             <div
-              className={`absolute overflow-hidden bg-black shadow-2xl ${seamBorderClass}`}
+              className={`pointer-events-none absolute overflow-hidden bg-black shadow-2xl select-none ${seamBorderClass}`}
               style={{
                 left: `${-leftW}px`,
                 top: '0px',
@@ -374,13 +452,14 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
                   heightCm={roomDimensions.leftWall.heightCm}
                   aspectRatio={leftAspect}
                   renderContext={embedded ? 'demo' : 'simulator'}
+                  globeRotationPaused={globeRotationPaused}
                 />
               </LogicalSceneViewport>
             </div>
 
             {/* 2. Parede Direita (z = 0, x ∈ [0, rightW], voltada para +Z dentro da sala) */}
             <div
-              className={`absolute overflow-hidden bg-black shadow-2xl ${seamBorderClass}`}
+              className={`pointer-events-none absolute overflow-hidden bg-black shadow-2xl select-none ${seamBorderClass}`}
               style={{
                 left: '0px',
                 top: '0px',
@@ -403,7 +482,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
 
             {/* 3. Teto (y = 0, x ∈ [0, ceilW], z ∈ [0, ceilD], voltado para baixo +Y para quem olha p/ cima) */}
             <div
-              className={`absolute overflow-hidden bg-black shadow-2xl ${seamBorderClass}`}
+              className={`pointer-events-none absolute overflow-hidden bg-black shadow-2xl select-none ${seamBorderClass}`}
               style={{
                 left: '0px',
                 top: `${-ceilD}px`,
@@ -433,9 +512,9 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
             <button
               type="button"
               onClick={() =>
-                setZoomScale((prev) => Number(Math.min(1.85, prev + 0.15).toFixed(3)))
+                setZoomScale((prev) => Number(Math.min(2.4, prev + 0.15).toFixed(3)))
               }
-              disabled={zoomScale >= 1.85}
+              disabled={zoomScale >= 2.4}
               aria-label={isPt ? 'Aproximar simulação 3D' : 'Zoom in 3D simulation'}
               title={isPt ? 'Aproximar' : 'Zoom in'}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-200 transition hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:cursor-not-allowed disabled:opacity-35"

@@ -318,6 +318,14 @@ function earthJukeboxLanPlugin(): Plugin {
         if (decoded.closed) {
           const prev = clients.get(clientId);
           clients.delete(clientId);
+          if (prev) {
+            const hasRoomController = Array.from(clients.values()).some(
+              (c) => c.room === prev.room && c.role === 'controller'
+            );
+            if (!hasRoomController) {
+              getRoomSnap(prev.room).sync = null;
+            }
+          }
           socket.end();
           if (prev) broadcastPresence(prev.room);
           return;
@@ -368,6 +376,12 @@ function earthJukeboxLanPlugin(): Plugin {
       const cleanup = () => {
         const prev = clients.get(clientId);
         if (clients.delete(clientId) && prev) {
+          const hasRoomController = Array.from(clients.values()).some(
+            (c) => c.room === prev.room && c.role === 'controller'
+          );
+          if (!hasRoomController) {
+            getRoomSnap(prev.room).sync = null;
+          }
           broadcastPresence(prev.room);
         }
       };
