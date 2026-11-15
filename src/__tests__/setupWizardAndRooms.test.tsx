@@ -32,8 +32,13 @@ import {
 } from '../lan/roomSyncTransport';
 import { buildCalibrationGridCircles } from '../projection/calibrationCircles';
 import { applyProjectionPreset } from '../projection/homography';
+import {
+  clampScreenDelayMs,
+  computeEffectiveScreenDelays,
+} from '../projection/screenDelay';
 import { SetupWizardView } from '../views/SetupWizardView';
 import { presetToScenario } from '../views/setup/setupTypes';
+import { ScreenDelayControlPanel } from '../views/admin/ScreenDelayControlPanel';
 import { StepAudioSetup } from '../views/setup/StepAudioSetup';
 import { StepControllerPairing } from '../views/setup/StepControllerPairing';
 import { StepProjectionSetup } from '../views/setup/StepProjectionSetup';
@@ -780,5 +785,77 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
       (globalThis as unknown as { WebSocket: typeof WebSocket }).WebSocket = origWs;
       vi.useRealTimers();
     }
+  });
+
+  it('calcula delays efetivos entre telas e renderiza o Controlador de Delay no Setup e Admin', () => {
+    expect(clampScreenDelayMs(999)).toBe(400);
+    expect(clampScreenDelayMs(-999)).toBe(-400);
+    expect(clampScreenDelayMs('abc')).toBe(0);
+
+    const baseState = applyProjectionPreset('3-projectors');
+    baseState.outputs[1].delayMs = 40;
+    baseState.outputs[2].delayMs = -120; // OUT 2 chegando atrás: força OUT 1 (+160) e OUT 3 (+120) esperarem
+    baseState.outputs[3].delayMs = 0;
+
+    const effective = computeEffectiveScreenDelays(baseState.outputs);
+    expect(effective[1]).toBe(160);
+    expect(effective[2]).toBe(0);
+    expect(effective[3]).toBe(120);
+    expect(Object.keys(baseState.outputs)).toEqual(['1', '2', '3']);
+
+    // Quando apenas OUT 3 está com grade ativa, o botão global indica grade ativa (para ocultá-la)
+    baseState.showGrid = false;
+    baseState.outputs[3].showGrid = true;
+
+    // Preserva delayMs ao alternar topologia
+    const switched = applyProjectionPreset('2-projectors', baseState);
+    expect(switched.outputs[1].delayMs).toBe(40);
+    expect(switched.outputs[2].delayMs).toBe(-120);
+
+    const panelHtml = renderToStaticMarkup(
+      <ScreenDelayControlPanel
+        isPt={true}
+        projectionState={baseState}
+        screenSyncPulseActive={true}
+        calibBeatSeq={4}
+        stepLabelPt="Passo 2D · Sincronia entre Telas"
+        stepLabelEn="Step 2D · Screen-to-Screen Delay"
+        onUpdateOutputDelay={() => {}}
+        onResetScreenDelays={() => {}}
+        onToggleScreenSyncPulse={() => {}}
+      />
+    );
+    expect(panelHtml).toContain('screen-delay-control-panel');
+    expect(panelHtml).toContain('screen-delay-slider-1');
+    expect(panelHtml).toContain('screen-delay-slider-2');
+    expect(panelHtml).toContain('screen-delay-slider-3');
+    expect(panelHtml).toContain('+160 ms');
+    expect(panelHtml).toContain('+120 ms');
+    expect(panelHtml).toContain('btn-screen-sync-pulse');
+    expect(panelHtml).toContain('btn-reset-screen-delays');
+
+    const stepHtml = renderToStaticMarkup(
+      <StepProjectionSetup
+        isPt={true}
+        scenario={3}
+        projectionState={baseState}
+        roomDimensions={DEFAULT_ROOM_DIMENSIONS}
+        baseOrigin="http://localhost:5173"
+        roomCode="ROOM01"
+        lanClients={[]}
+        copiedKey={null}
+        screenSyncPulseActive={false}
+        calibBeatSeq={0}
+        onCopyText={() => {}}
+        onIdentifyOutputs={() => {}}
+        onToggleGlobalShowGrid={() => {}}
+        onResetAllProjectionQuads={() => {}}
+        onUpdateSurfaceQuad={() => {}}
+        onTranslateOutputMesh={() => {}}
+      />
+    );
+    expect(stepHtml).toContain('Controlador de Delay entre as Telas');
+    expect(stepHtml).toContain('screen-delay-slider-3');
+    expect(stepHtml).toContain('Ocultar Guia dos 4 Cantos');
   });
 });

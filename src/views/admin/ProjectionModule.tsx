@@ -21,6 +21,7 @@ import {
 } from '../../projection/homography';
 import { AdminSelect } from './AdminSelect';
 import { DimensionCmField } from './DimensionCmField';
+import { ScreenDelayControlPanel } from './ScreenDelayControlPanel';
 import {
   ADMIN_FOCUS,
   ADMIN_PANEL_CLASS,
@@ -78,6 +79,10 @@ interface ProjectionModuleProps {
   onUpdateEdgeMask: (key: CalibrationSurfaceKey, patch: Partial<EdgeFeatherMask>) => void;
   onCopyText: (key: string, text: string) => void;
   onUpdateDimension: (surface: SurfaceId, field: 'widthCm' | 'heightCm', raw: string) => void;
+  screenSyncPulseActive?: boolean;
+  calibBeatSeq?: number;
+  onResetScreenDelays?: () => void;
+  onToggleScreenSyncPulse?: () => void;
 }
 
 function lerpSvgPt(
@@ -112,6 +117,10 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
   onUpdateEdgeMask,
   onCopyText,
   onUpdateDimension,
+  screenSyncPulseActive = false,
+  calibBeatSeq = 0,
+  onResetScreenDelays,
+  onToggleScreenSyncPulse,
 }) => {
   const activeWarpSurfaces = projectionState.outputs[selectedWarpOut].surfaces;
   const [maskSurfaceChoice, setMaskSurfaceChoice] = useState<SurfaceId>('leftWall');
@@ -318,20 +327,25 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
                   })}
 
                   <div className="col-span-4 flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onUpdateOutputConfig(outId, { showGrid: !cfg.showGrid });
-                      }}
-                      className={`min-h-[40px] rounded-xl border px-2.5 text-xs font-medium transition ${ADMIN_FOCUS} ${
-                        cfg.showGrid
-                          ? 'border-white bg-white font-semibold text-[#060913]'
-                          : 'border-[#1e3a66]/55 bg-[#060c1a] text-slate-300 hover:text-white'
-                      }`}
-                    >
-                      {isPt ? 'Grade' : 'Grid'}
-                    </button>
+                    {(() => {
+                      const isOutputGridOn = Boolean(projectionState.showGrid || cfg.showGrid);
+                      return (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onUpdateOutputConfig(outId, { showGrid: !isOutputGridOn });
+                          }}
+                          className={`min-h-[40px] rounded-xl border px-2.5 text-xs font-medium transition ${ADMIN_FOCUS} ${
+                            isOutputGridOn
+                              ? 'border-white bg-white font-semibold text-[#060913]'
+                              : 'border-[#1e3a66]/55 bg-[#060c1a] text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          {isPt ? 'Grade' : 'Grid'}
+                        </button>
+                      );
+                    })()}
 
                     <button
                       type="button"
@@ -403,18 +417,25 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                onClick={onToggleGlobalShowGrid}
-                className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium transition ${ADMIN_FOCUS} ${
-                  projectionState.showGrid
-                    ? 'border-white bg-white font-semibold text-[#060913]'
-                    : 'border-[#1e3a66] bg-[#060c1a] text-slate-300 hover:border-[#2563eb] hover:text-white'
-                }`}
-              >
-                <Grid size={13} />
-                <span>{isPt ? 'Grade Global' : 'Global Grid'}</span>
-              </button>
+              {(() => {
+                const anyGridOn =
+                  projectionState.showGrid ||
+                  PROJECTOR_OUT_IDS.some((id) => Boolean(projectionState.outputs[id]?.showGrid));
+                return (
+                  <button
+                    type="button"
+                    onClick={onToggleGlobalShowGrid}
+                    className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium transition ${ADMIN_FOCUS} ${
+                      anyGridOn
+                        ? 'border-white bg-white font-semibold text-[#060913]'
+                        : 'border-[#1e3a66] bg-[#060c1a] text-slate-300 hover:border-[#2563eb] hover:text-white'
+                    }`}
+                  >
+                    <Grid size={13} />
+                    <span>{isPt ? 'Grade Global' : 'Global Grid'}</span>
+                  </button>
+                );
+              })()}
               <button
                 type="button"
                 onClick={() => onResetSingleOutputQuads(selectedWarpOut)}
@@ -890,6 +911,17 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
           </div>
         </section>
       </div>
+
+      {/* 3. Controlador de Delay entre Telas */}
+      <ScreenDelayControlPanel
+        isPt={isPt}
+        projectionState={projectionState}
+        screenSyncPulseActive={screenSyncPulseActive}
+        calibBeatSeq={calibBeatSeq}
+        onUpdateOutputDelay={(outId, delayMs) => onUpdateOutputConfig(outId, { delayMs })}
+        onResetScreenDelays={() => onResetScreenDelays?.()}
+        onToggleScreenSyncPulse={() => onToggleScreenSyncPulse?.()}
+      />
     </>
   );
 };

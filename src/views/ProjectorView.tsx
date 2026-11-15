@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ProjectorDelayBoundary,
   useAudioAdmin,
   useExperience,
   useProjectionAdmin,
@@ -15,6 +16,7 @@ import {
   Point2D,
   QuadCorners,
 } from '../projection/homography';
+import { computeEffectiveScreenDelays } from '../projection/screenDelay';
 import { CeilingScene } from '../scenes/CeilingScene';
 import { LeftWallScene } from '../scenes/LeftWallScene';
 import { RightWallScene } from '../scenes/RightWallScene';
@@ -59,7 +61,8 @@ const SURFACE_META: Record<
  */
 export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
   const { roomDimensions, lang, sceneReplayKey } = useExperience();
-  const { calibTestMode, calibBeatSeq, speakerCalibration } = useAudioAdmin();
+  const { calibTestMode, calibBeatSeq, screenSyncPulseActive, speakerCalibration } =
+    useAudioAdmin();
   const {
     projectionState,
     updateOutputConfig,
@@ -71,20 +74,40 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
   const containerRef = useRef<HTMLElement | null>(null);
   const [beatFlashOn, setBeatFlashOn] = useState<boolean>(false);
 
+  const effectiveScreenDelays = useMemo(
+    () => computeEffectiveScreenDelays(projectionState.outputs),
+    [projectionState.outputs]
+  );
+  const outputDelayMs = effectiveScreenDelays[outId] ?? 0;
+
   useEffect(() => {
     if (calibBeatSeq <= 0) {
       setBeatFlashOn(false);
       return;
     }
-    setBeatFlashOn(true);
-    const timer = window.setTimeout(() => setBeatFlashOn(false), 115);
-    return () => window.clearTimeout(timer);
-  }, [calibBeatSeq]);
+    let offTimer: number | undefined;
+    const triggerFlash = () => {
+      setBeatFlashOn(true);
+      offTimer = window.setTimeout(() => setBeatFlashOn(false), 115);
+    };
+    if (outputDelayMs <= 0) {
+      triggerFlash();
+      return () => {
+        if (offTimer !== undefined) window.clearTimeout(offTimer);
+      };
+    }
+    const startTimer = window.setTimeout(triggerFlash, outputDelayMs);
+    return () => {
+      window.clearTimeout(startTimer);
+      if (offTimer !== undefined) window.clearTimeout(offTimer);
+    };
+  }, [calibBeatSeq, outputDelayMs]);
 
   const isClickSyncActive =
     calibTestMode.kind === 'delay-click-multi' ||
     calibTestMode.kind === 'delay-click-all' ||
-    calibTestMode.kind === 'delay-click';
+    calibTestMode.kind === 'delay-click' ||
+    screenSyncPulseActive;
 
   const [viewport, setViewport] = useState<{ w: number; h: number }>(() => ({
     w: typeof window !== 'undefined' ? Math.max(1, window.innerWidth) : 1920,
@@ -149,7 +172,7 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'c' || e.key === 'C') {
-        updateOutputConfig(outId, { showGrid: !outputCfg.showGrid });
+        updateOutputConfig(outId, { showGrid: !isGridVisible });
       } else if ((e.key === 'r' || e.key === 'R') && isGridVisible) {
         resetSingleOutputQuads(outId);
       } else if (e.key === 'b' || e.key === 'B') {
@@ -232,36 +255,37 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
       style={{ backgroundColor: '#000000' }}
       data-testid={`projector-view-${outId}`}
     >
-      {!isBlackout &&
-        outputCfg.surfaces.map((surfaceId) => {
-          const quadKey = makeSurfaceQuadKey(outId, surfaceId);
-          const meta = SURFACE_META[surfaceId];
-          const aspect = getAspectForSurface(surfaceId);
-          const srcW = Math.round(BASE_H * Math.max(0.4, Math.min(2.5, aspect || BASE_W / BASE_H)));
-          const srcH = BASE_H;
-          const normQuad = projectionState.quads[quadKey];
-          const dstPixels: [Point2D, Point2D, Point2D, Point2D] = [
-            { x: normQuad[0].x * viewport.w, y: normQuad[0].y * viewport.h },
-            { x: normQuad[1].x * viewport.w, y: normQuad[1].y * viewport.h },
-            { x: normQuad[2].x * viewport.w, y: normQuad[2].y * viewport.h },
-            { x: normQuad[3].x * viewport.w, y: normQuad[3].y * viewport.h },
-          ];
-          const fittedPixels = fitQuadAspectContain(srcW, srcH, dstPixels);
-          const matrix3d = computeHomographyMatrix3d(srcW, srcH, fittedPixels);
+      <ProjectorDelayBoundary delayMs={outputDelayMs}>
+        {!isBlackout &&
+          outputCfg.surfaces.map((surfaceId) => {
+            const quadKey = makeSurfaceQuadKey(outId, surfaceId);
+            const meta = SURFACE_META[surfaceId];
+            const aspect = getAspectForSurface(surfaceId);
+            const srcW = Math.round(BASE_H * Math.max(0.4, Math.min(2.5, aspect || BASE_W / BASE_H)));
+            const srcH = BASE_H;
+            const normQuad = projectionState.quads[quadKey];
+            const dstPixels: [Point2D, Point2D, Point2D, Point2D] = [
+              { x: normQuad[0].x * viewport.w, y: normQuad[0].y * viewport.h },
+              { x: normQuad[1].x * viewport.w, y: normQuad[1].y * viewport.h },
+              { x: normQuad[2].x * viewport.w, y: normQuad[2].y * viewport.h },
+              { x: normQuad[3].x * viewport.w, y: normQuad[3].y * viewport.h },
+            ];
+            const fittedPixels = fitQuadAspectContain(srcW, srcH, dstPixels);
+            const matrix3d = computeHomographyMatrix3d(srcW, srcH, fittedPixels);
 
-          return (
-            <div
-              key={`${quadKey}-${sceneReplayKey}`}
-              className="absolute top-0 left-0 overflow-hidden bg-black"
-              style={{
-                width: `${srcW}px`,
-                height: `${srcH}px`,
-                transformOrigin: '0 0',
-                transform: matrix3d,
-                backgroundColor: '#000000',
-              }}
-            >
-              {renderSurfaceScene(surfaceId, aspect)}
+            return (
+              <div
+                key={`${quadKey}-${sceneReplayKey}`}
+                className="absolute top-0 left-0 overflow-hidden bg-black"
+                style={{
+                  width: `${srcW}px`,
+                  height: `${srcH}px`,
+                  transformOrigin: '0 0',
+                  transform: matrix3d,
+                  backgroundColor: '#000000',
+                }}
+              >
+                {renderSurfaceScene(surfaceId, aspect)}
 
               {(() => {
                 const edgeMask = projectionState.edgeMasks?.[quadKey];
@@ -407,8 +431,9 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
                 );
               })()}
             </div>
-          );
-        })}
+            );
+          })}
+      </ProjectorDelayBoundary>
 
       {/* Handles arrastáveis de Corner-Pin (com pins compartilhados soldados em 1 única alça limpa) */}
       {!isBlackout &&
@@ -467,7 +492,13 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
               }`}
             />
             <div className="mt-3 text-xl font-bold tracking-wider uppercase">
-              {isPt ? 'SINCRONIA VÍDEO × SOM' : 'VIDEO × AUDIO SYNC'}
+              {screenSyncPulseActive
+                ? isPt
+                  ? 'SINCRONIA ENTRE TELAS'
+                  : 'SCREEN TO SCREEN SYNC'
+                : isPt
+                  ? 'SINCRONIA VÍDEO × SOM'
+                  : 'VIDEO × AUDIO SYNC'}
             </div>
             <div
               className={`mt-1 text-sm font-semibold ${
@@ -475,9 +506,15 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
               }`}
             >
               OUT {outId} ·{' '}
-              {(speakerCalibration.avOffsetMs ?? 0) > 0
-                ? `+${speakerCalibration.avOffsetMs} ms`
-                : `${speakerCalibration.avOffsetMs ?? 0} ms`}
+              {isPt ? 'Delay tela' : 'Screen delay'}: +{outputDelayMs} ms
+              {!screenSyncPulseActive && (
+                <>
+                  {' · A/V '}
+                  {(speakerCalibration.avOffsetMs ?? 0) > 0
+                    ? `+${speakerCalibration.avOffsetMs} ms`
+                    : `${speakerCalibration.avOffsetMs ?? 0} ms`}
+                </>
+              )}
             </div>
           </div>
         </div>

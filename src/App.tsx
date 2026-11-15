@@ -68,8 +68,7 @@ export function parseRouteFromSearch(
   }
 
   const rawOut = Number(params.get('out') ?? '1');
-  const outId: ProjectorOutId =
-    rawOut === 2 ? 2 : rawOut === 3 ? 3 : rawOut === 4 ? 4 : 1;
+  const outId: ProjectorOutId = rawOut === 2 ? 2 : rawOut === 3 ? 3 : 1;
 
   return { view, outId };
 }

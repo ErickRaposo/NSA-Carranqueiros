@@ -4,7 +4,12 @@ import {
   DEFAULT_ROOM_DIMENSIONS,
   formatMetersPair,
 } from '../../experience/roomDimensions';
-import { LanPeerInfo, ProjectorOutId, RoomDimensions } from '../../experience/types';
+import {
+  LanPeerInfo,
+  PROJECTOR_OUT_IDS,
+  ProjectorOutId,
+  RoomDimensions,
+} from '../../experience/types';
 import { buildViewUrl } from '../../lan/roomCode';
 import {
   CalibrationSurfaceKey,
@@ -21,6 +26,7 @@ import {
   SURFACE_UI_META,
 } from '../admin/adminMeta';
 import { DimensionCmField } from '../admin/DimensionCmField';
+import { ScreenDelayControlPanel } from '../admin/ScreenDelayControlPanel';
 import { ScreenScenario } from './setupTypes';
 
 interface StepProjectionSetupProps {
@@ -32,6 +38,8 @@ interface StepProjectionSetupProps {
   roomCode: string | null;
   lanClients: LanPeerInfo[];
   copiedKey: string | null;
+  screenSyncPulseActive?: boolean;
+  calibBeatSeq?: number;
   onCopyText: (key: string, text: string) => void;
   onIdentifyOutputs: () => void;
   onToggleGlobalShowGrid: () => void;
@@ -49,6 +57,9 @@ interface StepProjectionSetupProps {
     rawValue: string
   ) => void;
   onResetRoomDimensions?: () => void;
+  onUpdateOutputDelay?: (outId: ProjectorOutId, delayMs: number) => void;
+  onResetScreenDelays?: () => void;
+  onToggleScreenSyncPulse?: () => void;
 }
 
 type LocalDragState =
@@ -81,6 +92,11 @@ export const StepProjectionSetup: React.FC<StepProjectionSetupProps> = ({
   onTranslateOutputMesh,
   onUpdateWallDimension,
   onResetRoomDimensions,
+  screenSyncPulseActive = false,
+  calibBeatSeq = 0,
+  onUpdateOutputDelay,
+  onResetScreenDelays,
+  onToggleScreenSyncPulse,
 }) => {
   const activeOutputs = ([1, 2, 3] as ProjectorOutId[]).slice(0, scenario);
   const [selectedOut, setSelectedOut] = useState<ProjectorOutId>(1);
@@ -403,26 +419,33 @@ export const StepProjectionSetup: React.FC<StepProjectionSetupProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={onToggleGlobalShowGrid}
-              className={`inline-flex min-h-[44px] items-center gap-2 rounded-full border px-4 text-xs font-semibold transition ${ADMIN_FOCUS} ${
-                projectionState.showGrid
-                  ? 'border-white bg-white text-[#060913]'
-                  : 'border-[#2563eb] bg-[#0c1a36] text-white hover:bg-[#142850]'
-              }`}
-            >
-              <Grid size={14} />
-              <span>
-                {projectionState.showGrid
-                  ? isPt
-                    ? 'Ocultar Guia dos 4 Cantos'
-                    : 'Hide 4-Corner Guide'
-                  : isPt
-                    ? 'Mostrar Guia dos 4 Cantos'
-                    : 'Show 4-Corner Guide'}
-              </span>
-            </button>
+            {(() => {
+              const isAnyGridVisible =
+                projectionState.showGrid ||
+                PROJECTOR_OUT_IDS.some((id) => Boolean(projectionState.outputs[id]?.showGrid));
+              return (
+                <button
+                  type="button"
+                  onClick={onToggleGlobalShowGrid}
+                  className={`inline-flex min-h-[44px] items-center gap-2 rounded-full border px-4 text-xs font-semibold transition ${ADMIN_FOCUS} ${
+                    isAnyGridVisible
+                      ? 'border-white bg-white text-[#060913]'
+                      : 'border-[#2563eb] bg-[#0c1a36] text-white hover:bg-[#142850]'
+                  }`}
+                >
+                  <Grid size={14} />
+                  <span>
+                    {isAnyGridVisible
+                      ? isPt
+                        ? 'Ocultar Guia dos 4 Cantos'
+                        : 'Hide 4-Corner Guide'
+                      : isPt
+                        ? 'Mostrar Guia dos 4 Cantos'
+                        : 'Show 4-Corner Guide'}
+                  </span>
+                </button>
+              );
+            })()}
 
             <button
               type="button"
@@ -597,6 +620,19 @@ export const StepProjectionSetup: React.FC<StepProjectionSetupProps> = ({
             : 'Tip: once the corners fit your walls, click "Hide 4-Corner Guide" (or simply continue — we automatically hide the alignment grid when launching).'}
         </div>
       </section>
+
+      {/* Sub-etapa D: Controlador de Delay entre as Telas */}
+      <ScreenDelayControlPanel
+        isPt={isPt}
+        projectionState={projectionState}
+        screenSyncPulseActive={screenSyncPulseActive}
+        calibBeatSeq={calibBeatSeq}
+        stepLabelPt="Passo 2D · Sincronia entre Telas"
+        stepLabelEn="Step 2D · Screen-to-Screen Delay"
+        onUpdateOutputDelay={(outId, delayMs) => onUpdateOutputDelay?.(outId, delayMs)}
+        onResetScreenDelays={() => onResetScreenDelays?.()}
+        onToggleScreenSyncPulse={() => onToggleScreenSyncPulse?.()}
+      />
     </div>
   );
 };

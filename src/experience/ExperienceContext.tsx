@@ -81,6 +81,7 @@ import {
   translateOutputSurfacesTogether,
   updateQuadWithSharedSeams,
 } from '../projection/homography';
+import { clampScreenDelayMs } from '../projection/screenDelay';
 import {
   advanceLoopProgress,
   buildBeatTimeline,
@@ -113,6 +114,7 @@ import {
   LiveNoteEvent,
   MissionPhase,
   PILOT_COUNTRY_IDS,
+  PROJECTOR_OUT_IDS,
   ProjectorOutId,
   RoomDimensions,
   SoloableLayerId,
@@ -131,6 +133,7 @@ export interface AudioAdminContextValue {
   speakerCalibration: AudioCalibrationState;
   calibTestMode: CalibrationTestMode;
   calibBeatSeq: number;
+  screenSyncPulseActive: boolean;
   visualDelayMs: number;
   outputDevices: AudioDeviceOption[];
   outputSupportStatus: AudioOutputSupportStatus;
@@ -148,6 +151,7 @@ export interface AudioAdminContextValue {
   togglePinkNoiseSpeaker: (speakerId: SpeakerSlotId) => void;
   toggleDelayClickSpeaker: (speakerId: SpeakerSlotId) => void;
   toggleHeadphoneDelayClick: () => void;
+  toggleScreenSyncPulse: () => void;
   startPinkNoiseSingle: (speakerId: SpeakerSlotId) => void;
   startPinkNoiseAB: (targetSpeakerId: SpeakerSlotId) => void;
   startDelayClickTest: (targetSpeakerId: SpeakerSlotId) => void;
@@ -163,6 +167,7 @@ export interface ProjectionAdminContextValue {
   selectProjectionPreset: (preset: Exclude<ProjectionTopologyPreset, 'custom'>) => void;
   toggleOutputSurface: (outId: ProjectorOutId, surfaceId: SurfaceId) => void;
   updateOutputConfig: (outId: ProjectorOutId, patch: Partial<ProjectorOutputConfig>) => void;
+  resetScreenDelays: () => void;
   updateSurfaceQuad: (key: CalibrationSurfaceKey, quad: QuadCorners) => void;
   translateOutputMesh: (
     outId: ProjectorOutId,
@@ -370,11 +375,15 @@ function calibModeToSignalCommand(mode: CalibrationTestMode): RemoteCalibSignalC
 const ExperienceContext = createContext<ExperienceContextValue | null>(null);
 const AudioAdminContext = createContext<AudioAdminContextValue | null>(null);
 const ProjectionAdminContext = createContext<ProjectionAdminContextValue | null>(null);
+const GetLiveFrameWithDelayContext = createContext<
+  ((extraDelayMs: number) => LiveFrameSnapshot) | null
+>(null);
 
 type RemoteCalibSignalCommand =
   | { action: 'stop' }
   | { action: 'pink-multi'; speakers: SpeakerSlotId[] }
   | { action: 'delay-click-multi'; speakers: SpeakerSlotId[]; headphones?: boolean }
+  | { action: 'screen-pulse'; active: boolean }
   | { action: 'calib-beat'; beatSeq: number }
   | { action: 'pink-single'; speakerId: SpeakerSlotId }
   | { action: 'pink-ab'; targetSpeakerId: SpeakerSlotId }
@@ -584,6 +593,9 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   );
   const [calibTestMode, setCalibTestMode] = useState<CalibrationTestMode>({ kind: 'off' });
   const [calibBeatSeq, setCalibBeatSeq] = useState<number>(0);
+  const [screenSyncPulseActive, setScreenSyncPulseActive] = useState<boolean>(false);
+  const [screenSyncPulseOrigin, setScreenSyncPulseOrigin] = useState<boolean>(false);
+  const screenPulseSeqRef = useRef<number>(1000);
   const [outputDevices, setOutputDevices] = useState<AudioDeviceOption[]>([]);
   const [speakerSinkStatuses, setSpeakerSinkStatuses] = useState<SpeakerSinkStatusMap>({
     speaker1: { status: 'default', engine: 'native' },
@@ -1238,48 +1250,58 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     [audioLevels, liveEvents, masterGain, progress01, speakerCalibration]
   );
 
-  const getLiveFrame = useCallback((): LiveFrameSnapshot => {
-    const pb = playbackRef.current;
-    const eng = audioEngineRef.current;
-    const hwProg = eng?.getPlayheadProgress01() ?? null;
-    const rawProg = hwProg !== null ? hwProg : liveProgressRef.current;
-    const prog = shiftProgressBackwardBySeconds(
-      rawProg,
-      visualDelayMsRef.current / 1000,
-      pb.durationSeconds,
-      barLoopRef.current,
-      pb.totalBars
-    );
-    const active = pb.isPlaying || scrubPreviewActive;
+  const computeLiveFrameAtDelay = useCallback(
+    (extraDelayMs = 0): LiveFrameSnapshot => {
+      const pb = playbackRef.current;
+      const eng = audioEngineRef.current;
+      const hwProg = eng?.getPlayheadProgress01() ?? null;
+      const rawProg = hwProg !== null ? hwProg : liveProgressRef.current;
+      const totalVisualDelaySec =
+        (visualDelayMsRef.current + Math.max(0, extraDelayMs)) / 1000;
+      const prog = shiftProgressBackwardBySeconds(
+        rawProg,
+        totalVisualDelaySec,
+        pb.durationSeconds,
+        barLoopRef.current,
+        pb.totalBars
+      );
+      const active = pb.isPlaying || scrubPreviewActive;
 
-    const activeNotes = active ? extractRealNotesAtProgress(prog) : [];
+      const activeNotes = active ? extractRealNotesAtProgress(prog) : [];
 
-    let vu = ZERO_VU;
-    let masterDbFs = -99;
-    if (eng && eng.isStemAudioPlaying()) {
-      const meters = eng.readLiveMeters();
-      vu = meters.vu;
-      masterDbFs = meters.masterDbFs;
-    } else if (active) {
-      vu = computeEstimatedMetersFromNotes(true, activeNotes);
-      masterDbFs = vu.master > 1e-4 ? Number((20 * Math.log10(vu.master)).toFixed(1)) : -99;
-    }
+      let vu = ZERO_VU;
+      let masterDbFs = -99;
+      if (eng && eng.isStemAudioPlaying()) {
+        const meters = eng.readLiveMeters();
+        vu = meters.vu;
+        masterDbFs = meters.masterDbFs;
+      } else if (active) {
+        vu = computeEstimatedMetersFromNotes(true, activeNotes);
+        masterDbFs = vu.master > 1e-4 ? Number((20 * Math.log10(vu.master)).toFixed(1)) : -99;
+      }
 
-    const yc = countryMetaRef.current?.studio?.yellowCounts;
-    const lightningCount =
-      yc && yc.length > 0
-        ? yc[Math.min(yc.length - 1, Math.floor(prog * yc.length))] ?? 0
-        : activeNotes.filter((n) => n.layer === 'melody' || n.layer === 'sparkle').length;
+      const yc = countryMetaRef.current?.studio?.yellowCounts;
+      const lightningCount =
+        yc && yc.length > 0
+          ? yc[Math.min(yc.length - 1, Math.floor(prog * yc.length))] ?? 0
+          : activeNotes.filter((n) => n.layer === 'melody' || n.layer === 'sparkle').length;
 
-    return {
-      currentTime: prog * pb.durationSeconds,
-      progress01: prog,
-      vu,
-      masterDbFs,
-      activeNotes,
-      lightningCount,
-    };
-  }, [computeEstimatedMetersFromNotes, extractRealNotesAtProgress, scrubPreviewActive]);
+      return {
+        currentTime: prog * pb.durationSeconds,
+        progress01: prog,
+        vu,
+        masterDbFs,
+        activeNotes,
+        lightningCount,
+      };
+    },
+    [computeEstimatedMetersFromNotes, extractRealNotesAtProgress, scrubPreviewActive]
+  );
+
+  const getLiveFrame = useCallback(
+    (): LiveFrameSnapshot => computeLiveFrameAtDelay(0),
+    [computeLiveFrameAtDelay]
+  );
 
   const applyIncomingSync = useCallback((data: SyncPayload) => {
     if (!data || data.senderId === senderIdRef.current) return;
@@ -1402,10 +1424,19 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       setCalibBeatSeq(cmd.beatSeq);
       return;
     }
+    if (cmd.action === 'screen-pulse') {
+      setScreenSyncPulseActive(cmd.active);
+      if (!cmd.active) {
+        setScreenSyncPulseOrigin(false);
+      }
+      return;
+    }
 
     // Abas silenciosas (como ?view=projector) refletem o estado visual do Pulso Rítmico sem emitir som
     if (localAudioMutedRef.current) {
       if (cmd.action === 'stop') {
+        setScreenSyncPulseActive(false);
+        setScreenSyncPulseOrigin(false);
         setCalibTestMode({ kind: 'off' });
       } else if (cmd.action === 'delay-click-multi') {
         setCalibTestMode({
@@ -1426,6 +1457,8 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     const eng = audioEngineRef.current;
     if (!eng) return;
     if (cmd.action === 'stop') {
+      setScreenSyncPulseActive(false);
+      setScreenSyncPulseOrigin(false);
       eng.stopCalibrationSignal();
     } else if (cmd.action === 'pink-multi') {
       eng.setPinkNoiseSpeakers(cmd.speakers);
@@ -2204,16 +2237,41 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   const updateOutputConfig = useCallback(
     (outId: ProjectorOutId, patch: Partial<ProjectorOutputConfig>) => {
       setProjectionState((prev) => {
+        const sanitizedPatch: Partial<ProjectorOutputConfig> =
+          patch.delayMs !== undefined
+            ? { ...patch, delayMs: clampScreenDelayMs(patch.delayMs) }
+            : patch;
+        const nextOutputs = { ...prev.outputs };
+        if (sanitizedPatch.showGrid !== undefined) {
+          for (const id of PROJECTOR_OUT_IDS) {
+            if (id === outId) {
+              nextOutputs[id] = {
+                ...prev.outputs[id],
+                ...sanitizedPatch,
+                outId: id,
+              };
+            } else if (prev.showGrid && sanitizedPatch.showGrid === false) {
+              nextOutputs[id] = {
+                ...prev.outputs[id],
+                showGrid: true,
+              };
+            }
+          }
+        } else {
+          nextOutputs[outId] = {
+            ...prev.outputs[outId],
+            ...sanitizedPatch,
+            outId,
+          };
+        }
+        const nextShowGrid =
+          sanitizedPatch.showGrid !== undefined
+            ? PROJECTOR_OUT_IDS.every((id) => Boolean(nextOutputs[id]?.showGrid))
+            : prev.showGrid;
         const next: ProjectionCalibrationState = {
           ...prev,
-          outputs: {
-            ...prev.outputs,
-            [outId]: {
-              ...prev.outputs[outId],
-              ...patch,
-              outId,
-            },
-          },
+          showGrid: nextShowGrid,
+          outputs: nextOutputs,
         };
         publishProjectionUpdate(next, true);
         return next;
@@ -2221,6 +2279,24 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     },
     [publishProjectionUpdate]
   );
+
+  const resetScreenDelays = useCallback(() => {
+    setProjectionState((prev) => {
+      const nextOutputs = { ...prev.outputs };
+      for (const outId of PROJECTOR_OUT_IDS) {
+        nextOutputs[outId] = {
+          ...prev.outputs[outId],
+          delayMs: 0,
+        };
+      }
+      const next: ProjectionCalibrationState = {
+        ...prev,
+        outputs: nextOutputs,
+      };
+      publishProjectionUpdate(next, true);
+      return next;
+    });
+  }, [publishProjectionUpdate]);
 
   const updateSurfaceQuad = useCallback(
     (key: CalibrationSurfaceKey, quad: QuadCorners) => {
@@ -2296,18 +2372,28 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   const resetAllProjectionQuads = useCallback(() => {
     setProjectionState((prev) => {
       const defaults = createDefaultCalibrationState();
+      const clearedOutputs = { ...prev.outputs };
+      for (const id of PROJECTOR_OUT_IDS) {
+        clearedOutputs[id] = {
+          ...clearedOutputs[id],
+          showGrid: false,
+          blackout: false,
+        };
+      }
       const next =
         prev.preset === 'custom'
           ? {
               ...prev,
               showGrid: false,
               globalBlackout: false,
+              outputs: clearedOutputs,
               quads: defaults.quads,
               edgeMasks: defaults.edgeMasks,
             }
           : applyProjectionPreset(prev.preset, {
               ...prev,
               showGrid: false,
+              outputs: clearedOutputs,
               edgeMasks: defaults.edgeMasks,
             });
       publishProjectionUpdate(next, true);
@@ -2344,10 +2430,20 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
 
   const toggleGlobalShowGrid = useCallback(() => {
     setProjectionState((prev) => {
-      const nextVal = !prev.showGrid;
+      const anyCurrentlyOn =
+        prev.showGrid || PROJECTOR_OUT_IDS.some((id) => Boolean(prev.outputs[id]?.showGrid));
+      const nextVal = !anyCurrentlyOn;
+      const nextOutputs = { ...prev.outputs };
+      for (const id of PROJECTOR_OUT_IDS) {
+        nextOutputs[id] = {
+          ...nextOutputs[id],
+          showGrid: nextVal,
+        };
+      }
       const next: ProjectionCalibrationState = {
         ...prev,
         showGrid: nextVal,
+        outputs: nextOutputs,
       };
       publishProjectionUpdate(next, true);
       return next;
@@ -2574,12 +2670,43 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     broadcastCalibCommand({ action: 'pink-all' });
   }, [broadcastCalibCommand]);
 
+  const toggleScreenSyncPulse = useCallback(() => {
+    setScreenSyncPulseActive((prev) => {
+      const next = !prev;
+      setScreenSyncPulseOrigin(next);
+      broadcastCalibCommand({ action: 'screen-pulse', active: next });
+      return next;
+    });
+  }, [broadcastCalibCommand]);
+
+  useEffect(() => {
+    if (!screenSyncPulseOrigin || !screenSyncPulseActive) return;
+    const isAudioClickRunning =
+      calibTestMode.kind === 'delay-click' ||
+      calibTestMode.kind === 'delay-click-all' ||
+      calibTestMode.kind === 'delay-click-multi';
+    if (isAudioClickRunning) return;
+
+    const emitVisualBeat = () => {
+      const nextSeq = screenPulseSeqRef.current + 1;
+      screenPulseSeqRef.current = nextSeq;
+      setCalibBeatSeq(nextSeq);
+      broadcastCalibCommand({ action: 'calib-beat', beatSeq: nextSeq });
+    };
+
+    emitVisualBeat();
+    const timer = window.setInterval(emitVisualBeat, 750);
+    return () => window.clearInterval(timer);
+  }, [broadcastCalibCommand, calibTestMode.kind, screenSyncPulseActive, screenSyncPulseOrigin]);
+
   const startDelayClickAll = useCallback(() => {
     audioEngineRef.current?.startDelayClickAll();
     broadcastCalibCommand({ action: 'delay-click-all' });
   }, [broadcastCalibCommand]);
 
   const stopCalibrationSignal = useCallback(() => {
+    setScreenSyncPulseActive(false);
+    setScreenSyncPulseOrigin(false);
     audioEngineRef.current?.stopCalibrationSignal();
     broadcastCalibCommand({ action: 'stop' });
   }, [broadcastCalibCommand]);
@@ -2881,6 +3008,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       speakerCalibration,
       calibTestMode,
       calibBeatSeq,
+      screenSyncPulseActive,
       visualDelayMs,
       outputDevices,
       outputSupportStatus,
@@ -2898,6 +3026,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       togglePinkNoiseSpeaker,
       toggleDelayClickSpeaker,
       toggleHeadphoneDelayClick,
+      toggleScreenSyncPulse,
       startPinkNoiseSingle,
       startPinkNoiseAB,
       startDelayClickTest,
@@ -2915,6 +3044,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       refreshOutputDevices,
       resetSpeakerCalibration,
       retrySpeakerSink,
+      screenSyncPulseActive,
       setIsolatedSpeakerSlot,
       setReferenceSpeaker,
       speakerCalibration,
@@ -2928,6 +3058,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       toggleDelayClickSpeaker,
       toggleHeadphoneDelayClick,
       togglePinkNoiseSpeaker,
+      toggleScreenSyncPulse,
       unlockAudioContextLegacy,
       unlockOutputDevices,
       updateAvOffsetMs,
@@ -2943,6 +3074,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       selectProjectionPreset,
       toggleOutputSurface,
       updateOutputConfig,
+      resetScreenDelays,
       updateSurfaceQuad,
       translateOutputMesh,
       updateEdgeMask,
@@ -2955,6 +3087,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     [
       projectionState,
       resetAllProjectionQuads,
+      resetScreenDelays,
       resetSingleOutputQuads,
       selectProjectionPreset,
       toggleGlobalBlackout,
@@ -3145,13 +3278,178 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   );
 
   return (
-    <ExperienceContext.Provider value={value}>
-      <AudioAdminContext.Provider value={audioAdminValue}>
-        <ProjectionAdminContext.Provider value={projectionAdminValue}>
-          {children}
-        </ProjectionAdminContext.Provider>
-      </AudioAdminContext.Provider>
-    </ExperienceContext.Provider>
+    <GetLiveFrameWithDelayContext.Provider value={computeLiveFrameAtDelay}>
+      <ExperienceContext.Provider value={value}>
+        <AudioAdminContext.Provider value={audioAdminValue}>
+          <ProjectionAdminContext.Provider value={projectionAdminValue}>
+            {children}
+          </ProjectionAdminContext.Provider>
+        </AudioAdminContext.Provider>
+      </ExperienceContext.Provider>
+    </GetLiveFrameWithDelayContext.Provider>
+  );
+};
+
+interface DelayedDiscreteSnapshot {
+  country: ExperienceContextValue['country'];
+  lang: ExperienceContextValue['lang'];
+  storyStep: ExperienceContextValue['storyStep'];
+  missionPhase: ExperienceContextValue['missionPhase'];
+  sceneReplayKey: ExperienceContextValue['sceneReplayKey'];
+  loopSingleBar: ExperienceContextValue['loopSingleBar'];
+  barLoop: ExperienceContextValue['barLoop'];
+  compareCountries: ExperienceContextValue['compareCountries'];
+  layers: ExperienceContextValue['layers'];
+  isPlaying: boolean;
+  durationSeconds: number;
+  totalBars: number;
+}
+
+function buildDiscreteSnapshotSignature(s: DelayedDiscreteSnapshot): string {
+  return JSON.stringify({
+    c: s.country?.id ?? null,
+    l: s.lang,
+    st: s.storyStep,
+    mp: s.missionPhase,
+    sr: s.sceneReplayKey,
+    lb: s.loopSingleBar,
+    bl: s.barLoop,
+    cc: s.compareCountries,
+    ly: s.layers,
+    pl: s.isPlaying,
+    ds: s.durationSeconds,
+    tb: s.totalBars,
+  });
+}
+
+/**
+ * Aplica atraso temporal por saída física (`delayMs >= 0`) em `ProjectorView`:
+ * atrasa eventos discretos (fase, país, storyStep, play/pause, camadas) em fila FIFO
+ * e desloca o cursor temporal de `getLiveFrame()` e `playback.progress01` em exatos `delayMs` ms.
+ */
+export const ProjectorDelayBoundary: React.FC<{
+  delayMs: number;
+  children: React.ReactNode;
+}> = ({ delayMs, children }) => {
+  const parent = useExperience();
+  const computeLiveFrameAtDelay = useContext(GetLiveFrameWithDelayContext);
+
+  const liveDiscrete: DelayedDiscreteSnapshot = useMemo(
+    () => ({
+      country: parent.country,
+      lang: parent.lang,
+      storyStep: parent.storyStep,
+      missionPhase: parent.missionPhase,
+      sceneReplayKey: parent.sceneReplayKey,
+      loopSingleBar: parent.loopSingleBar,
+      barLoop: parent.barLoop,
+      compareCountries: parent.compareCountries,
+      layers: parent.layers,
+      isPlaying: parent.playback.isPlaying,
+      durationSeconds: parent.playback.durationSeconds,
+      totalBars: parent.playback.totalBars,
+    }),
+    [
+      parent.barLoop,
+      parent.compareCountries,
+      parent.country,
+      parent.lang,
+      parent.layers,
+      parent.loopSingleBar,
+      parent.missionPhase,
+      parent.playback.durationSeconds,
+      parent.playback.isPlaying,
+      parent.playback.totalBars,
+      parent.sceneReplayKey,
+      parent.storyStep,
+    ]
+  );
+
+  const [delayedDiscrete, setDelayedDiscrete] = useState<DelayedDiscreteSnapshot>(liveDiscrete);
+  const lastScheduledSigRef = useRef<string>(buildDiscreteSnapshotSignature(liveDiscrete));
+  const pendingTimersRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    const clearAll = () => {
+      for (const id of pendingTimersRef.current) {
+        window.clearTimeout(id);
+      }
+      pendingTimersRef.current.clear();
+    };
+
+    if (delayMs <= 0) {
+      clearAll();
+      lastScheduledSigRef.current = buildDiscreteSnapshotSignature(liveDiscrete);
+      setDelayedDiscrete(liveDiscrete);
+      return;
+    }
+
+    const sig = buildDiscreteSnapshotSignature(liveDiscrete);
+    if (sig === lastScheduledSigRef.current) return;
+    lastScheduledSigRef.current = sig;
+
+    const timer = window.setTimeout(() => {
+      pendingTimersRef.current.delete(timer);
+      setDelayedDiscrete(liveDiscrete);
+    }, delayMs);
+    pendingTimersRef.current.add(timer);
+  }, [delayMs, liveDiscrete]);
+
+  useEffect(() => {
+    const timers = pendingTimersRef.current;
+    return () => {
+      for (const id of timers) {
+        window.clearTimeout(id);
+      }
+      timers.clear();
+    };
+  }, []);
+
+  const delayedGetLiveFrame = useCallback(() => {
+    if (delayMs > 0 && computeLiveFrameAtDelay) {
+      return computeLiveFrameAtDelay(delayMs);
+    }
+    return parent.getLiveFrame();
+  }, [computeLiveFrameAtDelay, delayMs, parent]);
+
+  const delayedValue = useMemo<ExperienceContextValue>(() => {
+    if (delayMs <= 0) return parent;
+    const shiftedProg = shiftProgressBackwardBySeconds(
+      parent.playback.progress,
+      delayMs / 1000,
+      delayedDiscrete.durationSeconds,
+      delayedDiscrete.barLoop,
+      delayedDiscrete.totalBars
+    );
+    return {
+      ...parent,
+      country: delayedDiscrete.country,
+      lang: delayedDiscrete.lang,
+      storyStep: delayedDiscrete.storyStep,
+      missionPhase: delayedDiscrete.missionPhase,
+      sceneReplayKey: delayedDiscrete.sceneReplayKey,
+      loopSingleBar: delayedDiscrete.loopSingleBar,
+      barLoop: delayedDiscrete.barLoop,
+      compareCountries: delayedDiscrete.compareCountries,
+      layers: delayedDiscrete.layers,
+      playback: {
+        ...parent.playback,
+        isPlaying: delayedDiscrete.isPlaying,
+        progress: shiftedProg,
+        currentTime: shiftedProg * delayedDiscrete.durationSeconds,
+        durationSeconds: delayedDiscrete.durationSeconds,
+        totalBars: delayedDiscrete.totalBars,
+      },
+      getLiveFrame: delayedGetLiveFrame,
+    };
+  }, [delayMs, delayedDiscrete, delayedGetLiveFrame, parent]);
+
+  if (delayMs <= 0) {
+    return <>{children}</>;
+  }
+
+  return (
+    <ExperienceContext.Provider value={delayedValue}>{children}</ExperienceContext.Provider>
   );
 };
 

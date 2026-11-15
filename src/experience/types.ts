@@ -11,7 +11,7 @@ export type ViewRole =
   | 'portal'
   | 'audio-node';
 export type SyncNetworkMode = 'isolated' | 'lan-ws' | 'cloud-room';
-export type ProjectorOutId = 1 | 2 | 3 | 4;
+export type ProjectorOutId = 1 | 2 | 3;
 export type SpeakerNodeIndex = 1 | 2 | 3;
 export type MissionPhase =
   | 'idle'
@@ -24,7 +24,7 @@ export type MissionPhase =
 export type SpeechPlaybackStatus = 'idle' | 'speaking' | 'paused' | 'stopped';
 export type SpeechCommandType = 'pause' | 'resume' | 'stop';
 
-export const PROJECTOR_OUT_IDS: readonly ProjectorOutId[] = [1, 2, 3, 4] as const;
+export const PROJECTOR_OUT_IDS: readonly ProjectorOutId[] = [1, 2, 3] as const;
 export const SURFACE_IDS: readonly SurfaceId[] = ['leftWall', 'rightWall', 'ceiling'] as const;
 
 /**
