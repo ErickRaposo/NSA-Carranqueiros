@@ -3,7 +3,6 @@ dist
 dist-ssr
 *.local
 tsconfig.tsbuildinfo
-public/nasa/*.mp4
 __pycache__/
 *.pyc
 .DS_Store
