@@ -90,6 +90,11 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
+.reg-country-search-input:focus,
+.reg-country-search-input:focus-visible {
+  outline: none;
+}
+
 .toggle-chip:active:not(:disabled),
 .seg-btn:active:not(:disabled),
 .preset-ledger-btn:active:not(:disabled),

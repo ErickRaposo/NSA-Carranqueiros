@@ -216,8 +216,10 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
               }`}
             >
               <div
-                className={`flex items-center gap-2 border-b px-3 py-2 ${
-                  highContrast ? 'border-white/30' : 'border-[#1e3a66]'
+                className={`flex items-center gap-2 border-b px-3 py-2 transition-colors ${
+                  highContrast
+                    ? 'border-white/30 focus-within:border-white'
+                    : 'border-[#1e3a66] focus-within:border-[#3b82f6]'
                 }`}
               >
                 <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
@@ -229,7 +231,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
                   placeholder="Pesquisar país..."
                   aria-label="Pesquisar país de origem"
                   data-testid="reg-country-search"
-                  className="w-full bg-transparent text-xs text-slate-100 placeholder:text-slate-400 focus:outline-none"
+                  className="reg-country-search-input w-full bg-transparent text-xs text-slate-100 placeholder:text-slate-400 focus:outline-none"
                 />
               </div>
 
