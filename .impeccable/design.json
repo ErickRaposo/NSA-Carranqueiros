@@ -1,0 +1,418 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-15T01:10:00-03:00",
+  "source": "extracted-from-live-codebase",
+  "extensions": {
+    "colorMeta": {
+      "bgPortalHero": {
+        "role": "Portal institutional hero deep space background",
+        "tonalRamp": {
+          "50": "#eef2ff",
+          "100": "#dbe4ff",
+          "200": "#b4c6fc",
+          "300": "#748ffc",
+          "500": "#1b2a4a",
+          "700": "#091124",
+          "800": "#040814",
+          "900": "#02050d"
+        }
+      },
+      "bgVoid": {
+        "role": "Primary planetary explorer deep space ground (--bg-void)",
+        "tonalRamp": {
+          "50": "#f1f5f9",
+          "100": "#e2e8f0",
+          "200": "#cbd5e1",
+          "300": "#94a3b8",
+          "500": "#334155",
+          "700": "#0f172a",
+          "800": "#090e1c",
+          "900": "#060913"
+        }
+      },
+      "bgContentBand": {
+        "role": "Dark navy section band for portal pillars and team section",
+        "tonalRamp": {
+          "50": "#eff6ff",
+          "100": "#dbeafe",
+          "200": "#bfdbfe",
+          "300": "#60a5fa",
+          "500": "#1e3a66",
+          "700": "#0b1933",
+          "800": "#071124",
+          "900": "#040b1a"
+        }
+      },
+      "bgAuthDeep": {
+        "role": "Split-screen authentication cosmic gradient midpoint",
+        "tonalRamp": {
+          "50": "#eff6ff",
+          "100": "#dbeafe",
+          "200": "#93c5fd",
+          "300": "#3b82f6",
+          "500": "#1d4ed8",
+          "700": "#0c224d",
+          "800": "#07142e",
+          "900": "#030816"
+        }
+      },
+      "bgAuthPanel": {
+        "role": "Authentication form panel surface (#071126 / 95%)",
+        "tonalRamp": {
+          "50": "#f0f4ff",
+          "100": "#d9e2ff",
+          "200": "#adc2ff",
+          "300": "#6690ff",
+          "500": "#1e3a7a",
+          "700": "#0d1f45",
+          "800": "#071126",
+          "900": "#040917"
+        }
+      },
+      "bgObsidianIsland": {
+        "role": "Floating orbital HUD capsule surface (rgba(6, 12, 26, 0.78) + blur 16px)",
+        "tonalRamp": {
+          "50": "#f8fafc",
+          "100": "#e2e8f0",
+          "200": "#cbd5e1",
+          "300": "#64748b",
+          "500": "#1e293b",
+          "700": "#0b1326",
+          "800": "#060c1a",
+          "900": "#030712"
+        }
+      },
+      "bgObsidianDrawer": {
+        "role": "Expanded orbital popover and bottom-sheet surface (rgba(8, 13, 25, 0.95) + blur 20px)",
+        "tonalRamp": {
+          "50": "#f8fafc",
+          "100": "#e2e8f0",
+          "200": "#94a3b8",
+          "300": "#475569",
+          "500": "#1e293b",
+          "700": "#0f172a",
+          "800": "#080d19",
+          "900": "#04070f"
+        }
+      },
+      "bgInputDark": {
+        "role": "Dark form input fill on authentication and orbital drawers",
+        "tonalRamp": {
+          "50": "#eff6ff",
+          "100": "#dbeafe",
+          "200": "#93c5fd",
+          "300": "#60a5fa",
+          "500": "#1e3a66",
+          "700": "#122449",
+          "800": "#0c1a36",
+          "900": "#060e1f"
+        }
+      },
+      "bgEditorialLight": {
+        "role": "High-contrast light editorial section background on EntryPortal",
+        "tonalRamp": {
+          "50": "#ffffff",
+          "100": "#f8fafc",
+          "200": "#f1f5f9",
+          "300": "#e2e8f0",
+          "500": "#94a3b8",
+          "700": "#475569",
+          "800": "#1e293b",
+          "900": "#0f172a"
+        }
+      },
+      "inkEditorialDark": {
+        "role": "Deep navy heading and border ink on light editorial section",
+        "tonalRamp": {
+          "50": "#f0f5ff",
+          "100": "#e0ebff",
+          "200": "#b8d0ff",
+          "300": "#6b9eff",
+          "500": "#1d4ed8",
+          "700": "#112b57",
+          "800": "#0a1a35",
+          "900": "#050d1c"
+        }
+      },
+      "textPrimary": {
+        "role": "Primary crisp ice-white text on dark surfaces (--text-primary)",
+        "contrastOnVoid": "19.1:1",
+        "tonalRamp": {
+          "50": "#ffffff",
+          "100": "#f8fafc",
+          "200": "#f1f5f9",
+          "300": "#e2e8f0",
+          "500": "#94a3b8",
+          "700": "#475569",
+          "800": "#1e293b",
+          "900": "#0f172a"
+        }
+      },
+      "textSecondary": {
+        "role": "Secondary slate body and control text on dark surfaces (--text-secondary)",
+        "contrastOnVoid": "13.4:1",
+        "tonalRamp": {
+          "50": "#f8fafc",
+          "100": "#f1f5f9",
+          "200": "#e2e8f0",
+          "300": "#cbd5e1",
+          "500": "#64748b",
+          "700": "#334155",
+          "800": "#1e293b",
+          "900": "#0f172a"
+        }
+      },
+      "textMuted": {
+        "role": "Muted telemetry metadata, units, and subtle labels (--text-muted)",
+        "contrastOnVoid": "6.8:1",
+        "tonalRamp": {
+          "50": "#f8fafc",
+          "100": "#e2e8f0",
+          "200": "#cbd5e1",
+          "300": "#94a3b8",
+          "500": "#64748b",
+          "700": "#334155",
+          "800": "#1e293b",
+          "900": "#0f172a"
+        }
+      },
+      "borderHairline": {
+        "role": "Base token for 1px hairline borders (used via rgba(148, 163, 184, 0.16))",
+        "tonalRamp": {
+          "50": "#f8fafc",
+          "100": "#e2e8f0",
+          "200": "#cbd5e1",
+          "300": "#94a3b8",
+          "500": "#475569",
+          "700": "#334155",
+          "800": "#1e293b",
+          "900": "#0f172a"
+        }
+      },
+      "borderPortalNavy": {
+        "role": "Structural navy border on EntryPortal and Auth inputs",
+        "tonalRamp": {
+          "50": "#eff6ff",
+          "100": "#dbeafe",
+          "200": "#93c5fd",
+          "300": "#60a5fa",
+          "500": "#2563eb",
+          "700": "#1e3a66",
+          "800": "#172745",
+          "900": "#0d182b"
+        }
+      },
+      "ctaWhite": {
+        "role": "High-impact luminous primary CTA fill on dark Hero",
+        "tonalRamp": {
+          "50": "#ffffff",
+          "100": "#f8fafc",
+          "200": "#e2e8f0",
+          "300": "#cbd5e1",
+          "500": "#94a3b8",
+          "700": "#475569",
+          "800": "#1e293b",
+          "900": "#060913"
+        }
+      },
+      "ctaOrbitalBlue": {
+        "role": "Primary orbital royal blue button fill (.portal-login-btn)",
+        "tonalRamp": {
+          "50": "#eff6ff",
+          "100": "#dbeafe",
+          "200": "#bfdbfe",
+          "300": "#60a5fa",
+          "500": "#2563eb",
+          "700": "#1d4ed8",
+          "800": "#1e40af",
+          "900": "#1e3a8a"
+        }
+      },
+      "ctaOrbitalBlueHover": {
+        "role": "Interactive hover and outline accent blue (.portal-outline-btn)",
+        "tonalRamp": {
+          "50": "#eff6ff",
+          "100": "#dbeafe",
+          "200": "#93c5fd",
+          "300": "#60a5fa",
+          "500": "#3b82f6",
+          "700": "#2563eb",
+          "800": "#1d4ed8",
+          "900": "#1e3a8a"
+        }
+      },
+      "ctaAuthSubmit": {
+        "role": "Authentication form submit button fill (#1a3a7a -> hover #234b9c)",
+        "tonalRamp": {
+          "50": "#eff6ff",
+          "100": "#dbeafe",
+          "200": "#93c5fd",
+          "300": "#60a5fa",
+          "500": "#234b9c",
+          "700": "#1a3a7a",
+          "800": "#132a59",
+          "900": "#0b1936"
+        }
+      },
+      "focusRing": {
+        "role": "Keyboard accessibility :focus-visible outline (--focus-ring)",
+        "tonalRamp": {
+          "50": "#f0f9ff",
+          "100": "#e0f2fe",
+          "200": "#bae6fd",
+          "300": "#7dd3fc",
+          "500": "#38bdf8",
+          "700": "#0284c7",
+          "800": "#075985",
+          "900": "#0c4a6e"
+        }
+      },
+      "stemMelody": {
+        "role": "NASA Stem 1 — Melodia / ISS Lightning (SVS 5011, discrete event)",
+        "tonalRamp": {
+          "50": "#fffbeb",
+          "100": "#fef3c7",
+          "200": "#fde68a",
+          "300": "#fcd34d",
+          "500": "#fbbf24",
+          "700": "#b45309",
+          "800": "#92400e",
+          "900": "#78350f"
+        }
+      },
+      "stemHarmony": {
+        "role": "NASA Stem 2 — Harmonia / Carbon Monoxide CO (SVS 5153)",
+        "tonalRamp": {
+          "50": "#fff7ed",
+          "100": "#ffedd5",
+          "200": "#fed7aa",
+          "300": "#fdba74",
+          "500": "#fb923c",
+          "700": "#c2410c",
+          "800": "#9a3412",
+          "900": "#7c2d12"
+        }
+      },
+      "stemRhythm": {
+        "role": "NASA Stem 3 — Ritmo / 2m Temperature T2M (SVS 5147)",
+        "tonalRamp": {
+          "50": "#fff1f2",
+          "100": "#ffe4e6",
+          "200": "#fecdd3",
+          "300": "#fda4af",
+          "500": "#fb7185",
+          "700": "#be123c",
+          "800": "#9f1239",
+          "900": "#881337"
+        }
+      },
+      "stemBass": {
+        "role": "NASA Stem 4 — Baixo / Nitrogen Oxides NO2 (SVS 5154)",
+        "tonalRamp": {
+          "50": "#ecfdf5",
+          "100": "#d1fae5",
+          "200": "#a7f3d0",
+          "300": "#6ee7b7",
+          "500": "#34d399",
+          "700": "#047857",
+          "800": "#065f46",
+          "900": "#064e3b"
+        }
+      },
+      "stemFx": {
+        "role": "NASA Stem 5 — Efeitos / 10m Winds (SVS 5148)",
+        "tonalRamp": {
+          "50": "#f0f9ff",
+          "100": "#e0f2fe",
+          "200": "#bae6fd",
+          "300": "#7dd3fc",
+          "500": "#38bdf8",
+          "700": "#0369a1",
+          "800": "#075985",
+          "900": "#0c4a6e"
+        }
+      },
+      "globeOcean": {
+        "role": "3D/2D globe base deep ocean shader surface",
+        "tonalRamp": {
+          "50": "#f0f9ff",
+          "100": "#e0f2fe",
+          "200": "#bae6fd",
+          "300": "#38bdf8",
+          "500": "#0c2d5e",
+          "700": "#071a38",
+          "800": "#040d21",
+          "900": "#020612"
+        }
+      },
+      "borderCoastCasing": {
+        "role": "Cartographic dark casing beneath country borders for legibility over bright NASA heatmaps",
+        "tonalRamp": {
+          "50": "#f8fafc",
+          "100": "#e2e8f0",
+          "200": "#cbd5e1",
+          "300": "#94a3b8",
+          "500": "#334155",
+          "700": "#0f172a",
+          "800": "#090d16",
+          "900": "#020617"
+        }
+      }
+    },
+    "typographyMeta": {
+      "googleFontsUrl": "https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800&family=Poppins:wght@400;500;600;700&display=swap",
+      "numericRule": "font-variant-numeric: tabular-nums mandatory on all coordinates, counters, timers, XP, percentages, and rankings",
+      "fontScaleMultipliers": [1, 1.15, 1.3],
+      "displayUsageConstraint": "Orbitron is strictly limited to EntryPortal uppercase monumental titles (.entry-headline, .entry-section-title, .entry-team-title); never inside dense HUD telemetry or forms."
+    },
+    "shadows": {
+      "portalCta": "0 8px 24px rgba(0, 0, 0, 0.35)",
+      "orbitalIsland": "0 10px 26px rgba(0, 0, 0, 0.45)",
+      "obsidianDrawer": "0 24px 52px -12px rgba(2, 6, 20, 0.82), inset 0 1px 0 rgba(255, 255, 255, 0.04)",
+      "pullTabToast": "0 -8px 24px rgba(0, 0, 0, 0.32)",
+      "editorialSpeechBubble": "0 10px 26px rgba(10, 26, 53, 0.08)"
+    },
+    "motion": {
+      "easeOutQuint": "cubic-bezier(0.23, 1, 0.32, 1)",
+      "microDuration": "150ms",
+      "drawerDuration": "220ms",
+      "tactileActiveScale": "scale(0.98)",
+      "countryFocusPeripheralOpacity": 0.12,
+      "reducedMotionPolicy": "Disable orbit rings, float keyframes, and layout transitions under @media (prefers-reduced-motion: reduce)"
+    },
+    "breakpoints": {
+      "hudWideDesktop": "1360px",
+      "consoleDesktop": "1140px",
+      "authSplitDesktop": "1024px",
+      "portalTablet": "900px",
+      "hudMobile": "760px",
+      "portalCompactMobile": "520px"
+    }
+  },
+  "components": {
+    "portalCtaPair": {
+      "description": "EntryPortal luminous white primary CTA paired with orbital blue outline CTA",
+      "html": "<div class=\"ds-portal-cta-row\"><button type=\"button\" class=\"ds-portal-primary\">Iniciar exploração</button><button type=\"button\" class=\"ds-portal-outline\">Entrar na conta</button></div>",
+      "css": ".ds-portal-cta-row{display:inline-flex;gap:12px;flex-wrap:wrap;font-family:'Poppins',system-ui,sans-serif}.ds-portal-primary{min-height:46px;padding:0 24px;border-radius:999px;border:none;background:#ffffff;color:#060913;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35);transition:transform 160ms cubic-bezier(.23,1,.32,1),background-color 160ms ease}.ds-portal-primary:hover{transform:translateY(-1px);background:#e2e8f0}.ds-portal-primary:active{transform:scale(.98)}.ds-portal-outline{min-height:46px;padding:0 20px;border-radius:999px;border:1.5px solid #2563eb;background:rgba(8,17,36,.72);color:#ffffff;font-size:14px;font-weight:600;cursor:pointer;transition:border-color 160ms ease,background-color 160ms ease}.ds-portal-outline:hover{border-color:#60a5fa;background:rgba(37,99,235,.14)}.ds-portal-primary:focus-visible,.ds-portal-outline:focus-visible{outline:2px solid #7dd3fc;outline-offset:2px}"
+    },
+    "orbitalCapsulePill": {
+      "description": "1-line quiet obsidian floating capsule used for PlayerHUD session pill and Órbita Global",
+      "html": "<button type=\"button\" class=\"ds-orbital-pill\"><span class=\"ds-orbital-avatar\">AD</span><span class=\"ds-orbital-name\">Administrador</span><span class=\"ds-orbital-meta\">11/25</span><svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"m6 9 6 6 6-6\"/></svg></button>",
+      "css": ".ds-orbital-pill{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:5px 12px 5px 7px;border-radius:999px;border:1px solid rgba(148,163,184,.16);background:rgba(6,12,26,.78);backdrop-filter:blur(16px);box-shadow:0 10px 26px rgba(0,0,0,.45);color:#f8fafc;font-family:'Poppins',system-ui,sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:border-color 150ms cubic-bezier(.23,1,.32,1),background 150ms cubic-bezier(.23,1,.32,1)}.ds-orbital-pill:hover{border-color:rgba(148,163,184,.32);background:rgba(10,17,34,.92)}.ds-orbital-pill:focus:not(:focus-visible){outline:none}.ds-orbital-pill:focus-visible{outline:2px solid #7dd3fc;outline-offset:2px}.ds-orbital-avatar{width:26px;height:26px;border-radius:50%;border:1px solid rgba(148,163,184,.22);background:rgba(255,255,255,.055);color:#e2e8f0;display:grid;place-items:center;font-size:10px;font-weight:600}.ds-orbital-name{letter-spacing:-.01em}.ds-orbital-meta{color:#94a3b8;font-size:11px;font-weight:500;font-variant-numeric:tabular-nums}"
+    },
+    "obsidianDrawerTelemetry": {
+      "description": "18px obsidian drawer with segmented 2-tab bar and 3-column hairline telemetry strip",
+      "html": "<section class=\"ds-drawer\"><div class=\"ds-tabs\"><button type=\"button\" class=\"ds-tab is-active\">Resumo</button><button type=\"button\" class=\"ds-tab\">Meus Dados</button></div><div class=\"ds-metrics\"><div class=\"ds-metric\"><strong>46</strong><span>Regiões</span></div><div class=\"ds-metric\"><strong>3</strong><span>Vozes</span></div><div class=\"ds-metric\"><strong>4/5</strong><span>Missões</span></div></div></section>",
+      "css": ".ds-drawer{width:340px;padding:13px;border-radius:18px;background:rgba(8,13,25,.95);border:1px solid rgba(148,163,184,.16);backdrop-filter:blur(20px);box-shadow:0 24px 52px -12px rgba(2,6,20,.82),inset 0 1px 0 rgba(255,255,255,.04);display:flex;flex-direction:column;gap:11px;font-family:'Poppins',system-ui,sans-serif;color:#f8fafc}.ds-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:3px;border-radius:10px;background:rgba(255,255,255,.035);border:1px solid rgba(148,163,184,.13)}.ds-tab{min-height:32px;border-radius:8px;border:1px solid transparent;background:transparent;color:#94a3b8;font-size:11.5px;font-weight:600;cursor:pointer}.ds-tab.is-active{background:rgba(255,255,255,.09);border-color:rgba(148,163,184,.22);color:#f8fafc}.ds-metrics{display:grid;grid-template-columns:repeat(3,1fr);border-radius:12px;background:rgba(255,255,255,.025);border:1px solid rgba(148,163,184,.12);overflow:hidden}.ds-metric{padding:9px 10px;display:flex;flex-direction:column;gap:2px;border-right:1px solid rgba(148,163,184,.12)}.ds-metric:last-child{border-right:none}.ds-metric strong{font-size:14px;font-weight:600;color:#f8fafc;font-variant-numeric:tabular-nums}.ds-metric span{font-size:10.5px;color:#94a3b8}"
+    },
+    "nasaStemIndicator": {
+      "description": "Scientific NASA stem indicator chip using 6px semantic micro-dot without neon card clutter",
+      "html": "<span class=\"ds-stem-chip\"><span class=\"ds-stem-dot\" style=\"background:#34d399\"></span>Baixo · NO₂</span>",
+      "css": ".ds-stem-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.035);border:1px solid rgba(148,163,184,.16);color:#e2e8f0;font-family:'Poppins',system-ui,sans-serif;font-size:11px;font-weight:500}.ds-stem-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}"
+    }
+  },
+  "narrative": {
+    "aestheticDirection": "Observatório Orbital Cinematográfico — silent obsidian-slate scientific instruments around a 90%-dominant 3D/2D NASA planetary globe, paired with a cinematic deep-space & high-contrast editorial institutional portal.",
+    "governanceRule": "All upcoming screens must derive strictly from DESIGN.md and .impeccable/design.json via the shared mineiro-frontend agent; any token or workflow evolution is aligned step-by-step with the team before mutating the base system."
+  }
+}
