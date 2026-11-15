@@ -98,6 +98,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
     layers,
     playback,
     storyStep,
+    missionPhase,
     selectCountry,
     toggleEye,
     toggleSolo,
@@ -105,6 +106,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
     togglePlay,
     seekBar,
     setStoryStep,
+    setMissionPhase,
   } = useExperience();
 
   const isPt = lang === 'pt';
@@ -266,7 +268,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
 
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] font-medium text-amber-300 [font-variant-numeric:tabular-nums]">
-              2 · {isPt ? 'Parede Direita — Robozinho' : 'Right Wall — Robot'} ·{' '}
+              2 · {isPt ? 'Parede Direita — Jukebox Studio & MIDI' : 'Right Wall — Jukebox Studio & MIDI'} ·{' '}
               {roomDimensions.rightWall.widthCm}×{roomDimensions.rightWall.heightCm} cm
             </span>
             <div
@@ -483,7 +485,15 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
                   <button
                     key={pid}
                     type="button"
-                    onClick={() => selectCountry(pid)}
+                    onClick={() => {
+                      selectCountry(pid);
+                      if (missionPhase === 'idle') {
+                        setMissionPhase('exploring');
+                      }
+                      if (storyStep === 0) {
+                        setStoryStep(1);
+                      }
+                    }}
                     className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition ${
                       active
                         ? 'border-amber-400/70 bg-amber-400/15 text-amber-100 shadow-sm'
@@ -563,7 +573,13 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={togglePlay}
+                onClick={() => {
+                  if (missionPhase === 'idle') {
+                    setMissionPhase('exploring');
+                    if (storyStep === 0) setStoryStep(1);
+                  }
+                  togglePlay();
+                }}
                 className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl bg-amber-400 px-3.5 text-xs font-bold text-slate-950 transition hover:bg-amber-300"
               >
                 {playback.isPlaying ? <Pause size={14} /> : <Play size={14} />}

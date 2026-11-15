@@ -29,7 +29,7 @@ export const SURFACE_IDS: readonly SurfaceId[] = ['leftWall', 'rightWall', 'ceil
 export type VisualLayerId = 'melody' | 'chords' | 'temperature' | 'bass' | 'wind';
 
 /**
- * Camadas geradoras com áudio próprio + botão Solo (S).
+ * Camadas geradoras principais com áudio próprio + botão Solo (S).
  */
 export type SoloableLayerId = 'melody' | 'chords' | 'bass';
 
@@ -60,12 +60,30 @@ export interface CompareCountriesState {
  */
 export const PILOT_COUNTRY_IDS = ['076', '818'] as const;
 
+/**
+ * Os 11 Países pré-gerados com pacote completo real (5 PNGs 1024x1024 RGBA + 5 vídeos 96f + 16 Stems OGG + Partitura MIDI Studio):
+ * Sem fallback sintético — apenas países com pacote gerado ficam disponíveis.
+ */
+export const GENERATED_COUNTRY_IDS = [
+  '076',
+  '840',
+  '250',
+  '392',
+  '276',
+  '818',
+  '356',
+  '484',
+  '036',
+  '710',
+  '620',
+] as const;
+
 export const VISUAL_LAYER_ORDER: VisualLayerId[] = [
   'melody',
   'chords',
-  'temperature',
   'bass',
   'wind',
+  'temperature',
 ];
 
 export interface LayerVisualMeta {
@@ -89,8 +107,8 @@ export const LAYER_METAS: Record<VisualLayerId, LayerVisualMeta> = {
     roleKind: 'generator',
     labelPt: 'Melodia',
     labelEn: 'Melody',
-    musicalRolePt: 'Celesta / Rhodes + Tempestade · 5ª/8ª',
-    musicalRoleEn: 'Celesta / Rhodes + Storm Sparkle · 5th/8th',
+    musicalRolePt: 'Celesta / Rhodes + Pentatônica Neutra',
+    musicalRoleEn: 'Celesta / Rhodes + Neutral Pentatonic',
     phenomenonPt: 'Raios ISS · SVS 5011',
     phenomenonEn: 'ISS Lightning · SVS 5011',
   },
@@ -101,8 +119,8 @@ export const LAYER_METAS: Record<VisualLayerId, LayerVisualMeta> = {
     roleKind: 'generator',
     labelPt: 'Acordes',
     labelEn: 'Chords',
-    musicalRolePt: 'Pad Harmônico · Lídio → Frígio',
-    musicalRoleEn: 'Harmonic Pad · Lydian → Phrygian',
+    musicalRolePt: 'Pad Harmônico Unison · Lídio → Frígio',
+    musicalRoleEn: 'Unison Harmonic Pad · Lydian → Phrygian',
     phenomenonPt: 'Monóxido de Carbono CO · SVS 5153',
     phenomenonEn: 'Carbon Monoxide CO · SVS 5153',
   },
@@ -125,8 +143,8 @@ export const LAYER_METAS: Record<VisualLayerId, LayerVisualMeta> = {
     roleKind: 'generator',
     labelPt: 'Baixo',
     labelEn: 'Bass',
-    musicalRolePt: 'Sub-Bass Urbano · Cutoff & Drive',
-    musicalRoleEn: 'Urban Sub-Bass · Cutoff & Drive',
+    musicalRolePt: 'Sub-Bass Contínuo · Cutoff & Drive',
+    musicalRoleEn: 'Continuous Sub-Bass · Cutoff & Drive',
     phenomenonPt: 'Óxidos de Nitrogênio NO₂ · SVS 5154',
     phenomenonEn: 'Nitrogen Oxides NO₂ · SVS 5154',
   },
@@ -137,8 +155,8 @@ export const LAYER_METAS: Record<VisualLayerId, LayerVisualMeta> = {
     roleKind: 'fxBus',
     labelPt: 'Vento',
     labelEn: 'Wind',
-    musicalRolePt: 'Bus Espacial 8D · Delay + Shimmer Reverb',
-    musicalRoleEn: '8D Spatial Bus · Delay + Shimmer Reverb',
+    musicalRolePt: 'Bus Espacial 8D · Delay + Chorus + Reverb',
+    musicalRoleEn: '8D Spatial Bus · Delay + Chorus + Reverb',
     phenomenonPt: 'Ventos 10m · SVS 5148',
     phenomenonEn: '10m Winds · SVS 5148',
   },
@@ -177,6 +195,8 @@ export interface BaseLayerState {
 
 export interface MelodyLayerState extends BaseLayerState {
   sparkleEnabled: boolean;
+  sparkleGain: number;
+  sparkleSolo: boolean;
 }
 
 export interface WindLayerState extends BaseLayerState {
@@ -193,6 +213,89 @@ export interface ExperienceLayersState {
   bass: BaseLayerState;
   wind: WindLayerState;
   temperature: TemperatureLayerState;
+}
+
+/**
+ * Canonic saved gains from `nasa-geo-sonification/nasa_soundscape/config.py`
+ */
+export const STUDIO_SAVED_GAINS = {
+  melody: 0.88,
+  sparkle: 1.0,
+  chords: 0.72,
+  bass: 1.05,
+  wind: 1.0,
+  master: 1.0,
+} as const;
+
+export interface StudioMidiNote {
+  start_beat: number;
+  duration_beats: number;
+  pitch: number;
+  velocity: number;
+  source_x: number;
+  source_y: number;
+  is_anchor?: boolean;
+  sub_role?: 'bloom_interval' | 'crystal_sparkle' | string;
+}
+
+export interface StudioSessionData {
+  tuningMode: TuningMode;
+  bpm: number;
+  keyRoot: string;
+  keyRootPt: string;
+  durationSeconds: number;
+  totalBars: number;
+  modeId: string;
+  modeNamePt: string;
+  modeNameEn: string;
+  chordProgression: string[];
+  musicalParameters: {
+    melody: {
+      noteCount: number;
+      anchorNoteCount: number;
+      sparkleCount: number;
+      lightningMap: string;
+      lightningMode: string;
+    };
+    chords: {
+      noteCount: number;
+      voicingStyle: string;
+    };
+    bass: {
+      noteCount: number;
+      cutoffHz: number;
+      drive: number;
+    };
+    wind: {
+      reverbDecaySeconds: number;
+      meanSpeed: number;
+    };
+  };
+  tracks: {
+    melody: StudioMidiNote[];
+    melody_sparkle: StudioMidiNote[];
+    chords_pad: StudioMidiNote[];
+    bass: StudioMidiNote[];
+  };
+}
+
+export interface CountryWindProfile {
+  orientation: number[];
+  hotspotX: number[];
+  hotspotY: number[];
+  speed: number[];
+  turbulence: number[];
+}
+
+export interface CountryStudioPayload {
+  numFrames: number;
+  yellowCounts: number[];
+  persistentPeaks: Array<[number, number]>;
+  windProfile?: CountryWindProfile;
+  sessions: {
+    region: StudioSessionData;
+    base: StudioSessionData;
+  };
 }
 
 export interface ExperiencePlaybackState {
@@ -228,12 +331,14 @@ export interface LiveNoteEvent {
   pitch: number;
   velocity: number;
   isAnchor: boolean;
+  subRole?: string;
 }
 
 export interface LiveFrameSnapshot {
   currentTime: number;
   progress01: number;
   vu: AudioLevelsMap;
+  masterDbFs: number;
   activeNotes: LiveNoteEvent[];
   lightningCount: number;
 }
@@ -268,6 +373,11 @@ export interface LanPeerInfo {
 
 export type AudioOwnerRole = 'pc' | 'tablet' | 'both';
 
+/**
+ * Intervalo de compassos em loop `[barStart, barEnd]` inclusivo (`0..7`), ou `null` para todos os 8 compassos (`C1–C8`).
+ */
+export type BarLoopRange = [number, number] | null;
+
 export interface ExperienceContextValue {
   country: ExperienceCountry | null;
   allCountries: ReadonlyArray<ExperienceCountry>;
@@ -283,18 +393,26 @@ export interface ExperienceContextValue {
   sceneReplayKey: number;
   /** Compasso congelado em loop (0..7) para inspeção de animação/áudio, ou null para fluxo normal */
   loopSingleBar: number | null;
+  /** Trecho de compassos em loop estilo Jukebox Studio (`[b0, b1]` inclusivo ou `null` p/ `C1–C8`) */
+  barLoop: BarLoopRange;
   /** Par de países configurado para comparação científica A ⇄ B na mesma batida */
   compareCountries: CompareCountriesState;
   /** Sequência completa de 32 batidas (8 compassos x 4 tempos) do país ativo */
   beatTimeline: ReadonlyArray<BeatTimelineSlot>;
+  /** Partitura MIDI e telemetria completa do Jukebox Studio para o país atual */
+  studioData: CountryStudioPayload | null;
+  /** Sessão ativa (`region` ou `base`) da partitura MIDI */
+  activeStudioSession: StudioSessionData | null;
   /** Energia acústica em tempo real (0..1) enviada para cada uma das 3 caixas físicas (VBAP) */
   speakerLiveLevels: Record<'speaker1' | 'speaker2' | 'speaker3', number>;
   audioMode: AudioOutputMode;
   masterGain: number;
   voiceVolume: number;
+  /** Pico em dBFS medido em tempo real no barramento Master */
+  masterDbFs: number;
   /** Silencia apenas este dispositivo/aba local (ex.: Projetores mudos por padrão ou Tablet remoto mudo) */
   localAudioMuted: boolean;
-  /** Indica se o áudio vem dos 8 stems pré-gerados ('stems') ou da síntese 8D via meta.json ('meta-synth') */
+  /** Fonte de áudio ativa ('stems' para os 8 stems OGG pré-renderizados) */
   audioSourceKind: 'stems' | 'meta-synth';
   /** Estado da rede LAN WebSocket offline-first */
   lanConnected: boolean;
@@ -330,10 +448,15 @@ export interface ExperienceContextValue {
   ) => void;
   replayActiveFrame: () => void;
   setLoopSingleBar: (barIndex: number | null) => void;
+  setBarLoop: (range: BarLoopRange) => void;
+  restartLoop: () => void;
+  resetMixerGains: () => void;
   stepBeat: (delta: number) => void;
   toggleEye: (layerId: VisualLayerId) => void;
   setAllLayersEnabled: (enabled: boolean) => void;
   toggleSparkle: () => void;
+  setSparkleGain: (gain: number) => void;
+  toggleSparkleSolo: () => void;
   setLayerGain: (layerId: VisualLayerId, gainOrWet: number) => void;
   setWindWetMix: (wetMix: number) => void;
   toggleSolo: (layerId: SoloableLayerId) => void;

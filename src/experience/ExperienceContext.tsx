@@ -53,11 +53,14 @@ import {
   AudioLevelsMap,
   AudioOutputMode,
   AudioOwnerRole,
+  BarLoopRange,
   CompareCountriesState,
+  CountryStudioPayload,
   ExperienceContextValue,
   ExperienceCountry,
   ExperienceLayersState,
   ExperiencePlaybackState,
+  GENERATED_COUNTRY_IDS,
   Lang,
   LanPeerInfo,
   LiveFrameSnapshot,
@@ -67,6 +70,8 @@ import {
   ProjectorOutId,
   RoomDimensions,
   SoloableLayerId,
+  STUDIO_SAVED_GAINS,
+  StudioSessionData,
   SurfaceId,
   VISUAL_LAYER_ORDER,
   VisualLayerId,
@@ -137,6 +142,7 @@ interface CountryMetaJson {
     region: CountryMetaTuning;
     base: CountryMetaTuning;
   };
+  studio?: CountryStudioPayload;
   telemetrySummary?: {
     lightningHotspotCount?: number;
   };
@@ -147,88 +153,6 @@ const SYNC_CHANNEL_NAME = 'earth-jukebox-sync-v1';
 const countryMetaCache = new Map<string, CountryMetaJson>();
 const ROOM_STORAGE_KEY = 'earth-jukebox-room-dims-v1';
 const STORY_STEP_COUNT = 6;
-
-interface PilotMusicalProfile {
-  regionBpm: number;
-  regionKeyRoot: string;
-  regionKeyRootPt: string;
-  modeNamePt: string;
-  modeNameEn: string;
-  chords: string[];
-  windMeanSpeed: number;
-}
-
-const PILOT_PROFILES: Record<string, PilotMusicalProfile> = {
-  '076': {
-    // Brasil — clima quente tropical + alta incidência de raios ISS na Amazônia/Centro-Oeste
-    regionBpm: 98,
-    regionKeyRoot: 'D',
-    regionKeyRootPt: 'Ré',
-    modeNamePt: 'Mixolídio Tropical',
-    modeNameEn: 'Tropical Mixolydian',
-    chords: ['Dadd9', 'Am7', 'Gmaj7', 'Asus4'],
-    windMeanSpeed: 7.4,
-  },
-  '818': {
-    // Egito — calor árido intenso (BPM alto) + ventos do Saara/Mar Vermelho + raríssimos raios
-    regionBpm: 106,
-    regionKeyRoot: 'E',
-    regionKeyRootPt: 'Mi',
-    modeNamePt: 'Frígio Solar Árido',
-    modeNameEn: 'Arid Solar Phrygian',
-    chords: ['Esus4', 'Fmaj7', 'Dm7', 'Esus2'],
-    windMeanSpeed: 11.2,
-  },
-  '840': {
-    // Estados Unidos
-    regionBpm: 92,
-    regionKeyRoot: 'G',
-    regionKeyRootPt: 'Sol',
-    modeNamePt: 'Dórico Continental',
-    modeNameEn: 'Continental Dorian',
-    chords: ['Gm9', 'Csus2', 'Eb6', 'Fadd9'],
-    windMeanSpeed: 10.8,
-  },
-  '484': {
-    // México
-    regionBpm: 102,
-    regionKeyRoot: 'E',
-    regionKeyRootPt: 'Mi',
-    modeNamePt: 'Lídio Solar',
-    modeNameEn: 'Solar Lydian',
-    chords: ['Emaj9', 'F#6', 'C#m7', 'Bsus4'],
-    windMeanSpeed: 8.6,
-  },
-};
-
-function inferFallbackProfile(country: ExperienceCountry | null): PilotMusicalProfile {
-  if (!country) {
-    return {
-      regionBpm: 90,
-      regionKeyRoot: 'A',
-      regionKeyRootPt: 'Lá',
-      modeNamePt: 'Eólio Neutro',
-      modeNameEn: 'Neutral Aeolian',
-      chords: ['Am9', 'Fmaj7', 'Cmaj7', 'Gsus4'],
-      windMeanSpeed: 6.5,
-    };
-  }
-  const pilot = PILOT_PROFILES[country.id];
-  if (pilot) return pilot;
-
-  const absLat = Math.abs(country.lat);
-  const regionBpm = Math.round(Math.max(66, Math.min(110, 108 - absLat * 0.58)));
-  const isCold = absLat > 46;
-  return {
-    regionBpm,
-    regionKeyRoot: isCold ? 'F#' : 'C',
-    regionKeyRootPt: isCold ? 'Fá#' : 'Dó',
-    modeNamePt: isCold ? 'Eólio Boreal' : 'Lídio Equatorial',
-    modeNameEn: isCold ? 'Boreal Aeolian' : 'Equatorial Lydian',
-    chords: isCold ? ['F#m9', 'Dmaj7', 'Aadd9', 'Esus4'] : ['Cmaj9', 'G6', 'Am7', 'Fmaj7#11'],
-    windMeanSpeed: Number((5.2 + (absLat / 90) * 9.4).toFixed(1)),
-  };
-}
 
 export const DEFAULT_ROOM_DIMENSIONS: RoomDimensions = {
   leftWall: { widthCm: 360, heightCm: 270 },
@@ -256,12 +180,38 @@ function loadInitialRoomDimensions(): RoomDimensions {
 }
 
 export const DEFAULT_LAYERS_STATE: ExperienceLayersState = {
-  melody: { enabled: false, gain: 0.88, solo: false, sparkleEnabled: true },
-  chords: { enabled: false, gain: 0.8, solo: false },
-  bass: { enabled: false, gain: 0.82, solo: false },
-  wind: { enabled: false, gain: 0.55, wetMix: 0.55, solo: false },
+  melody: {
+    enabled: false,
+    gain: STUDIO_SAVED_GAINS.melody,
+    solo: false,
+    sparkleEnabled: true,
+    sparkleGain: STUDIO_SAVED_GAINS.sparkle,
+    sparkleSolo: false,
+  },
+  chords: { enabled: false, gain: STUDIO_SAVED_GAINS.chords, solo: false },
+  bass: { enabled: false, gain: STUDIO_SAVED_GAINS.bass, solo: false },
+  wind: {
+    enabled: false,
+    gain: STUDIO_SAVED_GAINS.wind,
+    wetMix: STUDIO_SAVED_GAINS.wind,
+    solo: false,
+  },
   temperature: { enabled: false, gain: 1.0, solo: false, tuningMode: 'region' },
 };
+
+function normalizeIncomingLayers(raw: ExperienceLayersState): ExperienceLayersState {
+  return {
+    ...raw,
+    melody: {
+      ...raw.melody,
+      sparkleGain:
+        typeof raw.melody.sparkleGain === 'number'
+          ? raw.melody.sparkleGain
+          : STUDIO_SAVED_GAINS.sparkle,
+      sparkleSolo: Boolean(raw.melody.sparkleSolo),
+    },
+  };
+}
 
 function toExperienceCountry(
   entry: CountryEntry,
@@ -301,6 +251,7 @@ interface SyncPayload {
   missionPhase?: MissionPhase;
   sceneReplayKey?: number;
   loopSingleBar?: number | null;
+  barLoop?: BarLoopRange;
   compareCountries?: CompareCountriesState;
   audioMode: AudioOutputMode;
   masterGain: number;
@@ -364,6 +315,15 @@ function isLocalLanHost(): boolean {
   );
 }
 
+const ZERO_VU: AudioLevelsMap = {
+  melody: 0,
+  sparkle: 0,
+  chords: 0,
+  bass: 0,
+  wind: 0,
+  master: 0,
+};
+
 export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const senderIdRef = useRef<string>(`node-${Math.random().toString(36).slice(2, 9)}`);
   const channelRef = useRef<BroadcastChannel | null>(null);
@@ -375,14 +335,14 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [localAudioMuted, setLocalAudioMutedState] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     const raw = new URLSearchParams(window.location.search).get('view')?.toLowerCase() ?? '';
-    return raw === 'projector'; // Janelas de projetor iniciam mudas por padrão para não vazar áudio ruim via HDMI
+    return raw === 'projector';
   });
   const [audioOwner, setAudioOwnerState] = useState<AudioOwnerRole>('pc');
   const [audioContextState, setAudioContextState] = useState<
     AudioContextState | 'uninitialized'
   >('uninitialized');
   const [realAudioRms01, setRealAudioRms01] = useState<number>(0);
-  const [audioSourceKind, setAudioSourceKind] = useState<'stems' | 'meta-synth'>('meta-synth');
+  const [audioSourceKind, setAudioSourceKind] = useState<'stems' | 'meta-synth'>('stems');
   const [lanConnected, setLanConnected] = useState<boolean>(false);
   const [lanClients, setLanClients] = useState<LanPeerInfo[]>([]);
 
@@ -408,35 +368,71 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const world = useMemo(() => loadWorldCountries(), []);
   const pilotSet = useMemo<ReadonlySet<string>>(() => new Set(PILOT_COUNTRY_IDS), []);
 
+  // Lista estrita de países com pacote pré-gerado real (sem fallback sintético!)
+  const [generatedIdsList, setGeneratedIdsList] = useState<readonly string[]>(
+    GENERATED_COUNTRY_IDS
+  );
+
+  useEffect(() => {
+    if (
+      typeof window === 'undefined' ||
+      typeof window.fetch !== 'function' ||
+      !window.location?.origin ||
+      window.location.origin === 'null'
+    ) {
+      return;
+    }
+    let cancelled = false;
+    window
+      .fetch(resolveAssetUrl('/countries/index.json'))
+      .then((res) => (res.ok ? (res.json() as Promise<{ generatedIds?: string[] }>) : null))
+      .then((json) => {
+        if (cancelled || !json || !Array.isArray(json.generatedIds) || json.generatedIds.length === 0) {
+          return;
+        }
+        setGeneratedIdsList(json.generatedIds);
+      })
+      .catch(() => {
+        // Mantém GENERATED_COUNTRY_IDS estático quando offline/sem index.json extra
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const { countryMap, availableCountryIds, allCountries } = useMemo(() => {
     const map = new Map<string, ExperienceCountry>();
+    const generatedSet = new Set<string>(generatedIdsList);
     const available = new Set<string>();
     const list: ExperienceCountry[] = [];
+
     for (const c of world.countries) {
       const ec = toExperienceCountry(c, pilotSet);
       map.set(c.id, ec);
-      if (!c.isMinorUninhabited) {
+      if (!c.isMinorUninhabited && generatedSet.has(c.id)) {
         available.add(c.id);
         list.push(ec);
       }
     }
+
     list.sort((a, b) => {
       if (a.isPilot !== b.isPilot) return a.isPilot ? -1 : 1;
       return a.namePt.localeCompare(b.namePt, 'pt-BR');
     });
+
     return {
       countryMap: map,
       availableCountryIds: available as ReadonlySet<string>,
       allCountries: list as ReadonlyArray<ExperienceCountry>,
     };
-  }, [pilotSet, world.countries]);
+  }, [generatedIdsList, pilotSet, world.countries]);
 
   const [selectedCountryId, setSelectedCountryId] = useState<string | null>('076');
   const [lang, setLangState] = useState<Lang>('pt');
   const [storyStep, setStoryStepState] = useState<number>(0);
   const [missionPhase, setMissionPhaseState] = useState<MissionPhase>('idle');
   const [sceneReplayKey, setSceneReplayKey] = useState<number>(0);
-  const [loopSingleBar, setLoopSingleBarState] = useState<number | null>(null);
+  const [barLoop, setBarLoopState] = useState<BarLoopRange>(null);
   const [compareCountries, setCompareCountriesState] = useState<CompareCountriesState>({
     slotA: '076',
     slotB: '818',
@@ -445,13 +441,22 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const scrubTimerRef = useRef<number | null>(null);
   const [seekSyncNonce, setSeekSyncNonce] = useState<number>(0);
   const [audioMode, setAudioModeState] = useState<AudioOutputMode>('hrtf');
-  const [masterGain, setMasterGainState] = useState<number>(0.9);
+  const [masterGain, setMasterGainState] = useState<number>(STUDIO_SAVED_GAINS.master);
   const [voiceVolume, setVoiceVolumeState] = useState<number>(1.0);
   const [layers, setLayers] = useState<ExperienceLayersState>(DEFAULT_LAYERS_STATE);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [progress01, setProgress01] = useState<number>(0);
+  const [liveMetersState, setLiveMetersState] = useState<{ vu: AudioLevelsMap; masterDbFs: number }>({
+    vu: ZERO_VU,
+    masterDbFs: -99,
+  });
   const [roomDimensions, setRoomDimensionsState] = useState<RoomDimensions>(
     loadInitialRoomDimensions
+  );
+
+  const loopSingleBar = useMemo(
+    () => (barLoop && barLoop[0] === barLoop[1] ? barLoop[0] : null),
+    [barLoop]
   );
 
   const country = useMemo(
@@ -460,15 +465,18 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
 
   const [countryMeta, setCountryMeta] = useState<CountryMetaJson | null>(null);
+  const [metaLoadStatus, setMetaLoadStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
 
   useEffect(() => {
     if (!country) {
       setCountryMeta(null);
+      setMetaLoadStatus('idle');
       return;
     }
     const cached = countryMetaCache.get(country.id);
     if (cached) {
       setCountryMeta(cached);
+      setMetaLoadStatus('ready');
       return;
     }
     setCountryMeta(null);
@@ -482,17 +490,23 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
 
     let cancelled = false;
+    setMetaLoadStatus('loading');
     const url = resolveAssetUrl(`/countries/${country.id}/meta.json`);
     window
       .fetch(url)
       .then((res) => (res.ok ? (res.json() as Promise<CountryMetaJson>) : null))
       .then((json) => {
-        if (cancelled || !json || !json.session?.region) return;
+        if (cancelled) return;
+        if (!json || !json.session?.region) {
+          setMetaLoadStatus('error');
+          return;
+        }
         countryMetaCache.set(country.id, json);
         setCountryMeta(json);
+        setMetaLoadStatus('ready');
       })
       .catch(() => {
-        // Fallback profile remains active when country meta.json has not been generated yet
+        if (!cancelled) setMetaLoadStatus('error');
       });
 
     return () => {
@@ -500,7 +514,6 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
   }, [country]);
 
-  const fallbackProfile = useMemo(() => inferFallbackProfile(country), [country]);
   const isRegionTuning = layers.temperature.enabled && layers.temperature.tuningMode === 'region';
   const activeTuning = countryMeta
     ? isRegionTuning
@@ -508,38 +521,33 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       : countryMeta.session.base
     : null;
 
-  const bpm = activeTuning ? activeTuning.bpm : isRegionTuning ? fallbackProfile.regionBpm : 90;
-  const keyRoot = activeTuning
-    ? activeTuning.keyRoot
-    : isRegionTuning
-      ? fallbackProfile.regionKeyRoot
-      : 'A';
-  const keyRootPt = activeTuning
-    ? activeTuning.keyRootPt
-    : isRegionTuning
-      ? fallbackProfile.regionKeyRootPt
-      : 'Lá';
-  const modeNamePt = activeTuning
-    ? activeTuning.modeNamePt
-    : isRegionTuning
-      ? fallbackProfile.modeNamePt
-      : 'Referência Neutra (90 BPM)';
-  const modeNameEn = activeTuning
-    ? activeTuning.modeNameEn
-    : isRegionTuning
-      ? fallbackProfile.modeNameEn
-      : 'Neutral Reference (90 BPM)';
-  const windMeanSpeed = activeTuning ? activeTuning.windMeanSpeed : fallbackProfile.windMeanSpeed;
-  const chordList = activeTuning ? activeTuning.chords : fallbackProfile.chords;
+  const studioData: CountryStudioPayload | null = countryMeta?.studio ?? null;
+  const activeStudioSession: StudioSessionData | null = studioData
+    ? isRegionTuning
+      ? studioData.sessions.region
+      : studioData.sessions.base
+    : null;
 
-  const totalBars = 8;
+  const bpm = activeStudioSession?.bpm ?? activeTuning?.bpm ?? 90;
+  const keyRoot = activeStudioSession?.keyRoot ?? activeTuning?.keyRoot ?? '--';
+  const keyRootPt = activeStudioSession?.keyRootPt ?? activeTuning?.keyRootPt ?? '--';
+  const modeNamePt =
+    activeStudioSession?.modeNamePt ?? activeTuning?.modeNamePt ?? '--';
+  const modeNameEn =
+    activeStudioSession?.modeNameEn ?? activeTuning?.modeNameEn ?? '--';
+  const windMeanSpeed = activeTuning?.windMeanSpeed ?? 0;
+  const chordList =
+    activeStudioSession?.chordProgression ?? activeTuning?.chords ?? [];
+
+  const totalBars = activeStudioSession?.totalBars ?? 8;
   const totalBeats = totalBars * 4;
-  const durationSeconds = Number(((totalBeats * 60) / bpm).toFixed(2));
+  const durationSeconds =
+    activeStudioSession?.durationSeconds ?? Number(((totalBeats * 60) / Math.max(40, bpm)).toFixed(2));
 
   const exactBeat = progress01 * totalBeats;
   const bar = Math.min(totalBars - 1, Math.floor(exactBeat / 4));
   const beat = Math.floor(exactBeat % 4);
-  const activeChord = chordList[bar % Math.max(1, chordList.length)] ?? 'Am7';
+  const activeChord = chordList[bar % Math.max(1, chordList.length)] ?? '--';
 
   const playback: ExperiencePlaybackState = useMemo(
     () => ({
@@ -583,36 +591,8 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const liveProgressRef = useRef(0);
   liveProgressRef.current = progress01;
-
-  useEffect(() => {
-    if (!isPlaying) return;
-    let raf = 0;
-    let prevMs = performance.now();
-    let lastCommittedBeat = -1;
-
-    const tick = (nowMs: number) => {
-      const dtSec = Math.min(0.1, Math.max(0, (nowMs - prevMs) / 1000));
-      prevMs = nowMs;
-      const nextProg = advanceLoopProgress(
-        liveProgressRef.current,
-        dtSec,
-        durationSeconds,
-        loopSingleBar,
-        totalBars
-      );
-      liveProgressRef.current = nextProg;
-
-      const currentQuarter = Math.floor(nextProg * totalBeats * 2);
-      if (currentQuarter !== lastCommittedBeat) {
-        lastCommittedBeat = currentQuarter;
-        setProgress01(nextProg);
-      }
-      raf = requestAnimationFrame(tick);
-    };
-
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [durationSeconds, isPlaying, loopSingleBar, totalBars, totalBeats]);
+  const barLoopRef = useRef<BarLoopRange>(barLoop);
+  barLoopRef.current = barLoop;
 
   const layersRef = useRef(layers);
   layersRef.current = layers;
@@ -620,120 +600,168 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   masterGainRef.current = masterGain;
   const playbackRef = useRef(playback);
   playbackRef.current = playback;
-
-  const makeNoteEvent = (
-    layer: LiveNoteEvent['layer'],
-    sx: number,
-    sy: number,
-    pitch: number,
-    velocity: number,
-    isAnchor: boolean
-  ): LiveNoteEvent => ({
-    layer,
-    source_x: sx,
-    source_y: sy,
-    sourceX: sx,
-    sourceY: sy,
-    pitch,
-    velocity,
-    isAnchor,
-  });
-
   const countryMetaRef = useRef(countryMeta);
   countryMetaRef.current = countryMeta;
+  const activeStudioSessionRef = useRef(activeStudioSession);
+  activeStudioSessionRef.current = activeStudioSession;
 
-  const computeSyntheticNotes = useCallback(
-    (prog: number): LiveNoteEvent[] => {
-      const l = layersRef.current;
-      const anySolo = l.melody.solo || l.chords.solo || l.bass.solo;
-      const melodyAudible = l.melody.enabled && (!anySolo || l.melody.solo);
-      const chordsAudible = l.chords.enabled && (!anySolo || l.chords.solo);
-      const bassAudible = l.bass.enabled && (!anySolo || l.bass.solo);
+  const extractRealNotesAtProgress = useCallback((prog01: number): LiveNoteEvent[] => {
+    const l = layersRef.current;
+    const spkSolo = l.melody.sparkleSolo;
+    const anyGenSolo = spkSolo || l.melody.solo || l.chords.solo || l.bass.solo;
 
-      const meta = countryMetaRef.current;
-      if (meta?.beatEvents && meta.beatEvents.length > 0) {
-        const beatIdx = Math.min(31, Math.max(0, Math.floor(prog * 32) % 32));
-        const realEvents: LiveNoteEvent[] = [];
-        for (const ev of meta.beatEvents) {
-          if (ev.beat !== beatIdx) continue;
-          if (ev.layer === 'melody' && !melodyAudible) continue;
-          if (ev.layer === 'sparkle' && (!melodyAudible || !l.melody.sparkleEnabled)) continue;
-          if (ev.layer === 'chords' && !chordsAudible) continue;
-          if (ev.layer === 'bass' && !bassAudible) continue;
-          realEvents.push(
-            makeNoteEvent(
-              ev.layer,
-              ev.source_x,
-              ev.source_y,
-              ev.pitch,
-              ev.velocity,
-              ev.isAnchor
-            )
-          );
-        }
-        return realEvents;
-      }
+    const melodyAudible =
+      !spkSolo && l.melody.enabled && (!anyGenSolo || l.melody.solo);
+    const sparkleAudible = spkSolo
+      ? l.melody.sparkleEnabled
+      : l.melody.enabled && l.melody.sparkleEnabled && (!anyGenSolo || l.melody.solo);
+    const chordsAudible = !spkSolo && l.chords.enabled && (!anyGenSolo || l.chords.solo);
+    const bassAudible = !spkSolo && l.bass.enabled && (!anyGenSolo || l.bass.solo);
 
-      const events: LiveNoteEvent[] = [];
-      const phase = prog * Math.PI * 2;
+    const session = activeStudioSessionRef.current;
+    if (session) {
+      const tBeats = (session.totalBars || 8) * 4;
+      const curBeat = prog01 * tBeats;
+      const out: LiveNoteEvent[] = [];
+
       if (melodyAudible) {
-        events.push(
-          makeNoteEvent(
-            'melody',
-            Number((0.5 + 0.34 * Math.cos(phase * 3)).toFixed(3)),
-            Number((0.5 + 0.3 * Math.sin(phase * 2)).toFixed(3)),
-            74,
-            0.82,
-            beat === 0
-          )
-        );
-        if (l.melody.sparkleEnabled) {
-          events.push(
-            makeNoteEvent(
-              'sparkle',
-              Number((0.5 - 0.36 * Math.sin(phase * 4)).toFixed(3)),
-              Number((0.56 + 0.28 * Math.cos(phase * 3)).toFixed(3)),
-              86,
-              0.64,
-              false
-            )
-          );
+        for (const n of session.tracks.melody) {
+          if (curBeat >= n.start_beat && curBeat <= n.start_beat + Math.min(n.duration_beats, 0.65)) {
+            out.push({
+              layer: 'melody',
+              source_x: n.source_x,
+              source_y: n.source_y,
+              sourceX: n.source_x,
+              sourceY: n.source_y,
+              pitch: n.pitch,
+              velocity: n.velocity,
+              isAnchor: Boolean(n.is_anchor),
+            });
+          }
         }
       }
-      if (chordsAudible) {
-        events.push(makeNoteEvent('chords', 0.5, 0.45, 62, 0.7, true));
-      }
-      if (bassAudible) {
-        events.push(makeNoteEvent('bass', 0.5, 0.2, 38, 0.88, true));
-      }
-      return events;
-    },
-    [beat]
-  );
 
-  const computeAudioLevels = useCallback(
-    (active: boolean, pulseFactor: number): AudioLevelsMap => {
+      if (sparkleAudible) {
+        for (const sp of session.tracks.melody_sparkle) {
+          const win = sp.sub_role === 'crystal_sparkle' ? 0.28 : Math.min(sp.duration_beats, 0.55);
+          if (curBeat >= sp.start_beat && curBeat <= sp.start_beat + win) {
+            out.push({
+              layer: 'sparkle',
+              source_x: sp.source_x,
+              source_y: sp.source_y,
+              sourceX: sp.source_x,
+              sourceY: sp.source_y,
+              pitch: sp.pitch,
+              velocity: sp.velocity,
+              isAnchor: false,
+              subRole: sp.sub_role,
+            });
+          }
+        }
+      }
+
+      if (chordsAudible) {
+        for (let i = 0; i < session.tracks.chords_pad.length; i += 3) {
+          const c = session.tracks.chords_pad[i];
+          if (curBeat >= c.start_beat && curBeat <= c.start_beat + c.duration_beats) {
+            out.push({
+              layer: 'chords',
+              source_x: c.source_x,
+              source_y: c.source_y,
+              sourceX: c.source_x,
+              sourceY: c.source_y,
+              pitch: c.pitch,
+              velocity: c.velocity,
+              isAnchor: true,
+            });
+          }
+        }
+      }
+
+      if (bassAudible) {
+        for (const b of session.tracks.bass) {
+          if (curBeat >= b.start_beat && curBeat <= b.start_beat + b.duration_beats) {
+            out.push({
+              layer: 'bass',
+              source_x: b.source_x,
+              source_y: b.source_y,
+              sourceX: b.source_x,
+              sourceY: b.source_y,
+              pitch: b.pitch,
+              velocity: b.velocity,
+              isAnchor: Boolean(b.is_anchor),
+            });
+          }
+        }
+      }
+
+      return out;
+    }
+
+    const meta = countryMetaRef.current;
+    if (meta?.beatEvents && meta.beatEvents.length > 0) {
+      const beatIdx = Math.min(31, Math.max(0, Math.floor(prog01 * 32) % 32));
+      const realEvents: LiveNoteEvent[] = [];
+      for (const ev of meta.beatEvents) {
+        if (ev.beat !== beatIdx) continue;
+        if (ev.layer === 'melody' && !melodyAudible) continue;
+        if (ev.layer === 'sparkle' && !sparkleAudible) continue;
+        if (ev.layer === 'chords' && !chordsAudible) continue;
+        if (ev.layer === 'bass' && !bassAudible) continue;
+        realEvents.push({
+          layer: ev.layer,
+          source_x: ev.source_x,
+          source_y: ev.source_y,
+          sourceX: ev.source_x,
+          sourceY: ev.source_y,
+          pitch: ev.pitch,
+          velocity: ev.velocity,
+          isAnchor: ev.isAnchor,
+        });
+      }
+      return realEvents;
+    }
+
+    return [];
+  }, []);
+
+  const computeEstimatedMetersFromNotes = useCallback(
+    (active: boolean, notes: LiveNoteEvent[]): AudioLevelsMap => {
+      if (!active) return ZERO_VU;
       const l = layersRef.current;
-      const anySolo = l.melody.solo || l.chords.solo || l.bass.solo;
-      const melVu =
-        active && l.melody.enabled && (!anySolo || l.melody.solo)
-          ? l.melody.gain * pulseFactor
-          : 0;
-      const spkVu = melVu > 0 && l.melody.sparkleEnabled ? melVu * 0.78 : 0;
-      const chdVu =
-        active && l.chords.enabled && (!anySolo || l.chords.solo)
-          ? l.chords.gain * (0.55 + 0.25 * pulseFactor)
-          : 0;
-      const basVu =
-        active && l.bass.enabled && (!anySolo || l.bass.solo)
-          ? l.bass.gain * (0.68 + 0.3 * pulseFactor)
-          : 0;
-      const wndVu =
-        active && l.wind.enabled ? l.wind.wetMix * Math.max(melVu, chdVu, basVu) * 0.85 : 0;
+      const spkSolo = l.melody.sparkleSolo;
+      const anyGenSolo = spkSolo || l.melody.solo || l.chords.solo || l.bass.solo;
+
+      const melAudible = !spkSolo && l.melody.enabled && (!anyGenSolo || l.melody.solo);
+      const spkAudible = spkSolo
+        ? l.melody.sparkleEnabled
+        : l.melody.enabled && l.melody.sparkleEnabled && (!anyGenSolo || l.melody.solo);
+      const chdAudible = !spkSolo && l.chords.enabled && (!anyGenSolo || l.chords.solo);
+      const basAudible = !spkSolo && l.bass.enabled && (!anyGenSolo || l.bass.solo);
+
+      let melVel = 0;
+      let spkVel = 0;
+      let chdVel = 0;
+      let basVel = 0;
+      for (const n of notes) {
+        if (n.layer === 'melody' && n.velocity > melVel) melVel = n.velocity;
+        else if (n.layer === 'sparkle' && n.velocity > spkVel) spkVel = n.velocity;
+        else if (n.layer === 'chords' && n.velocity > chdVel) chdVel = n.velocity;
+        else if (n.layer === 'bass' && n.velocity > basVel) basVel = n.velocity;
+      }
+
+      const melVu = melAudible ? Math.min(1, melVel * l.melody.gain) : 0;
+      const spkVu = spkAudible ? Math.min(1, spkVel * l.melody.gain * l.melody.sparkleGain) : 0;
+      const chdVu = chdAudible ? Math.min(1, chdVel * l.chords.gain) : 0;
+      const basVu = basAudible ? Math.min(1, basVel * l.bass.gain) : 0;
+      const wndVu = l.wind.enabled
+        ? Math.min(1, l.wind.wetMix * Math.max(melVu, spkVu, chdVu, basVu) * 0.85)
+        : 0;
       const masterVu = Math.min(
         1,
-        Math.max(melVu, chdVu, basVu) * masterGainRef.current
+        Math.max(melVu, spkVu, chdVu, basVu) * masterGainRef.current
       );
+
       return {
         melody: melVu,
         sparkle: spkVu,
@@ -746,6 +774,102 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     []
   );
 
+  // Loop 60fps sincronizado com o relógio sample-accurate Web Audio (ou relógio sincronizado LAN/Broadcast)
+  useEffect(() => {
+    if (!isPlaying) {
+      setLiveMetersState({ vu: ZERO_VU, masterDbFs: -99 });
+      return;
+    }
+    let raf = 0;
+    let prevMs = performance.now();
+    let lastCommittedQuarter = -1;
+    let lastMeterCommitMs = 0;
+
+    const tick = (nowMs: number) => {
+      const dtSec = Math.min(0.1, Math.max(0, (nowMs - prevMs) / 1000));
+      prevMs = nowMs;
+
+      const eng = audioEngineRef.current;
+      const hwProg = eng?.getPlayheadProgress01() ?? null;
+
+      const nextProg =
+        hwProg !== null
+          ? hwProg
+          : advanceLoopProgress(
+              liveProgressRef.current,
+              dtSec,
+              durationSeconds,
+              loopSingleBar,
+              totalBars,
+              barLoopRef.current
+            );
+
+      liveProgressRef.current = nextProg;
+
+      if (eng && eng.isStemAudioPlaying()) {
+        const activeNotes = extractRealNotesAtProgress(nextProg);
+        const melFocus = activeNotes.find((n) => n.layer === 'melody' || n.layer === 'sparkle');
+        if (melFocus) {
+          eng.steerMelodySpatialFocus(melFocus.source_x, melFocus.source_y);
+        }
+
+        const wp = countryMeta?.studio?.windProfile;
+        if (wp && wp.orientation.length > 0) {
+          const nSlots = wp.orientation.length;
+          const pos = Math.max(0, Math.min(nSlots - 1, nextProg * nSlots));
+          const i0 = Math.floor(pos) % nSlots;
+          const i1 = (i0 + 1) % nSlots;
+          const t = pos - Math.floor(pos);
+          const lerp = (arr: number[], fallback: number): number => {
+            if (!arr || arr.length === 0) return fallback;
+            const a = arr[i0] ?? fallback;
+            const b = arr[i1] ?? a;
+            return a + (b - a) * t;
+          };
+          const orient = lerp(wp.orientation, 0);
+          const hx = lerp(wp.hotspotX, 0.5);
+          const hy = lerp(wp.hotspotY, 0.5);
+          const spd = lerp(wp.speed, 0.45);
+          const turb = lerp(wp.turbulence, 0.2);
+          const panX = Math.max(-1, Math.min(1, orient * 0.65 + (hx - 0.5) * 2 * 0.55));
+          const depthY = Math.max(-1, Math.min(1, (hy - 0.5) * 2));
+          eng.steerWindByTelemetry(panX, depthY, spd, turb);
+        }
+      }
+
+      const currentQuarter = Math.floor(nextProg * totalBeats * 2);
+      if (currentQuarter !== lastCommittedQuarter) {
+        lastCommittedQuarter = currentQuarter;
+        setProgress01(nextProg);
+      }
+
+      if (nowMs - lastMeterCommitMs >= 55) {
+        lastMeterCommitMs = nowMs;
+        if (eng && eng.isStemAudioPlaying()) {
+          setLiveMetersState(eng.readLiveMeters());
+        } else {
+          const notes = extractRealNotesAtProgress(nextProg);
+          const vu = computeEstimatedMetersFromNotes(true, notes);
+          const db = vu.master > 1e-4 ? Number((20 * Math.log10(vu.master)).toFixed(1)) : -99;
+          setLiveMetersState({ vu, masterDbFs: db });
+        }
+      }
+
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [
+    computeEstimatedMetersFromNotes,
+    durationSeconds,
+    extractRealNotesAtProgress,
+    isPlaying,
+    loopSingleBar,
+    totalBars,
+    totalBeats,
+  ]);
+
   const isLiveOrScrubbing = isPlaying || scrubPreviewActive;
 
   const beatTimeline = useMemo(
@@ -754,14 +878,15 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
 
   const liveEvents = useMemo(
-    () => (isLiveOrScrubbing ? computeSyntheticNotes(progress01) : []),
-    [computeSyntheticNotes, countryMeta, isLiveOrScrubbing, progress01]
+    () => (isLiveOrScrubbing ? extractRealNotesAtProgress(progress01) : []),
+    [countryMeta, extractRealNotesAtProgress, isLiveOrScrubbing, layers, progress01]
   );
 
   const audioLevels = useMemo<AudioLevelsMap>(() => {
-    const beatPulse = isLiveOrScrubbing ? (beat % 2 === 0 ? 0.92 : 0.72) : 0;
-    return computeAudioLevels(isLiveOrScrubbing, beatPulse);
-  }, [beat, computeAudioLevels, isLiveOrScrubbing, layers, masterGain]);
+    if (isPlaying) return liveMetersState.vu;
+    if (scrubPreviewActive) return computeEstimatedMetersFromNotes(true, liveEvents);
+    return ZERO_VU;
+  }, [computeEstimatedMetersFromNotes, isPlaying, liveEvents, liveMetersState.vu, scrubPreviewActive]);
 
   const speakerLiveLevels = useMemo(
     () =>
@@ -776,22 +901,40 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
 
   const getLiveFrame = useCallback((): LiveFrameSnapshot => {
-    const l = layersRef.current;
     const pb = playbackRef.current;
-    const prog = liveProgressRef.current;
+    const eng = audioEngineRef.current;
+    const hwProg = eng?.getPlayheadProgress01() ?? null;
+    const prog = hwProg !== null ? hwProg : liveProgressRef.current;
     const active = pb.isPlaying || scrubPreviewActive;
-    const nowSec = typeof performance !== 'undefined' ? performance.now() / 1000 : 0;
-    const pulse = active ? 0.62 + 0.38 * Math.abs(Math.sin(nowSec * (pb.bpm / 30) * Math.PI)) : 0;
-    const vu = computeAudioLevels(active, pulse);
+
+    const activeNotes = active ? extractRealNotesAtProgress(prog) : [];
+
+    let vu = ZERO_VU;
+    let masterDbFs = -99;
+    if (eng && eng.isStemAudioPlaying()) {
+      const meters = eng.readLiveMeters();
+      vu = meters.vu;
+      masterDbFs = meters.masterDbFs;
+    } else if (active) {
+      vu = computeEstimatedMetersFromNotes(true, activeNotes);
+      masterDbFs = vu.master > 1e-4 ? Number((20 * Math.log10(vu.master)).toFixed(1)) : -99;
+    }
+
+    const yc = countryMetaRef.current?.studio?.yellowCounts;
+    const lightningCount =
+      yc && yc.length > 0
+        ? yc[Math.min(yc.length - 1, Math.floor(prog * yc.length))] ?? 0
+        : activeNotes.filter((n) => n.layer === 'melody' || n.layer === 'sparkle').length;
 
     return {
       currentTime: prog * pb.durationSeconds,
       progress01: prog,
       vu,
-      activeNotes: active ? computeSyntheticNotes(prog) : [],
-      lightningCount: vu.melody > 0 ? (l.melody.sparkleEnabled ? 12 : 5) : 0,
+      masterDbFs,
+      activeNotes,
+      lightningCount,
     };
-  }, [computeAudioLevels, computeSyntheticNotes, scrubPreviewActive]);
+  }, [computeEstimatedMetersFromNotes, extractRealNotesAtProgress, scrubPreviewActive]);
 
   const applyIncomingSync = useCallback((data: SyncPayload) => {
     if (!data || data.senderId === senderIdRef.current) return;
@@ -801,14 +944,22 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setStoryStepState(data.storyStep ?? 0);
     if (data.missionPhase) setMissionPhaseState(data.missionPhase);
     if (typeof data.sceneReplayKey === 'number') setSceneReplayKey(data.sceneReplayKey);
-    if (data.loopSingleBar !== undefined) setLoopSingleBarState(data.loopSingleBar);
+    if (data.barLoop !== undefined) {
+      setBarLoopState(data.barLoop);
+      barLoopRef.current = data.barLoop;
+    } else if (data.loopSingleBar !== undefined) {
+      const nextRange: BarLoopRange =
+        data.loopSingleBar === null ? null : [data.loopSingleBar, data.loopSingleBar];
+      setBarLoopState(nextRange);
+      barLoopRef.current = nextRange;
+    }
     if (data.compareCountries) setCompareCountriesState(data.compareCountries);
     setAudioModeState(data.audioMode);
     setMasterGainState(data.masterGain);
     if (typeof data.voiceVolume === 'number') {
       setVoiceVolumeState(data.voiceVolume);
     }
-    setLayers(data.layers);
+    setLayers(normalizeIncomingLayers(data.layers));
     setIsPlaying(data.isPlaying);
     setProgress01(data.progress01);
     liveProgressRef.current = data.progress01;
@@ -967,6 +1118,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       missionPhase,
       sceneReplayKey,
       loopSingleBar,
+      barLoop,
       compareCountries,
       audioMode,
       masterGain,
@@ -990,6 +1142,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [
     audioMode,
+    barLoop,
     compareCountries,
     isPlaying,
     lang,
@@ -1005,7 +1158,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     voiceVolume,
   ]);
 
-  // --- Sincronização do Motor Web Audio 8D (Stems Gapless + Síntese meta.json) ---
+  // --- Sincronização do Motor Web Audio 8D (100% Stems Pré-Gerados — Zero Fallback) ---
   useEffect(() => {
     const eng = audioEngineRef.current;
     if (!eng) return;
@@ -1026,7 +1179,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   useEffect(() => {
     const eng = audioEngineRef.current;
-    if (!eng || !country || localAudioMuted) {
+    if (!eng || !country || !countryMeta?.hasAudioStems || localAudioMuted) {
       eng?.stopStemPlayback();
       return;
     }
@@ -1037,15 +1190,20 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       .tryLoadPreRenderedStems(
         country.id,
         tuning,
-        countryMeta?.hasAudioStems,
-        countryMeta?.audioFormat ?? 'ogg'
+        countryMeta.hasAudioStems,
+        countryMeta.audioFormat ?? 'ogg'
       )
       .then((loaded) => {
         if (cancelled) return;
-        setAudioSourceKind(loaded ? 'stems' : 'meta-synth');
+        setAudioSourceKind('stems');
         if (loaded && isPlaying) {
-          eng.startStemPlayback(liveProgressRef.current, layersRef.current);
-        } else if (!loaded) {
+          eng.startStemPlayback(
+            liveProgressRef.current,
+            layersRef.current,
+            barLoopRef.current,
+            totalBars
+          );
+        } else {
           eng.stopStemPlayback();
         }
       });
@@ -1053,40 +1211,15 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return () => {
       cancelled = true;
     };
-  }, [country, countryMeta, isPlaying, isRegionTuning, localAudioMuted]);
-
-  const currentBeat32 = Math.min(31, Math.max(0, Math.floor(progress01 * 32) % 32));
-  const prevTriggeredBeatRef = useRef<number>(-1);
-
-  useEffect(() => {
-    const eng = audioEngineRef.current;
-    if (!eng) return;
-    if (!isPlaying || localAudioMuted) {
-      prevTriggeredBeatRef.current = -1;
-      eng.stopStemPlayback();
-      return;
-    }
-    if (eng.isUsingPreRenderedStems()) return;
-
-    if (prevTriggeredBeatRef.current !== currentBeat32) {
-      prevTriggeredBeatRef.current = currentBeat32;
-      eng.triggerBeatStep({
-        beatIndex: currentBeat32,
-        bpm,
-        activeChord,
-        keyRoot,
-        events: computeSyntheticNotes(currentBeat32 / 32),
-        layers: layersRef.current,
-      });
-    }
   }, [
-    activeChord,
-    bpm,
-    computeSyntheticNotes,
-    currentBeat32,
+    barLoop,
+    country,
+    countryMeta,
     isPlaying,
-    keyRoot,
+    isRegionTuning,
     localAudioMuted,
+    seekSyncNonce,
+    totalBars,
   ]);
 
   const selectCountry = useCallback(
@@ -1095,7 +1228,6 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setSelectedCountryId(countryId);
       setProgress01(0);
       liveProgressRef.current = 0;
-      prevTriggeredBeatRef.current = -1;
       setSeekSyncNonce((n) => n + 1);
     },
     [availableCountryIds]
@@ -1104,7 +1236,6 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const selectCountryPreserveBeat = useCallback(
     (countryId: string) => {
       if (!availableCountryIds.has(countryId)) return;
-      prevTriggeredBeatRef.current = -1;
       setSelectedCountryId(countryId);
       setSeekSyncNonce((n) => n + 1);
     },
@@ -1124,7 +1255,6 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const swapCompareCountries = useCallback(() => {
     const nextId = resolveCompareSwapTarget(selectedCountryId, compareCountries);
     if (!availableCountryIds.has(nextId)) return;
-    prevTriggeredBeatRef.current = -1;
     setSelectedCountryId(nextId);
     setSeekSyncNonce((n) => n + 1);
   }, [availableCountryIds, compareCountries, selectedCountryId]);
@@ -1192,59 +1322,132 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }));
   }, []);
 
+  const setSparkleGain = useCallback((gain: number) => {
+    const clamped = Math.min(2, Math.max(0, gain));
+    setLayers((prev) => ({
+      ...prev,
+      melody: {
+        ...prev.melody,
+        sparkleGain: clamped,
+      },
+    }));
+  }, []);
+
+  const toggleSparkleSolo = useCallback(() => {
+    setLayers((prev) => {
+      const nextSolo = !prev.melody.sparkleSolo;
+      return {
+        ...prev,
+        melody: {
+          ...prev.melody,
+          solo: false,
+          sparkleSolo: nextSolo,
+          sparkleEnabled: nextSolo ? true : prev.melody.sparkleEnabled,
+        },
+        chords: { ...prev.chords, solo: false },
+        bass: { ...prev.bass, solo: false },
+      };
+    });
+  }, []);
+
   const setAllLayersEnabled = useCallback((enabled: boolean) => {
     setLayers((prev) => ({
-      melody: { ...prev.melody, enabled, solo: false },
+      melody: {
+        ...prev.melody,
+        enabled,
+        solo: false,
+        sparkleSolo: false,
+      },
       chords: { ...prev.chords, enabled, solo: false },
-      temperature: { ...prev.temperature, enabled },
+      temperature: {
+        ...prev.temperature,
+        enabled,
+        tuningMode: enabled ? 'region' : 'base',
+      },
       bass: { ...prev.bass, enabled, solo: false },
       wind: { ...prev.wind, enabled },
     }));
   }, []);
 
   const setLayerGain = useCallback((layerId: VisualLayerId, gainOrWet: number) => {
-    const clamped = Math.min(1, Math.max(0, gainOrWet));
     setLayers((prev) => {
       if (layerId === 'temperature') {
         return prev;
       }
       if (layerId === 'wind') {
+        const clampedWet = Math.min(1.4, Math.max(0, gainOrWet));
         return {
           ...prev,
-          wind: { ...prev.wind, gain: clamped, wetMix: clamped },
+          wind: { ...prev.wind, gain: clampedWet, wetMix: Math.min(1, clampedWet) },
         };
       }
+      const clampedGain = Math.min(2, Math.max(0, gainOrWet));
       return {
         ...prev,
         [layerId]: {
           ...prev[layerId],
-          gain: clamped,
+          gain: clampedGain,
         },
       };
     });
   }, []);
 
   const setWindWetMix = useCallback((wetMix: number) => {
-    const clamped = Math.min(1, Math.max(0, wetMix));
+    const clamped = Math.min(1.4, Math.max(0, wetMix));
     setLayers((prev) => ({
       ...prev,
-      wind: { ...prev.wind, gain: clamped, wetMix: clamped },
+      wind: { ...prev.wind, gain: clamped, wetMix: Math.min(1, clamped) },
     }));
   }, []);
 
   const toggleSolo = useCallback((layerId: SoloableLayerId) => {
-    setLayers((prev) => ({
-      ...prev,
-      [layerId]: {
-        ...prev[layerId],
-        solo: !prev[layerId].solo,
-        enabled: !prev[layerId].solo ? true : prev[layerId].enabled,
-      },
-    }));
+    setLayers((prev) => {
+      const nextSolo = !prev[layerId].solo;
+      return {
+        ...prev,
+        melody: {
+          ...prev.melody,
+          solo: layerId === 'melody' ? nextSolo : false,
+          sparkleSolo: false,
+          enabled: layerId === 'melody' && nextSolo ? true : prev.melody.enabled,
+        },
+        chords: {
+          ...prev.chords,
+          solo: layerId === 'chords' ? nextSolo : false,
+          enabled: layerId === 'chords' && nextSolo ? true : prev.chords.enabled,
+        },
+        bass: {
+          ...prev.bass,
+          solo: layerId === 'bass' ? nextSolo : false,
+          enabled: layerId === 'bass' && nextSolo ? true : prev.bass.enabled,
+        },
+      };
+    });
   }, []);
 
   const setMasterGain = useCallback((gain: number) => {
-    setMasterGainState(Math.min(1, Math.max(0, gain)));
+    setMasterGainState(Math.min(1.6, Math.max(0, gain)));
+  }, []);
+
+  const resetMixerGains = useCallback(() => {
+    setLayers((prev) => ({
+      melody: {
+        ...prev.melody,
+        gain: STUDIO_SAVED_GAINS.melody,
+        sparkleGain: STUDIO_SAVED_GAINS.sparkle,
+        solo: false,
+        sparkleSolo: false,
+      },
+      chords: { ...prev.chords, gain: STUDIO_SAVED_GAINS.chords, solo: false },
+      bass: { ...prev.bass, gain: STUDIO_SAVED_GAINS.bass, solo: false },
+      wind: {
+        ...prev.wind,
+        gain: STUDIO_SAVED_GAINS.wind,
+        wetMix: STUDIO_SAVED_GAINS.wind,
+      },
+      temperature: prev.temperature,
+    }));
+    setMasterGainState(STUDIO_SAVED_GAINS.master);
   }, []);
 
   const setVoiceVolume = useCallback((volume: number) => {
@@ -1337,10 +1540,12 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     setSelectedCountryId('076');
     setLayers(DEFAULT_LAYERS_STATE);
+    setMasterGainState(STUDIO_SAVED_GAINS.master);
     setStoryStepState(0);
     setMissionPhaseState('idle');
     setSceneReplayKey((k) => k + 1);
-    setLoopSingleBarState(null);
+    setBarLoopState(null);
+    barLoopRef.current = null;
     setProgress01(0);
     liveProgressRef.current = 0;
     setIsPlaying(false);
@@ -1607,7 +1812,6 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     (speakerId: SpeakerSlotId, patch: Partial<SpeakerSlotConfig>) => {
       if (patch.sinkDeviceId) {
         audioEngineRef.current?.ensureContext();
-        // Ao escolher uma caixa física dedicada (Bluetooth/USB), ativa automaticamente o palco 3 Caixas VBAP!
         setAudioModeState('room3');
       }
       setSpeakerCalibration((prev) => {
@@ -1661,7 +1865,6 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return list;
   }, []);
 
-  // Atualiza automaticamente a lista de caixas sempre que uma caixa Bluetooth/USB conecta ou desconecta no Mac/PC
   useEffect(() => {
     if (
       typeof navigator === 'undefined' ||
@@ -1748,50 +1951,85 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
   }, []);
 
-  const auditionBeatIfPaused = useCallback(
-    (beatIdx: number) => {
-      if (playbackRef.current.isPlaying) return;
-      setScrubPreviewActive(true);
-      if (typeof window !== 'undefined') {
-        if (scrubTimerRef.current !== null) {
-          window.clearTimeout(scrubTimerRef.current);
-        }
-        scrubTimerRef.current = window.setTimeout(() => {
-          setScrubPreviewActive(false);
-          scrubTimerRef.current = null;
-        }, 1100);
+  const markScrubPreviewIfPaused = useCallback(() => {
+    if (playbackRef.current.isPlaying) return;
+    setScrubPreviewActive(true);
+    if (typeof window !== 'undefined') {
+      if (scrubTimerRef.current !== null) {
+        window.clearTimeout(scrubTimerRef.current);
       }
+      scrubTimerRef.current = window.setTimeout(() => {
+        setScrubPreviewActive(false);
+        scrubTimerRef.current = null;
+      }, 1100);
+    }
+  }, []);
 
-      const eng = audioEngineRef.current;
-      if (!eng || localAudioMuted || eng.isUsingPreRenderedStems()) return;
-      eng.ensureContext();
-      const pb = playbackRef.current;
-      eng.triggerBeatStep({
-        beatIndex: beatIdx,
-        bpm: pb.bpm,
-        activeChord: pb.activeChord,
-        keyRoot: pb.keyRoot,
-        events: computeSyntheticNotes(beatIdx / 32),
-        layers: layersRef.current,
-      });
+  const seekProgress = useCallback(
+    (nextProgress01: number) => {
+      const clamped = Math.min(0.999, Math.max(0, nextProgress01));
+      const curRange = barLoopRef.current;
+      if (curRange) {
+        const clickedBar = Math.floor(clamped * totalBars);
+        if (clickedBar < curRange[0] || clickedBar > curRange[1]) {
+          barLoopRef.current = null;
+          setBarLoopState(null);
+        }
+      }
+      liveProgressRef.current = clamped;
+      setProgress01(clamped);
+      setSeekSyncNonce((n) => n + 1);
+      markScrubPreviewIfPaused();
     },
-    [computeSyntheticNotes, localAudioMuted]
+    [markScrubPreviewIfPaused, totalBars]
   );
 
-  const seekProgress = useCallback((nextProgress01: number) => {
-    const clamped = Math.min(0.999, Math.max(0, nextProgress01));
-    liveProgressRef.current = clamped;
-    setProgress01(clamped);
+  const restartLoop = useCallback(() => {
+    const curRange = barLoopRef.current;
+    const startProg = curRange ? curRange[0] / Math.max(1, totalBars) : 0;
+    liveProgressRef.current = startProg;
+    setProgress01(startProg);
     setSeekSyncNonce((n) => n + 1);
-  }, []);
+  }, [totalBars]);
+
+  const setBarLoop = useCallback(
+    (range: BarLoopRange) => {
+      if (!range) {
+        barLoopRef.current = null;
+        setBarLoopState(null);
+        setSeekSyncNonce((n) => n + 1);
+        return;
+      }
+      const b0 = Math.max(0, Math.min(totalBars - 1, Math.min(range[0], range[1])));
+      const b1 = Math.max(b0, Math.min(totalBars - 1, Math.max(range[0], range[1])));
+      const normalized: [number, number] = [b0, b1];
+      barLoopRef.current = normalized;
+      setBarLoopState(normalized);
+
+      const startProg = b0 / totalBars;
+      const endProg = (b1 + 1) / totalBars;
+      if (liveProgressRef.current < startProg || liveProgressRef.current >= endProg) {
+        liveProgressRef.current = startProg;
+        setProgress01(startProg);
+      }
+      setSeekSyncNonce((n) => n + 1);
+    },
+    [totalBars]
+  );
+
+  const setLoopSingleBar = useCallback(
+    (barIndex: number | null) => {
+      setBarLoop(barIndex === null ? null : [barIndex, barIndex]);
+    },
+    [setBarLoop]
+  );
 
   const seekBeat = useCallback(
     (beatIndex: number) => {
       const clampedBeat = Math.max(0, Math.min(totalBeats - 1, beatIndex));
       seekProgress(clampedBeat / totalBeats);
-      auditionBeatIfPaused(clampedBeat);
     },
-    [auditionBeatIfPaused, seekProgress, totalBeats]
+    [seekProgress, totalBeats]
   );
 
   const stepBeat = useCallback(
@@ -1800,9 +2038,8 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const nextBeat =
         (((curBeat + Math.round(delta)) % totalBeats) + totalBeats) % totalBeats;
       seekProgress(nextBeat / totalBeats);
-      auditionBeatIfPaused(nextBeat);
     },
-    [auditionBeatIfPaused, seekProgress, totalBeats]
+    [seekProgress, totalBeats]
   );
 
   const seekBar = useCallback(
@@ -1810,22 +2047,6 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const clampedBar = Math.max(0, Math.min(totalBars - 1, barIndex));
       const targetBeat = clampedBar * 4;
       seekProgress(targetBeat / totalBeats);
-      auditionBeatIfPaused(targetBeat);
-    },
-    [auditionBeatIfPaused, seekProgress, totalBars, totalBeats]
-  );
-
-  const setLoopSingleBar = useCallback(
-    (barIndex: number | null) => {
-      if (barIndex === null) {
-        setLoopSingleBarState(null);
-        return;
-      }
-      const clampedBar = Math.max(0, Math.min(totalBars - 1, barIndex));
-      setLoopSingleBarState(clampedBar);
-      if (playbackRef.current.bar !== clampedBar) {
-        seekProgress((clampedBar * 4) / totalBeats);
-      }
     },
     [seekProgress, totalBars, totalBeats]
   );
@@ -1949,18 +2170,22 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       allCountries,
       availableCountryIds,
       pilotCountryIds: pilotSet,
-      loadStatus: country ? 'ready' : 'idle',
+      loadStatus: country ? metaLoadStatus : 'idle',
       lang,
       storyStep,
       missionPhase,
       sceneReplayKey,
       loopSingleBar,
+      barLoop,
       compareCountries,
       beatTimeline,
+      studioData,
+      activeStudioSession,
       speakerLiveLevels,
       audioMode,
       masterGain,
       voiceVolume,
+      masterDbFs: liveMetersState.masterDbFs,
       localAudioMuted,
       audioSourceKind,
       lanConnected,
@@ -1982,10 +2207,15 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       activateMissionFrame,
       replayActiveFrame,
       setLoopSingleBar,
+      setBarLoop,
+      restartLoop,
+      resetMixerGains,
       stepBeat,
       toggleEye,
       setAllLayersEnabled,
       toggleSparkle,
+      setSparkleGain,
+      toggleSparkleSolo,
       setLayerGain,
       setWindWetMix,
       toggleSolo,
@@ -2010,6 +2240,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }),
     [
       activateMissionFrame,
+      activeStudioSession,
       allCountries,
       audioContextState,
       audioLevels,
@@ -2017,6 +2248,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       audioOwner,
       audioSourceKind,
       availableCountryIds,
+      barLoop,
       beatTimeline,
       compareCountries,
       country,
@@ -2026,9 +2258,11 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       lang,
       layers,
       liveEvents,
+      liveMetersState.masterDbFs,
       localAudioMuted,
       loopSingleBar,
       masterGain,
+      metaLoadStatus,
       missionPhase,
       nextStoryStep,
       pilotSet,
@@ -2039,6 +2273,8 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       realAudioRms01,
       replayActiveFrame,
       resetExperienceToDefault,
+      resetMixerGains,
+      restartLoop,
       roomDimensions,
       sceneReplayKey,
       seekBar,
@@ -2049,6 +2285,8 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setAllLayersEnabled,
       setAudioMode,
       setAudioOwner,
+      setBarLoop,
+      setCompareSlot,
       setCompareSlot,
       setLang,
       setLayerGain,
@@ -2057,12 +2295,14 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setMasterGain,
       setMissionPhase,
       setRoomDimensions,
+      setSparkleGain,
       setStoryStep,
       setVoiceVolume,
       setWindWetMix,
       speakerLiveLevels,
       stepBeat,
       storyStep,
+      studioData,
       swapCompareCountries,
       toggleEye,
       togglePlay,
@@ -2070,6 +2310,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       toggleSparkle,
       unlockAudioContext,
       voiceVolume,
+      toggleSparkleSolo,
     ]
   );
 

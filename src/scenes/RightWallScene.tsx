@@ -22,6 +22,7 @@ import {
   VISUAL_LAYER_ORDER,
   VisualLayerId,
 } from '../experience/types';
+import { JukeboxStudioStage } from './JukeboxStudioStage';
 import { SpaceStarfield } from './SpaceStarfield';
 import { SpaceshipLaunchOverlay } from './SpaceshipLaunchOverlay';
 
@@ -591,8 +592,17 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         </div>
       )}
 
-      {/* Robô MINEIRØ no círculo azul + barra conectada saindo do globo */}
-      {missionPhase !== 'idle' && missionPhase !== 'ended' && (
+      {/* Fase Exploring: Palco Jukebox Studio + Partitura MIDI em Loop ocupando a Parede Direita */}
+      {missionPhase === 'exploring' && (
+        <JukeboxStudioStage
+          renderContext={renderContext}
+          storyStep={storyStep}
+          robotText={visibleText}
+        />
+      )}
+
+      {/* Robô MINEIRØ no círculo azul + barra conectada nas fases cinematográficas (exceto idle, exploring e ended) */}
+      {missionPhase !== 'idle' && missionPhase !== 'exploring' && missionPhase !== 'ended' && (
         <div
           className="pointer-events-none absolute z-30 flex items-center transition-all duration-1000 ease-out"
           style={robotPositionStyle}

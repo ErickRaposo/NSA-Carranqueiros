@@ -6,3 +6,8 @@ tsconfig.tsbuildinfo
 __pycache__/
 *.pyc
 .DS_Store
+
+# Cache do Atlas Global de 96 quadros e Python
+outputs/
+**/__pycache__/
+*.pyc

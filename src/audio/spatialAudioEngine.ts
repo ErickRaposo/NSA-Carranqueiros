@@ -1,8 +1,9 @@
 import { resolveAssetUrl } from '../datasets/nasaDatasets';
 import {
+  AudioLevelsMap,
   AudioOutputMode,
+  BarLoopRange,
   ExperienceLayersState,
-  LiveNoteEvent,
   TuningMode,
 } from '../experience/types';
 import {
@@ -31,6 +32,8 @@ export type AudioOutputSupportStatus =
   | 'permission-needed'
   | 'insecure-context'
   | 'unsupported';
+
+const HEADROOM_INV = 2.0;
 
 const NOTE_SEMITONES: Record<string, number> = {
   C: 0,
@@ -64,7 +67,7 @@ export function parseChordToMidiVoicing(chordSymbol: string, fallbackRoot = 'A')
   const rootName = match?.[1] ?? fallbackRoot;
   const quality = (match?.[2] ?? '').toLowerCase();
   const rootSemi = NOTE_SEMITONES[rootName] ?? 9;
-  const baseMidi = 48 + rootSemi; // C3 = 48 .. B3 = 59
+  const baseMidi = 48 + rootSemi;
 
   const isMinor = quality.startsWith('m') && !quality.startsWith('maj');
   const isSus2 = quality.includes('sus2');
@@ -86,13 +89,29 @@ export function parseChordToMidiVoicing(chordSymbol: string, fallbackRoot = 'A')
   return notes;
 }
 
+function makeSoftLimiterCurve(threshold = 0.94): Float32Array<ArrayBuffer> {
+  const n = 8192;
+  const curve = new Float32Array(new ArrayBuffer(n * 4));
+  const headroom = Math.max(0.01, 0.998 - threshold);
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / (n - 1) - 1;
+    const mag = Math.abs(x);
+    if (mag <= threshold) {
+      curve[i] = x;
+    } else {
+      const lim = threshold + headroom * Math.tanh((mag - threshold) / headroom);
+      curve[i] = Math.sign(x) * lim;
+    }
+  }
+  return curve;
+}
+
 function createPinkNoiseBuffer(ctx: BaseAudioContext, durationSeconds = 3.0): AudioBuffer {
   const sampleRate = ctx.sampleRate;
   const length = Math.floor(sampleRate * durationSeconds);
   const buffer = ctx.createBuffer(1, length, sampleRate);
   const out = buffer.getChannelData(0);
 
-  // Filtro Paul Kellet (-3 dB/oitava) para Ruído Rosa acústico de referência
   let b0 = 0;
   let b1 = 0;
   let b2 = 0;
@@ -112,7 +131,6 @@ function createPinkNoiseBuffer(ctx: BaseAudioContext, durationSeconds = 3.0): Au
     const pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
     b6 = white * 0.115926;
 
-    // Crossfade suave nas pontas de 25ms para loop 100% sem clique
     let env = 1;
     const fadeSamples = Math.floor(sampleRate * 0.025);
     if (i < fadeSamples) env = i / fadeSamples;
@@ -122,22 +140,6 @@ function createPinkNoiseBuffer(ctx: BaseAudioContext, durationSeconds = 3.0): Au
   }
 
   return buffer;
-}
-
-function createAtmosphericImpulseResponse(ctx: BaseAudioContext, seconds = 2.4): AudioBuffer {
-  const rate = ctx.sampleRate;
-  const length = Math.floor(rate * seconds);
-  const impulse = ctx.createBuffer(2, length, rate);
-
-  for (let ch = 0; ch < 2; ch++) {
-    const data = impulse.getChannelData(ch);
-    for (let i = 0; i < length; i++) {
-      const t = i / length;
-      const decay = Math.pow(1 - t, 2.6);
-      data[i] = (Math.random() * 2 - 1) * decay * 0.38;
-    }
-  }
-  return impulse;
 }
 
 interface SpeakerBusChain {
@@ -150,6 +152,15 @@ interface SpeakerBusChain {
   sinkAudioEl: HTMLAudioElement | null;
   sinkCtx: AudioContext | null;
 }
+
+type StemComponentId = 'chords' | 'bass' | 'melody_main' | 'melody_sparkle';
+
+const STEM_COMPONENTS: StemComponentId[] = [
+  'chords',
+  'bass',
+  'melody_main',
+  'melody_sparkle',
+];
 
 type StemKey =
   | 'chords_dry'
@@ -172,6 +183,16 @@ const STEM_KEYS: StemKey[] = [
   'melody_sparkle_wind',
 ];
 
+interface ComponentBusNodes {
+  dryGain: GainNode;
+  windGain: GainNode;
+  sumGain: GainNode;
+  meter: AnalyserNode;
+  directGain: GainNode;
+  stereoPan: StereoPannerNode;
+  roomGains: Record<SpeakerSlotId, GainNode>;
+}
+
 type AudioContextWithSink = AudioContext & {
   setSinkId?: (sinkId: string) => Promise<void>;
 };
@@ -193,30 +214,35 @@ export class SpatialAudioEngine {
   private masterGainNode: GainNode | null = null;
   private masterAnalyserNode: AnalyserNode | null = null;
   private analyserTimeData: Uint8Array<ArrayBuffer> | null = null;
-  private windSendNode: GainNode | null = null;
-  private windWetGainNode: GainNode | null = null;
+  private masterAnalyser: AnalyserNode | null = null;
+  private windDiffAnalyser: AnalyserNode | null = null;
   private windOrbitPanner: PannerNode | null = null;
   private windDirectGainNode: GainNode | null = null;
   private windRoomGainNodes: Record<SpeakerSlotId, GainNode> | null = null;
+  private componentBuses: Record<StemComponentId, ComponentBusNodes> | null = null;
   private pinkBuffer: AudioBuffer | null = null;
   private speakerChains: Record<SpeakerSlotId, SpeakerBusChain> | null = null;
 
   private audioMode: AudioOutputMode = 'hrtf';
-  private masterGain = 0.9;
+  private masterGain = 1.0;
   private voiceDuckMultiplier = 1.0;
   private calibration: AudioCalibrationState;
   private isolatedSpeakerSlot: SpeakerSlotId | null = null;
   private outputPermissionUnlocked = false;
-  private orbitTimer: number | null = null;
-  private orbitAngleRad = 0;
-  private windMeanSpeed = 8.0;
 
-  // Pre-rendered stems state (when countries/<id>/{region,base}/*.ogg|m4a exist)
+  // Pre-rendered stems state (100% deterministic from nasa-geo-sonification)
   private loadedStemCountryKey: string | null = null;
+  private loadingPromise: Promise<boolean> | null = null;
+  private loadingKey: string | null = null;
   private stemBuffers: Partial<Record<StemKey, AudioBuffer>> = {};
-  private activeStemNodes: Partial<Record<StemKey, { src: AudioBufferSourceNode; gain: GainNode }>> =
-    {};
+  private activeSources: AudioBufferSourceNode[] = [];
   private usingPreRenderedStems = false;
+  private stemsActivelyPlaying = false;
+  private stemLoopStartCtxTime = 0;
+  private stemLoopBoundsSec: [number, number] = [0, 16];
+  private stemFullDurationSec = 16;
+
+  private analyserScratch = new Float32Array(512);
 
   // Calibration signal state
   private calibTestMode: CalibrationTestMode = { kind: 'off' };
@@ -240,6 +266,10 @@ export class SpatialAudioEngine {
 
   public isUsingPreRenderedStems(): boolean {
     return this.usingPreRenderedStems;
+  }
+
+  public isStemAudioPlaying(): boolean {
+    return this.stemsActivelyPlaying && Boolean(this.ctx);
   }
 
   public isSetSinkIdSupported(): boolean {
@@ -280,6 +310,7 @@ export class SpatialAudioEngine {
     this.isolatedSpeakerSlot = slot;
     if (this.ctx && this.speakerChains) {
       this.updateSpeakerCalibration(this.calibration);
+      this.syncSpatialModeRouting();
     }
   }
 
@@ -318,8 +349,20 @@ export class SpatialAudioEngine {
 
       const master = ctx.createGain();
       master.gain.value = this.masterGain * this.voiceDuckMultiplier;
-      master.connect(ctx.destination);
+
+      const limiter = ctx.createWaveShaper();
+      limiter.curve = makeSoftLimiterCurve(0.94);
+      limiter.oversample = '2x';
+
+      const mAnalyser = ctx.createAnalyser();
+      mAnalyser.fftSize = 512;
+
+      master.connect(limiter);
+      limiter.connect(mAnalyser);
+      mAnalyser.connect(ctx.destination);
+
       this.masterGainNode = master;
+      this.masterAnalyser = mAnalyser;
 
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
@@ -364,30 +407,17 @@ export class SpatialAudioEngine {
         speaker3: makeChain('speaker3'),
       };
 
-      // Build Wind 8D Spatial FX Bus (Ping-Pong Delay + Hall Reverb -> 360° Orbit Panner OR 3-Speaker VBAP)
-      const windSend = ctx.createGain();
-      const preFilter = ctx.createBiquadFilter();
-      preFilter.type = 'bandpass';
-      preFilter.frequency.value = 1350;
-      preFilter.Q.value = 0.65;
-
-      const delayL = ctx.createDelay(1.0);
-      delayL.delayTime.value = 0.27;
-      const fbL = ctx.createGain();
-      fbL.gain.value = 0.36;
-
-      const convolver = ctx.createConvolver();
-      convolver.buffer = createAtmosphericImpulseResponse(ctx, 2.3);
-
-      const windWet = ctx.createGain();
-      windWet.gain.value = 0.55;
+      // Wind 8D Orbit Bus (receives pre-rendered *_wind stems and orbits in 360° HRTF or 3-Speaker VBAP)
+      const windDiffAn = ctx.createAnalyser();
+      windDiffAn.fftSize = 256;
+      this.windDiffAnalyser = windDiffAn;
 
       const orbitPanner = ctx.createPanner();
       orbitPanner.panningModel = 'HRTF';
       orbitPanner.distanceModel = 'inverse';
-      orbitPanner.refDistance = 1.2;
-      orbitPanner.positionX.value = 1.4;
-      orbitPanner.positionY.value = 0.4;
+      orbitPanner.refDistance = 1.45;
+      orbitPanner.positionX.value = 1.25;
+      orbitPanner.positionY.value = 0.35;
       orbitPanner.positionZ.value = 0.0;
 
       const windDirectGain = ctx.createGain();
@@ -401,28 +431,73 @@ export class SpatialAudioEngine {
       };
       for (const id of SPEAKER_IDS) {
         windRoomGains[id].gain.value = 0;
-        windWet.connect(windRoomGains[id]);
+        windDiffAn.connect(windRoomGains[id]);
         windRoomGains[id].connect(this.speakerChains[id].input);
       }
 
-      windSend.connect(preFilter);
-      preFilter.connect(delayL);
-      delayL.connect(fbL);
-      fbL.connect(delayL);
-      preFilter.connect(convolver);
-      delayL.connect(convolver);
-      convolver.connect(windWet);
-      windWet.connect(orbitPanner);
+      windDiffAn.connect(orbitPanner);
       orbitPanner.connect(windDirectGain);
       windDirectGain.connect(master);
 
-      this.windSendNode = windSend;
-      this.windWetGainNode = windWet;
       this.windOrbitPanner = orbitPanner;
       this.windDirectGainNode = windDirectGain;
       this.windRoomGainNodes = windRoomGains;
 
-      this.startWindOrbitLoop();
+      // Build 4 Independent Stem Component Buses (matching jukebox_studio.py + VBAP/HRTF routing)
+      const compBuses = {} as Record<StemComponentId, ComponentBusNodes>;
+      for (const comp of STEM_COMPONENTS) {
+        const dryGain = ctx.createGain();
+        const windGain = ctx.createGain();
+        const sumGain = ctx.createGain();
+        const meter = ctx.createAnalyser();
+        meter.fftSize = 256;
+
+        dryGain.connect(sumGain);
+        windGain.connect(sumGain);
+        sumGain.connect(meter);
+
+        const stereoPan = ctx.createStereoPanner();
+        stereoPan.pan.value = 0;
+        const directGain = ctx.createGain();
+        directGain.gain.value = useRoomVbap ? 0 : 1;
+
+        dryGain.connect(stereoPan);
+        stereoPan.connect(directGain);
+        directGain.connect(master);
+
+        windGain.connect(windDiffAn);
+
+        const roomGains: Record<SpeakerSlotId, GainNode> = {
+          speaker1: ctx.createGain(),
+          speaker2: ctx.createGain(),
+          speaker3: ctx.createGain(),
+        };
+        const baseVbap =
+          comp === 'bass'
+            ? computeVbap3Gains(0, 0, this.calibration.speakers)
+            : comp === 'chords'
+              ? { speaker1: 0.65, speaker2: 0.65, speaker3: 0.38 }
+              : computeVbap3Gains(0, 0.25, this.calibration.speakers);
+
+        for (const id of SPEAKER_IDS) {
+          roomGains[id].gain.value = useRoomVbap ? baseVbap[id] : 0;
+          dryGain.connect(roomGains[id]);
+          roomGains[id].connect(this.speakerChains[id].input);
+        }
+
+        compBuses[comp] = {
+          dryGain,
+          windGain,
+          sumGain,
+          meter,
+          directGain,
+          stereoPan,
+          roomGains,
+        };
+      }
+      this.componentBuses = compBuses;
+
+      this.steerWindByTelemetry(0, 0, 0.4, 0.2);
       void this.applySinkRouting();
     }
 
@@ -432,40 +507,86 @@ export class SpatialAudioEngine {
     return this.ctx;
   }
 
-  private startWindOrbitLoop(): void {
-    if (this.orbitTimer !== null || typeof window === 'undefined') return;
-    this.orbitTimer = window.setInterval(() => {
-      if (!this.ctx || !this.windOrbitPanner) return;
-      const angularVel = 0.35 + this.windMeanSpeed * 0.085; // rad/s proportional to NASA wind
-      this.orbitAngleRad = (this.orbitAngleRad + angularVel * 0.05) % (Math.PI * 2);
-      const radius = 1.65;
-      const unitX = Math.cos(this.orbitAngleRad);
-      const unitZ = Math.sin(this.orbitAngleRad);
-      const ox = unitX * radius;
-      const oz = unitZ * radius;
-      const oy = 0.35 + 0.25 * Math.sin(this.orbitAngleRad * 2);
+  private syncSpatialModeRouting(): void {
+    if (!this.ctx || !this.componentBuses) return;
+    const useRoomVbap = this.audioMode === 'room3' || this.isolatedSpeakerSlot !== null;
+    const now = this.ctx.currentTime;
 
-      const now = this.ctx.currentTime;
-      this.windOrbitPanner.positionX.setTargetAtTime(ox, now, 0.05);
-      this.windOrbitPanner.positionY.setTargetAtTime(oy, now, 0.05);
-      this.windOrbitPanner.positionZ.setTargetAtTime(oz, now, 0.05);
+    for (const comp of STEM_COMPONENTS) {
+      const bus = this.componentBuses[comp];
+      bus.directGain.gain.setTargetAtTime(useRoomVbap ? 0 : 1, now, 0.04);
+      const vbap =
+        comp === 'bass'
+          ? computeVbap3Gains(0, 0, this.calibration.speakers)
+          : comp === 'chords'
+            ? { speaker1: 0.65, speaker2: 0.65, speaker3: 0.38 }
+            : computeVbap3Gains(0, 0.25, this.calibration.speakers);
+      for (const id of SPEAKER_IDS) {
+        bus.roomGains[id].gain.setTargetAtTime(useRoomVbap ? vbap[id] : 0, now, 0.04);
+      }
+    }
+  }
 
-      // Se estivermos no modo 3 Caixas VBAP (ou Nó LAN isolado), orbita fisicamente entre C1, C2 e C3!
-      const useRoomVbap = this.audioMode === 'room3' || this.isolatedSpeakerSlot !== null;
-      if (this.windDirectGainNode && this.windRoomGainNodes) {
-        this.windDirectGainNode.gain.setTargetAtTime(useRoomVbap ? 0 : 1, now, 0.05);
-        if (useRoomVbap) {
-          const vbap = computeVbap3Gains(unitX * 0.9, unitZ * 0.9, this.calibration.speakers);
-          for (const id of SPEAKER_IDS) {
-            this.windRoomGainNodes[id].gain.setTargetAtTime(vbap[id], now, 0.05);
-          }
-        } else {
-          for (const id of SPEAKER_IDS) {
-            this.windRoomGainNodes[id].gain.setTargetAtTime(0, now, 0.05);
-          }
+  /**
+   * Direciona dinamicamente a espacialização 8D/VBAP das notas ativas de raios (`melody_main` e `melody_sparkle`)
+   * usando `source_x` (Oeste->Leste) e `source_y` (Sul->Norte/Teto) reais do `meta.json`.
+   */
+  public steerMelodySpatialFocus(sourceX01: number, sourceY01: number): void {
+    if (!this.ctx || !this.componentBuses) return;
+    const now = this.ctx.currentTime;
+    const normX = Math.max(-1, Math.min(1, (sourceX01 - 0.5) * 2));
+    const normY = Math.max(-1, Math.min(1, (sourceY01 - 0.5) * 2));
+    const useRoomVbap = this.audioMode === 'room3' || this.isolatedSpeakerSlot !== null;
+
+    for (const comp of ['melody_main', 'melody_sparkle'] as const) {
+      const bus = this.componentBuses[comp];
+      bus.stereoPan.pan.setTargetAtTime(normX * 0.96, now, 0.025);
+      if (useRoomVbap) {
+        const vbap = computeVbap3Gains(normX, normY, this.calibration.speakers);
+        for (const id of SPEAKER_IDS) {
+          bus.roomGains[id].gain.setTargetAtTime(vbap[id], now, 0.025);
         }
       }
-    }, 50);
+    }
+  }
+
+  /**
+   * Move o barramento 8D do Vento de um lado para o outro (Oeste <-> Leste) e profundidade
+   * com base na direção e concentração reais do vento extraídas do vídeo `svs5148` da NASA.
+   */
+  public steerWindByTelemetry(
+    panX: number,
+    depthY: number,
+    speed01 = 0.5,
+    turbulence01 = 0.2
+  ): void {
+    if (!this.ctx || !this.windOrbitPanner) return;
+    const now = this.ctx.currentTime;
+    const clampedX = Math.max(-1, Math.min(1, panX));
+    const clampedY = Math.max(-1, Math.min(1, depthY));
+    const span = 1.55 + Math.min(1, Math.max(0, speed01)) * 0.45;
+    const ox = clampedX * span;
+    const oy = 0.2 + clampedY * 0.45 + turbulence01 * 0.18;
+    const oz = 0.35 - Math.abs(clampedX) * 0.55;
+
+    this.windOrbitPanner.positionX.setTargetAtTime(ox, now, 0.08);
+    this.windOrbitPanner.positionY.setTargetAtTime(oy, now, 0.08);
+    this.windOrbitPanner.positionZ.setTargetAtTime(oz, now, 0.08);
+
+    const useRoomVbap = this.audioMode === 'room3' || this.isolatedSpeakerSlot !== null;
+    if (this.windDirectGainNode && this.windRoomGainNodes) {
+      this.windDirectGainNode.gain.setTargetAtTime(useRoomVbap ? 0 : 1, now, 0.06);
+      if (useRoomVbap) {
+        const vbap = computeVbap3Gains(clampedX * 0.98, clampedY * 0.85, this.calibration.speakers);
+        for (const id of SPEAKER_IDS) {
+          this.windRoomGainNodes[id].gain.setTargetAtTime(vbap[id], now, 0.06);
+        }
+      } else {
+        for (const id of SPEAKER_IDS) {
+          this.windRoomGainNodes[id].gain.setTargetAtTime(0, now, 0.06);
+        }
+      }
+    }
   }
 
   public getAudioContextState(): AudioContextState | 'uninitialized' {
@@ -501,8 +622,8 @@ export class SpatialAudioEngine {
   }
 
   public setMasterGain(gain: number): void {
-    this.masterGain = Math.max(0, Math.min(1.5, gain));
-    this.applyEffectiveMasterGain(0.03);
+    this.masterGain = Math.max(0, Math.min(1.6, gain));
+    this.applyEffectiveMasterGain(0.02);
   }
 
   /**
@@ -538,7 +659,7 @@ export class SpatialAudioEngine {
           this.ctx.destination.channelCountMode = 'explicit';
           this.ctx.destination.channelInterpretation = 'discrete';
         } catch {
-          // fallback to stereo hardware cleanly
+          // fallback cleanly
         }
       }
     } else if (this.ctx) {
@@ -550,6 +671,7 @@ export class SpatialAudioEngine {
         // ignore
       }
     }
+    this.syncSpatialModeRouting();
   }
 
   public updateSpeakerCalibration(next: AudioCalibrationState): void {
@@ -585,6 +707,8 @@ export class SpatialAudioEngine {
       }
     }
 
+    this.syncSpatialModeRouting();
+
     if (sinkChanged) {
       void this.applySinkRouting();
     }
@@ -599,7 +723,6 @@ export class SpatialAudioEngine {
       const cfg = this.calibration.speakers[id];
       const sinkId = cfg.routeTarget === 'local' ? cfg.sinkDeviceId : '';
 
-      // Limpa bridge anterior de saída dedicada (HTMLAudioElement ou AudioContext auxiliar)
       if (chain.sinkAudioEl) {
         try {
           chain.sinkAudioEl.pause();
@@ -623,7 +746,6 @@ export class SpatialAudioEngine {
       chain.masterMirrorGain.disconnect();
 
       if (!sinkId) {
-        // Saída padrão do sistema via Master Bus estéreo
         chain.calibGain.connect(chain.stereoPan);
       } else {
         try {
@@ -633,7 +755,6 @@ export class SpatialAudioEngine {
           chain.masterMirrorGain.connect(streamDest);
 
           if (typeof Audio !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype) {
-            // Caminho preferencial no Chrome/Edge/Brave/Arc: HTMLAudioElement evita o bug de stream silencioso de 2º AudioContext
             const audioEl = new Audio() as AudioElementWithSink;
             audioEl.autoplay = true;
             audioEl.srcObject = streamDest.stream;
@@ -654,7 +775,6 @@ export class SpatialAudioEngine {
             chain.sinkStreamDest = streamDest;
           }
         } catch {
-          // Fallback limpo para o Master Bus caso a caixa Bluetooth tenha sido desligada
           chain.calibGain.disconnect();
           chain.calibGain.connect(chain.stereoPan);
         }
@@ -662,17 +782,12 @@ export class SpatialAudioEngine {
     }
   }
 
-  public updateWindParameters(windMeanSpeed: number, layers: ExperienceLayersState): void {
-    this.windMeanSpeed = windMeanSpeed;
-    if (this.windWetGainNode && this.ctx) {
-      const targetWet = layers.wind.enabled ? layers.wind.wetMix * 0.95 : 0;
-      this.windWetGainNode.gain.setTargetAtTime(targetWet, this.ctx.currentTime, 0.05);
-    }
+  public updateWindParameters(_windMeanSpeed: number, layers: ExperienceLayersState): void {
     this.syncStemGains(layers);
   }
 
   /**
-   * Carrega os 8 stems gapless pré-renderizados pelo Python caso `hasAudioStems` esteja presente em `meta.json`.
+   * Carrega os 8 stems gapless pré-renderizados pelo Python (`nasa-geo-sonification`).
    */
   public async tryLoadPreRenderedStems(
     countryId: string,
@@ -695,268 +810,240 @@ export class SpatialAudioEngine {
       return true;
     }
 
-    try {
-      const entries = await Promise.all(
-        STEM_KEYS.map(async (stem) => {
-          const url = resolveAssetUrl(`/countries/${countryId}/${tuningMode}/${stem}.${audioExt}`);
-          const res = await window.fetch(url);
-          if (!res.ok) throw new Error(`Missing stem ${url}`);
-          const arr = await res.arrayBuffer();
-          const decoded = await ctx.decodeAudioData(arr);
-          return [stem, decoded] as const;
-        })
-      );
-
-      const nextBuffers: Partial<Record<StemKey, AudioBuffer>> = {};
-      for (const [stem, buf] of entries) {
-        nextBuffers[stem] = buf;
-      }
-      this.stemBuffers = nextBuffers;
-      this.loadedStemCountryKey = key;
-      this.usingPreRenderedStems = true;
-      return true;
-    } catch {
-      this.usingPreRenderedStems = false;
-      return false;
+    if (this.loadingPromise && this.loadingKey === key) {
+      return this.loadingPromise;
     }
+
+    this.loadingKey = key;
+    const job = (async () => {
+      try {
+        const entries = await Promise.all(
+          STEM_KEYS.map(async (stem) => {
+            const url = resolveAssetUrl(`/countries/${countryId}/${tuningMode}/${stem}.${audioExt}`);
+            const res = await window.fetch(url);
+            if (!res.ok) throw new Error(`Missing stem ${url}`);
+            const arr = await res.arrayBuffer();
+            const decoded = await ctx.decodeAudioData(arr);
+            return [stem, decoded] as const;
+          })
+        );
+
+        const nextBuffers: Partial<Record<StemKey, AudioBuffer>> = {};
+        for (const [stem, buf] of entries) {
+          nextBuffers[stem] = buf;
+        }
+        this.stemBuffers = nextBuffers;
+        this.stemFullDurationSec = nextBuffers.chords_dry?.duration ?? 16;
+        this.loadedStemCountryKey = key;
+        this.usingPreRenderedStems = true;
+        return true;
+      } catch {
+        this.usingPreRenderedStems = false;
+        return false;
+      } finally {
+        if (this.loadingKey === key) {
+          this.loadingPromise = null;
+          this.loadingKey = null;
+        }
+      }
+    })();
+
+    this.loadingPromise = job;
+    return job;
   }
 
-  public startStemPlayback(offsetProgress01: number, layers: ExperienceLayersState): void {
-    if (!this.usingPreRenderedStems || !this.ctx || !this.masterGainNode) return;
+  private computeLoopBoundsSec(barLoop: BarLoopRange, totalBars = 8): [number, number] {
+    const dur = Math.max(0.5, this.stemBuffers.chords_dry?.duration ?? this.stemFullDurationSec);
+    if (!barLoop) return [0, dur];
+    const barSec = dur / Math.max(1, totalBars);
+    const b0 = Math.max(0, Math.min(totalBars - 1, Math.min(barLoop[0], barLoop[1])));
+    const b1 = Math.max(b0, Math.min(totalBars - 1, Math.max(barLoop[0], barLoop[1])));
+    return [b0 * barSec, Math.min(dur, (b1 + 1) * barSec)];
+  }
+
+  /**
+   * Inicia os 8 stems em loop gapless exato, respeitando `barLoop` (`loopStart` / `loopEnd`) idêntico ao `jukebox_studio.py`.
+   */
+  public startStemPlayback(
+    offsetProgress01: number,
+    layers: ExperienceLayersState,
+    barLoop: BarLoopRange = null,
+    totalBars = 8
+  ): void {
+    if (!this.usingPreRenderedStems || !this.ctx || !this.componentBuses) return;
     this.stopStemPlayback();
 
+    const refBuf = this.stemBuffers.chords_dry;
+    if (!refBuf) return;
+
+    this.stemFullDurationSec = refBuf.duration;
+    const [loopStartSec, loopEndSec] = this.computeLoopBoundsSec(barLoop, totalBars);
+    const rawOffsetSec = Math.max(0, Math.min(refBuf.duration - 0.005, offsetProgress01 * refBuf.duration));
+    const clampedOffsetSec =
+      rawOffsetSec < loopStartSec || rawOffsetSec >= loopEndSec
+        ? loopStartSec
+        : Math.min(loopEndSec - 0.005, rawOffsetSec);
+
     const startTime = this.ctx.currentTime + 0.02;
-    for (const stem of STEM_KEYS) {
-      const buf = this.stemBuffers[stem];
-      if (!buf) continue;
-      const src = this.ctx.createBufferSource();
-      src.buffer = buf;
-      src.loop = true;
 
-      const gain = this.ctx.createGain();
-      src.connect(gain);
+    for (const comp of STEM_COMPONENTS) {
+      for (const mode of ['dry', 'wind'] as const) {
+        const stemKey = `${comp}_${mode}` as StemKey;
+        const buf = this.stemBuffers[stemKey];
+        if (!buf) continue;
 
-      if ((this.audioMode === 'room3' || this.isolatedSpeakerSlot !== null) && this.speakerChains) {
-        // Distribuição VBAP por função musical/geográfica do stem nas 3 caixas físicas
-        const stemWeights: Record<SpeakerSlotId, number> = stem.startsWith('melody')
-          ? { speaker1: 0.78, speaker2: 0.42, speaker3: 0.46 }
-          : stem.startsWith('chords')
-            ? { speaker1: 0.42, speaker2: 0.78, speaker3: 0.46 }
-            : { speaker1: 0.45, speaker2: 0.45, speaker3: 0.76 };
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        src.loop = true;
+        src.loopStart = loopStartSec;
+        src.loopEnd = Math.min(buf.duration, loopEndSec);
 
-        for (const id of SPEAKER_IDS) {
-          const send = this.ctx.createGain();
-          send.gain.value = stemWeights[id];
-          gain.connect(send);
-          send.connect(this.speakerChains[id].input);
-        }
-      } else {
-        gain.connect(this.masterGainNode);
+        const targetNode =
+          mode === 'dry' ? this.componentBuses[comp].dryGain : this.componentBuses[comp].windGain;
+        src.connect(targetNode);
+        src.start(startTime, clampedOffsetSec);
+        this.activeSources.push(src);
       }
-
-      const offsetSec = (offsetProgress01 % 1) * buf.duration;
-      src.start(startTime, offsetSec);
-      this.activeStemNodes[stem] = { src, gain };
     }
+
+    this.stemLoopBoundsSec = [loopStartSec, loopEndSec];
+    this.stemLoopStartCtxTime = startTime - (clampedOffsetSec - loopStartSec);
+    this.stemsActivelyPlaying = true;
     this.syncStemGains(layers);
   }
 
   public stopStemPlayback(): void {
-    for (const stem of STEM_KEYS) {
-      const entry = this.activeStemNodes[stem];
-      if (entry) {
-        try {
-          entry.src.stop();
-          entry.src.disconnect();
-          entry.gain.disconnect();
-        } catch {
-          // ignore
-        }
+    for (const src of this.activeSources) {
+      try {
+        src.stop();
+        src.disconnect();
+      } catch {
+        // ignore
       }
     }
-    this.activeStemNodes = {};
+    this.activeSources = [];
+    this.stemsActivelyPlaying = false;
   }
 
-  public syncStemGains(layers: ExperienceLayersState): void {
-    if (!this.usingPreRenderedStems || !this.ctx) return;
-    const anySolo = layers.melody.solo || layers.chords.solo || layers.bass.solo;
-    const melOn = layers.melody.enabled && (!anySolo || layers.melody.solo);
-    const spkOn = melOn && layers.melody.sparkleEnabled;
-    const chdOn = layers.chords.enabled && (!anySolo || layers.chords.solo);
-    const basOn = layers.bass.enabled && (!anySolo || layers.bass.solo);
-    const wet = layers.wind.enabled ? layers.wind.wetMix : 0;
-    const dry = 1 - wet * 0.45;
-    const now = this.ctx.currentTime;
+  /**
+   * Retorna `progress01` (`0..1`) sample-accurate diretamente do relógio Web Audio (`ctx.currentTime`).
+   */
+  public getPlayheadProgress01(): number | null {
+    if (!this.stemsActivelyPlaying || !this.ctx || this.stemFullDurationSec <= 0.05) {
+      return null;
+    }
+    const [loopStart, loopEnd] = this.stemLoopBoundsSec;
+    const span = Math.max(0.05, loopEnd - loopStart);
+    const elapsed = Math.max(0, this.ctx.currentTime - this.stemLoopStartCtxTime);
+    const curSec = loopStart + (((elapsed % span) + span) % span);
+    return Math.min(0.9999, Math.max(0, curSec / this.stemFullDurationSec));
+  }
 
-    const setG = (stem: StemKey, val: number) => {
-      this.activeStemNodes[stem]?.gain.gain.setTargetAtTime(val, now, 0.03);
+  /**
+   * Mistura Dry/Wind, Solo (`melody`, `sparkle`, `chords`, `bass`) e Ganhos idêntica ao `jukebox_studio.py`.
+   */
+  public syncStemGains(layers: ExperienceLayersState): void {
+    if (!this.ctx || !this.componentBuses) return;
+
+    const spkSolo = layers.melody.sparkleSolo;
+    const anyGenSolo =
+      spkSolo || layers.melody.solo || layers.chords.solo || layers.bass.solo;
+
+    const isAudible = (comp: StemComponentId): boolean => {
+      if (spkSolo) {
+        return comp === 'melody_sparkle' && layers.melody.sparkleEnabled;
+      }
+      if (anyGenSolo) {
+        if (comp === 'melody_main') return layers.melody.solo && layers.melody.enabled;
+        if (comp === 'melody_sparkle') {
+          return layers.melody.solo && layers.melody.enabled && layers.melody.sparkleEnabled;
+        }
+        if (comp === 'chords') return layers.chords.solo && layers.chords.enabled;
+        if (comp === 'bass') return layers.bass.solo && layers.bass.enabled;
+        return false;
+      }
+      if (comp === 'chords') return layers.chords.enabled;
+      if (comp === 'bass') return layers.bass.enabled;
+      if (comp === 'melody_main') return layers.melody.enabled;
+      if (comp === 'melody_sparkle') {
+        return layers.melody.enabled && layers.melody.sparkleEnabled;
+      }
+      return false;
     };
 
-    setG('melody_main_dry', melOn ? layers.melody.gain * dry : 0);
-    setG('melody_main_wind', melOn ? layers.melody.gain * wet : 0);
-    setG('melody_sparkle_dry', spkOn ? layers.melody.gain * 0.8 * dry : 0);
-    setG('melody_sparkle_wind', spkOn ? layers.melody.gain * 0.8 * wet : 0);
-    setG('chords_dry', chdOn ? layers.chords.gain * dry : 0);
-    setG('chords_wind', chdOn ? layers.chords.gain * wet : 0);
-    setG('bass_dry', basOn ? layers.bass.gain * dry : 0);
-    setG('bass_wind', basOn ? layers.bass.gain * wet : 0);
+    const w = layers.wind.enabled ? Math.min(1, Math.max(0, layers.wind.wetMix)) : 0;
+    const now = this.ctx.currentTime;
+    const tau = 0.015;
+
+    const compGainMap: Record<StemComponentId, number> = {
+      chords: isAudible('chords') ? layers.chords.gain : 0,
+      bass: isAudible('bass') ? layers.bass.gain : 0,
+      melody_main: isAudible('melody_main') ? layers.melody.gain : 0,
+      melody_sparkle: isAudible('melody_sparkle')
+        ? layers.melody.gain * layers.melody.sparkleGain
+        : 0,
+    };
+
+    for (const comp of STEM_COMPONENTS) {
+      const val = compGainMap[comp];
+      const dryTarget = HEADROOM_INV * val * (1.0 - w);
+      const windTarget = HEADROOM_INV * val * w;
+      this.componentBuses[comp].dryGain.gain.setTargetAtTime(dryTarget, now, tau);
+      this.componentBuses[comp].windGain.gain.setTargetAtTime(windTarget, now, tau);
+    }
+  }
+
+  private readAnalyserStats(an: AnalyserNode | null): { rms: number; peak: number } {
+    if (!an) return { rms: 0, peak: 0 };
+    const n = Math.min(this.analyserScratch.length, an.fftSize);
+    const buf = this.analyserScratch.subarray(0, n);
+    an.getFloatTimeDomainData(buf);
+    let sum = 0;
+    let peak = 0;
+    for (let i = 0; i < n; i++) {
+      const v = Math.abs(buf[i]);
+      sum += v * v;
+      if (v > peak) peak = v;
+    }
+    return { rms: Math.sqrt(sum / Math.max(1, n)), peak };
   }
 
   /**
-   * Roteia um nó de áudio para o espaço 3D conforme o modo ativo:
-   * - `room3`: VBAP nas 3 caixas calibradas (respeitando ganho de Ruído Rosa e delay Bluetooth!)
-   * - `hrtf` / `5.1`: PannerNode HRTF 3D ao redor do ouvinte
+   * Lê os medidores VU reais (0..1) e o pico Master em dBFS diretamente dos `AnalyserNode`s Web Audio.
    */
-  private routeSpatialVoice(
-    voiceOutput: AudioNode,
-    sourceX01: number,
-    sourceY01: number,
-    sendToWindFactor: number
-  ): void {
-    if (!this.ctx || !this.masterGainNode) return;
-
-    if (this.windSendNode && sendToWindFactor > 0) {
-      const sendGain = this.ctx.createGain();
-      sendGain.gain.value = sendToWindFactor;
-      voiceOutput.connect(sendGain);
-      sendGain.connect(this.windSendNode);
+  public readLiveMeters(): { vu: AudioLevelsMap; masterDbFs: number } {
+    if (!this.ctx || !this.stemsActivelyPlaying || !this.componentBuses) {
+      return {
+        vu: { melody: 0, sparkle: 0, chords: 0, bass: 0, wind: 0, master: 0 },
+        masterDbFs: -99,
+      };
     }
 
-    const normX = (sourceX01 - 0.5) * 2; // -1 (Oeste/Parede Esq) .. +1 (Leste/Parede Dir)
-    const normY = (sourceY01 - 0.5) * 2; // -1 (Sul/Fundo) .. +1 (Norte/Teto)
+    const toNorm = (rms: number, mult = 1.45) =>
+      Math.min(1, Math.max(0, Math.sqrt(rms) * mult));
 
-    if ((this.audioMode === 'room3' || this.isolatedSpeakerSlot !== null) && this.speakerChains) {
-      const gains = computeVbap3Gains(normX, normY, this.calibration.speakers);
-      for (const id of SPEAKER_IDS) {
-        if (gains[id] <= 0.001) continue;
-        const g = this.ctx.createGain();
-        g.gain.value = gains[id];
-        voiceOutput.connect(g);
-        g.connect(this.speakerChains[id].input);
-      }
-      return;
-    }
+    const mel = toNorm(this.readAnalyserStats(this.componentBuses.melody_main.meter).rms);
+    const spk = toNorm(this.readAnalyserStats(this.componentBuses.melody_sparkle.meter).rms);
+    const chd = toNorm(this.readAnalyserStats(this.componentBuses.chords.meter).rms);
+    const bas = toNorm(this.readAnalyserStats(this.componentBuses.bass.meter).rms);
+    const wnd = toNorm(this.readAnalyserStats(this.windDiffAnalyser).rms);
 
-    const panner = this.ctx.createPanner();
-    panner.panningModel = 'HRTF';
-    panner.distanceModel = 'inverse';
-    panner.refDistance = 1.2;
-    panner.positionX.value = normX * 1.85;
-    panner.positionY.value = normY * 1.15;
-    panner.positionZ.value = -1.1 + Math.abs(normX) * 0.45;
+    const masterStats = this.readAnalyserStats(this.masterAnalyser);
+    const mst = toNorm(masterStats.rms, 1.35);
+    const masterDbFs =
+      masterStats.peak > 1e-5 ? Number((20 * Math.log10(masterStats.peak)).toFixed(1)) : -99;
 
-    voiceOutput.connect(panner);
-    panner.connect(this.masterGainNode);
-  }
-
-  /**
-   * Síntese 8D em tempo real guiada pelo `meta.json` (quando os 8 stems de áudio ainda não existem no disco).
-   */
-  public triggerBeatStep(params: {
-    beatIndex: number;
-    bpm: number;
-    activeChord: string;
-    keyRoot: string;
-    events: LiveNoteEvent[];
-    layers: ExperienceLayersState;
-  }): void {
-    if (this.usingPreRenderedStems) return;
-    const ctx = this.ensureContext();
-    if (!ctx) return;
-
-    const { bpm, activeChord, keyRoot, events, layers } = params;
-    const beatDur = 60 / Math.max(40, bpm);
-    const now = ctx.currentTime + 0.005;
-
-    for (const ev of events) {
-      if (ev.layer === 'melody' || ev.layer === 'sparkle') {
-        const isSparkle = ev.layer === 'sparkle';
-        const freq = midiToFreq(ev.pitch);
-        const dur = isSparkle ? beatDur * 0.85 : beatDur * 1.35;
-        const level =
-          layers.melody.gain * ev.velocity * (isSparkle ? 0.14 : 0.22);
-
-        const oscMain = ctx.createOscillator();
-        oscMain.type = 'sine';
-        oscMain.frequency.setValueAtTime(freq, now);
-
-        const oscTine = ctx.createOscillator();
-        oscTine.type = 'triangle';
-        oscTine.frequency.setValueAtTime(freq * (isSparkle ? 3 : 2), now);
-
-        const tineGain = ctx.createGain();
-        tineGain.gain.setValueAtTime(0.18, now);
-        tineGain.gain.exponentialRampToValueAtTime(0.001, now + dur * 0.35);
-
-        const env = ctx.createGain();
-        env.gain.setValueAtTime(0.0001, now);
-        env.gain.linearRampToValueAtTime(Math.max(0.001, level), now + 0.012);
-        env.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-
-        oscMain.connect(env);
-        oscTine.connect(tineGain);
-        tineGain.connect(env);
-
-        this.routeSpatialVoice(env, ev.source_x, ev.source_y, 0.72);
-
-        oscMain.start(now);
-        oscTine.start(now);
-        oscMain.stop(now + dur + 0.04);
-        oscTine.stop(now + dur + 0.04);
-      } else if (ev.layer === 'chords') {
-        // Acorde sustentado por 1 compasso (4 batidas) espalhado entre Parede Esq e Parede Dir
-        const midiNotes = parseChordToMidiVoicing(activeChord, keyRoot);
-        const barDur = beatDur * 3.95;
-        const padFilter = ctx.createBiquadFilter();
-        padFilter.type = 'lowpass';
-        padFilter.frequency.setValueAtTime(920, now);
-
-        const padEnv = ctx.createGain();
-        const peak = Math.max(0.001, layers.chords.gain * 0.095);
-        padEnv.gain.setValueAtTime(0.0001, now);
-        padEnv.gain.linearRampToValueAtTime(peak, now + Math.min(0.45, barDur * 0.28));
-        padEnv.gain.setValueAtTime(peak * 0.85, now + barDur * 0.72);
-        padEnv.gain.exponentialRampToValueAtTime(0.0001, now + barDur);
-
-        padFilter.connect(padEnv);
-        this.routeSpatialVoice(padEnv, ev.source_x, ev.source_y, 0.85);
-
-        midiNotes.forEach((m, idx) => {
-          const osc = ctx.createOscillator();
-          osc.type = idx % 2 === 0 ? 'sawtooth' : 'triangle';
-          osc.frequency.setValueAtTime(midiToFreq(m), now);
-          osc.detune.setValueAtTime((idx - 1.5) * 6, now);
-          osc.connect(padFilter);
-          osc.start(now);
-          osc.stop(now + barDur + 0.05);
-        });
-      } else if (ev.layer === 'bass') {
-        // Sub-bass urbano NO2 (2 batidas)
-        const subMidi = Math.max(33, Math.min(48, ev.pitch));
-        const subDur = beatDur * 1.85;
-        const oscSub = ctx.createOscillator();
-        oscSub.type = 'triangle';
-        oscSub.frequency.setValueAtTime(midiToFreq(subMidi), now);
-
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(210 + ev.velocity * 180, now);
-
-        const env = ctx.createGain();
-        const peak = Math.max(0.001, layers.bass.gain * 0.26);
-        env.gain.setValueAtTime(0.0001, now);
-        env.gain.linearRampToValueAtTime(peak, now + 0.025);
-        env.gain.exponentialRampToValueAtTime(0.0001, now + subDur);
-
-        oscSub.connect(filter);
-        filter.connect(env);
-        // Baixo ancorado de forma coesa no centro da sala (0.5, 0.5)
-        this.routeSpatialVoice(env, 0.5, 0.5, 0.15);
-
-        oscSub.start(now);
-        oscSub.stop(now + subDur + 0.04);
-      }
-    }
+    return {
+      vu: {
+        melody: mel,
+        sparkle: spk,
+        chords: chd,
+        bass: bas,
+        wind: wnd,
+        master: mst,
+      },
+      masterDbFs,
+    };
   }
 
   // --- Ferramentas de Calibração Acústica (Ruído Rosa A/B + Pulso de Delay Bluetooth) ---
@@ -1191,12 +1278,6 @@ export class SpatialAudioEngine {
     }
   }
 
-  /**
-   * Desbloqueia no navegador a listagem completa de caixas Bluetooth / USB / HDMI (`audiooutput`).
-   * Por privacidade do W3C, Chrome/Edge/Brave escondem todos os `audiooutput` até que a página
-   * receba permissão de mídia (`getUserMedia`) ou `selectAudioOutput`.
-   * O stream de áudio é encerrado em 0ms (`track.stop()`) para não capturar som nem prender o Bluetooth em modo mãos-livres.
-   */
   public async unlockAudioOutputDevices(): Promise<AudioDeviceOption[]> {
     this.ensureContext();
     if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
@@ -1217,7 +1298,7 @@ export class SpatialAudioEngine {
         }
         this.outputPermissionUnlocked = true;
       } catch {
-        // Caso o usuário negue microfone ou o Mac esteja sem entrada, tentamos selectAudioOutput abaixo
+        // fallback to selectAudioOutput prompt below
       }
     }
 
@@ -1234,9 +1315,6 @@ export class SpatialAudioEngine {
     return list;
   }
 
-  /**
-   * Abre o seletor nativo de caixa de som do navegador (`navigator.mediaDevices.selectAudioOutput`) quando disponível.
-   */
   public async promptSelectSpeakerDevice(deviceId?: string): Promise<AudioDeviceOption | null> {
     if (!this.canSelectAudioOutputPrompt() || typeof navigator === 'undefined') {
       return null;

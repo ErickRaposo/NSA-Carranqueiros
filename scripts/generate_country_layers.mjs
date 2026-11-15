@@ -155,18 +155,34 @@ const manifest = {
 
 fs.writeFileSync(manifestPath, JSON.stringify(manifest));
 
-// 3. Compile Swift renderer once (or if source changed) with -O optimization
+// 3. Use Swift CoreGraphics on macOS when available, or cross-platform Python (OpenCV + SciPy) on Windows/Linux
 const swiftSrc = path.join(__dirname, 'render_country_layers.swift');
+const pySrc = path.join(__dirname, 'render_country_layers.py');
 const swiftBin = path.join(tmpDir, 'render_country_layers_bin');
-const needCompile =
-  !fs.existsSync(swiftBin) ||
-  fs.statSync(swiftSrc).mtimeMs > fs.statSync(swiftBin).mtimeMs;
 
-if (needCompile) {
-  console.log('⚙️  Compilando renderizador Swift CoreGraphics (-O)...');
-  execFileSync('swiftc', ['-O', swiftSrc, '-o', swiftBin], { stdio: 'inherit' });
+let canUseSwift = false;
+if (process.platform === 'darwin') {
+  try {
+    execFileSync('swiftc', ['--version'], { stdio: 'ignore' });
+    canUseSwift = true;
+  } catch {
+    canUseSwift = false;
+  }
 }
 
-console.log(`🌍 Gerando camadas PNG 1024x1024 + meta.json para ${selectedCountries.length} país(es)...`);
-execFileSync(swiftBin, [manifestPath], { stdio: 'inherit' });
+if (canUseSwift) {
+  const needCompile =
+    !fs.existsSync(swiftBin) ||
+    fs.statSync(swiftSrc).mtimeMs > fs.statSync(swiftBin).mtimeMs;
+  if (needCompile) {
+    console.log('⚙️  Compilando renderizador Swift CoreGraphics (-O)...');
+    execFileSync('swiftc', ['-O', swiftSrc, '-o', swiftBin], { stdio: 'inherit' });
+  }
+  console.log(`🌍 Gerando camadas PNG 1024x1024 + meta.json para ${selectedCountries.length} país(es) [Swift]...`);
+  execFileSync(swiftBin, [manifestPath], { stdio: 'inherit' });
+} else {
+  const pyCmd = process.platform === 'win32' ? 'python' : 'python3';
+  console.log(`🌍 Gerando camadas PNG 1024x1024 + meta.json para ${selectedCountries.length} país(es) [Python]...`);
+  execFileSync(pyCmd, [pySrc, manifestPath], { stdio: 'inherit' });
+}
 console.log(`✅ Concluído! Arquivos salvos em ${outBaseDir}`);
