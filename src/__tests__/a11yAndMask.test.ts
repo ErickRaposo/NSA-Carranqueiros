@@ -29,18 +29,36 @@ describe('accessibility & logistics & mask', () => {
     expect(profile.airAndLandCorridorsPt).toContain('Brasil');
   });
 
-  it('interprets NASA RGB colors into accessible PT-BR atmospheric readings', () => {
-    const lightningHigh = interpretDatasetRgb('svs5011', 255, 220, 40);
-    expect(lightningHigh.intensity01).toBeGreaterThan(0.6);
-    expect(lightningHigh.labelPt).toContain('Alta atividade');
+  it('interprets NASA RGB colors into scientifically calibrated PT-BR atmospheric readings', () => {
+    const lightningFlash = interpretDatasetRgb('svs5011', 255, 220, 40);
+    expect(lightningFlash.intensity01).toBeGreaterThan(0.7);
+    expect(lightningFlash.labelPt).toContain('ISS-LIS');
 
-    const coPlume = interpretDatasetRgb('svs5153', 210, 40, 20);
+    const lightningNone = interpretDatasetRgb('svs5011', 20, 20, 20);
+    expect(lightningNone.intensity01).toBeLessThan(0.2);
+    expect(lightningNone.labelPt).toContain('Sem eventos');
+
+    const coClean = interpretDatasetRgb('svs5153', 255, 245, 190);
+    expect(coClean.intensity01).toBeLessThan(0.3);
+    expect(coClean.labelPt).toContain('Baixa');
+
+    const coPlume = interpretDatasetRgb('svs5153', 188, 12, 15);
     expect(coPlume.intensity01).toBeGreaterThan(0.8);
-    expect(coPlume.labelPt).toContain('CO');
+    expect(coPlume.labelPt).toContain('elevada de CO');
 
-    const noxUrban = interpretDatasetRgb('svs5154', 210, 250, 210);
-    expect(noxUrban.intensity01).toBeGreaterThan(0.8);
-    expect(noxUrban.labelPt).toContain('NOx');
+    // SVS 5154 NOx scale: white/pale mint (10⁻³ ppbv) = LOW; dark forest green (10¹+ ppbv) = HIGH
+    const noxCleanOcean = interpretDatasetRgb('svs5154', 210, 245, 210);
+    expect(noxCleanOcean.intensity01).toBeLessThan(0.3);
+    expect(noxCleanOcean.labelPt).toContain('Baixa concentração de NOx');
+
+    const noxMidContinent = interpretDatasetRgb('svs5154', 45, 165, 45);
+    expect(noxMidContinent.intensity01).toBeGreaterThan(0.4);
+    expect(noxMidContinent.intensity01).toBeLessThan(0.8);
+    expect(noxMidContinent.labelPt).toContain('moderada de NOx');
+
+    const noxUrbanMetropolis = interpretDatasetRgb('svs5154', 2, 42, 2);
+    expect(noxUrbanMetropolis.intensity01).toBeGreaterThan(0.8);
+    expect(noxUrbanMetropolis.labelPt).toContain('elevada de NOx');
   });
 
   it('splits polygon rings cleanly across antimeridian jumps', () => {

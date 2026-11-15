@@ -42,19 +42,15 @@ export function createUnlockIlluminationTexture(
     if (unlockedCount === 0) continue;
 
     const progress = unlockedCount / 5;
-    // Progressive illumination palette: cyan-blue energy -> warm gold at full 5/5 community completion
-    const fillStyle =
-      unlockedCount >= 5
-        ? 'rgba(250, 204, 21, 0.30)'
-        : `rgba(56, 189, 248, ${(0.12 + progress * 0.24).toFixed(2)})`;
+    // Subtle luminous frontier stroke only — preserves 100% of NASA's interior pixel colors
     const strokeStyle =
       unlockedCount >= 5
         ? 'rgba(253, 224, 71, 0.96)'
-        : `rgba(56, 189, 248, ${(0.45 + progress * 0.45).toFixed(2)})`;
+        : `rgba(56, 189, 248, ${(0.52 + progress * 0.42).toFixed(2)})`;
 
-    ctx.fillStyle = fillStyle;
     ctx.strokeStyle = strokeStyle;
-    ctx.lineWidth = unlockedCount >= 5 ? 2.4 : 1.4;
+    ctx.lineWidth = unlockedCount >= 5 ? 2.6 : 1.65;
+    ctx.lineJoin = 'round';
 
     for (const ring of country.rings) {
       const subRings = splitAntimeridianRing(ring);
@@ -68,7 +64,6 @@ export function createUnlockIlluminationTexture(
           else ctx.lineTo(x, y);
         }
         ctx.closePath();
-        ctx.fill();
         ctx.stroke();
       }
     }

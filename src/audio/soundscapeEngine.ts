@@ -271,7 +271,11 @@ export function sampleSoundscapeStats(
         const rn = d5153[idx] / 255;
         const gn = d5153[idx + 1] / 255;
         const bn = d5153[idx + 2] / 255;
-        val = Math.min(1, Math.max(0, (rn - bn) * 0.8 + (1 - gn) * 0.4));
+        // CO: pale cream-yellow (low) -> orange -> red -> dark maroon (high)
+        val =
+          rn > 0.22 && gn < 0.22 && bn < 0.18 && rn > gn * 2.4
+            ? Math.min(1, 0.8 + (1 - gn) * 0.2)
+            : Math.min(1, Math.max(0, (1 - gn) * 0.72 + (rn - bn) * 0.28));
       } else {
         val = 0.25 + 0.55 * seededNoise01(lonCell(c) * 0.7 + latCell(r) * 1.1 + stepIndex * 0.25);
       }
@@ -315,11 +319,20 @@ export function sampleSoundscapeStats(
       const idx = (r * cols + c) * 4;
       let nox = 0;
       if (d5154) {
-        const rn = d5154[idx] / 255;
-        const gn = d5154[idx + 1] / 255;
-        const bn = d5154[idx + 2] / 255;
-        const lum = 0.299 * rn + 0.587 * gn + 0.114 * bn;
-        nox = gn >= rn ? Math.min(1, lum * 1.15) : Math.min(1, lum * 0.6);
+        const pr = d5154[idx];
+        const pg = d5154[idx + 1];
+        const pb = d5154[idx + 2];
+        const isBorderStroke = pr < 12 && pg < 12 && pb < 12 && Math.abs(pg - pr) <= 3;
+        if (isBorderStroke) {
+          nox = 0.25;
+        } else {
+          const rn = pr / 255;
+          const gn = pg / 255;
+          const bn = pb / 255;
+          const lum = 0.299 * rn + 0.587 * gn + 0.114 * bn;
+          // NASA SVS 5154 NOx scale: white/pale mint (10⁻³ low) -> dark forest green (10¹+ high)
+          nox = Math.min(1, Math.max(0, (1 - lum - 0.04) / 0.88));
+        }
       } else {
         nox = 0.2 + 0.65 * seededNoise01(lonCell(c) * 1.9 + latCell(r) * 1.3 + 4.1);
       }

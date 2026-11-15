@@ -137,6 +137,129 @@ export function authenticateUser(
   );
 }
 
+export interface ParticipantProfileInput {
+  name: string;
+  username: string;
+  email: string;
+  originCountryCode?: string;
+}
+
+export type ParticipantProfileResult =
+  | {
+      ok: true;
+      updatedUser: UserAccount;
+      nextUsers: UserAccount[];
+      previousUsername: string;
+    }
+  | {
+      ok: false;
+      errorPt: string;
+    };
+
+const RESERVED_USERNAMES = new Set(['visitante', 'juri', 'guest']);
+const USERNAME_PATTERN = /^[a-z0-9_.-]{3,24}$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function updateParticipantProfile(
+  users: UserAccount[],
+  currentUser: UserAccount,
+  input: ParticipantProfileInput
+): ParticipantProfileResult {
+  if (currentUser.isGuest) {
+    return { ok: false, errorPt: 'Crie uma conta para salvar dados permanentes de perfil.' };
+  }
+
+  const trimmedName = input.name.trim();
+  if (trimmedName.length < 2) {
+    return { ok: false, errorPt: 'Informe um nome com pelo menos 2 caracteres.' };
+  }
+
+  const normalizedUsername = input.username.trim().replace(/^@+/, '').toLowerCase();
+  if (!USERNAME_PATTERN.test(normalizedUsername)) {
+    return {
+      ok: false,
+      errorPt: 'Use de 3 a 24 caracteres no usuário (letras, números, ponto, hífen ou _).',
+    };
+  }
+  if (RESERVED_USERNAMES.has(normalizedUsername)) {
+    return { ok: false, errorPt: 'Este identificador de usuário é reservado pelo sistema.' };
+  }
+
+  const trimmedEmail = input.email.trim().toLowerCase();
+  if (!EMAIL_PATTERN.test(trimmedEmail)) {
+    return { ok: false, errorPt: 'Informe um endereço de e-mail válido.' };
+  }
+
+  const prevUsernameLower = currentUser.username.toLowerCase();
+
+  const usernameTaken = users.some(
+    (u) =>
+      u.username.toLowerCase() !== prevUsernameLower &&
+      u.username.toLowerCase() === normalizedUsername
+  );
+  if (usernameTaken) {
+    return { ok: false, errorPt: 'Este @usuário já está em uso por outro participante.' };
+  }
+
+  const emailTaken = users.some(
+    (u) =>
+      u.username.toLowerCase() !== prevUsernameLower &&
+      u.email.toLowerCase() === trimmedEmail
+  );
+  if (emailTaken) {
+    return { ok: false, errorPt: 'Este e-mail já está vinculado a outra conta.' };
+  }
+
+  const normalizedOrigin = input.originCountryCode?.trim().toUpperCase() || undefined;
+  const updatedUser: UserAccount = {
+    ...currentUser,
+    name: trimmedName,
+    username: normalizedUsername,
+    email: trimmedEmail,
+    originCountryCode: normalizedOrigin,
+  };
+
+  const foundExisting = users.some((u) => u.username.toLowerCase() === prevUsernameLower);
+  const nextUsers = foundExisting
+    ? users.map((u) => (u.username.toLowerCase() === prevUsernameLower ? updatedUser : u))
+    : [...users, updatedUser];
+
+  return {
+    ok: true,
+    updatedUser,
+    nextUsers,
+    previousUsername: currentUser.username,
+  };
+}
+
+export function updateParticipantPassword(
+  users: UserAccount[],
+  currentUser: UserAccount,
+  currentPasswordInput: string,
+  newPasswordInput: string
+): { ok: true; updatedUser: UserAccount; nextUsers: UserAccount[] } | { ok: false; errorPt: string } {
+  if (currentUser.isGuest) {
+    return { ok: false, errorPt: 'Sessões de visitante não possuem senha.' };
+  }
+  if (currentPasswordInput !== currentUser.password) {
+    return { ok: false, errorPt: 'A senha atual informada não confere.' };
+  }
+  if (newPasswordInput.trim().length < 5) {
+    return { ok: false, errorPt: 'A nova senha deve ter pelo menos 5 caracteres.' };
+  }
+
+  const prevUsernameLower = currentUser.username.toLowerCase();
+  const updatedUser: UserAccount = {
+    ...currentUser,
+    password: newPasswordInput,
+  };
+  const nextUsers = users.map((u) =>
+    u.username.toLowerCase() === prevUsernameLower ? updatedUser : u
+  );
+
+  return { ok: true, updatedUser, nextUsers };
+}
+
 export function findUserByIdentifier(identifier: string): UserAccount | null {
   const normalized = identifier.trim().toLowerCase();
   if (!normalized) return null;

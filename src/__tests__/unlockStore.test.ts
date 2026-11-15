@@ -78,15 +78,16 @@ describe('Collective Unlock Store & Illumination Progress', () => {
     expect(brSummary.isCompleteReal).toBe(false);
   });
 
-  it('computes planet-wide ecosystem summary prioritizing incomplete regions for collaboration', () => {
+  it('computes planet-wide ecosystem summary prioritizing 4/5 Portugal for authentic 1-click completion', () => {
     const state = createSeededUnlockState(countries);
     const eco = getGlobalEcosystemSummary(state, countries);
 
-    expect(eco.litRegionsCount).toBe(4);
+    expect(eco.litRegionsCount).toBe(5);
     expect(eco.completedRegionsCount).toBe(1);
-    expect(eco.unlockedVoicesCount).toBe(10);
+    expect(eco.unlockedVoicesCount).toBe(14);
     expect(eco.spotlightRegion).not.toBeNull();
     expect(eco.spotlightRegion?.isComplete).toBe(false);
+    expect(eco.spotlightRegion?.unlockedCount).toBe(4);
     expect(eco.recentFeed.length).toBeGreaterThan(0);
     expect(eco.recentFeed[0].unlockedAt >= eco.recentFeed[eco.recentFeed.length - 1].unlockedAt).toBe(true);
     expect(DATASET_TO_STEM.svs5011).toBe('melody');

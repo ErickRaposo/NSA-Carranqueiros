@@ -230,6 +230,7 @@ export function recordRegionDiscovery(
     regionKey: string;
     regionLabel: string;
     telemetry: SoundscapeVisualTelemetry;
+    isRegionComplete5of5?: boolean;
   }
 ): {
   nextState: ProgressionState;
@@ -248,6 +249,9 @@ export function recordRegionDiscovery(
   }
 
   let xpGained = 25; // Base XP for discovering a new region
+  if (input.isRegionComplete5of5) {
+    xpGained += 15; // Bonus for discovering a completed 5/5 collective symphony
+  }
   const dominant = getDominantPhenomenon(input.telemetry);
   const nextMatches: Record<MissionId, string[]> = {
     cacador_de_raios: [...state.missionMatches.cacador_de_raios],
@@ -517,6 +521,91 @@ export function loadProgressionState(userId: string): ProgressionState {
 
 export function saveProgressionState(userId: string, state: ProgressionState): void {
   localProgressionAdapter.save(userId, state);
+}
+
+/**
+ * Ensures ALL 5 co-authors (voices 1..5, not just the 5th clicker!) receive
+ * full 5/5 Symphony credit (+50 XP, Golden Trail, Maestro Halo) as soon as
+ * any region they contributed to reaches 5/5 illumination.
+ */
+export function reconcileCoauthoredSymphonies(
+  state: ProgressionState,
+  completedRegionKeys: string[]
+): {
+  nextState: ProgressionState;
+  newlyCompletedKeys: string[];
+  xpGained: number;
+} {
+  const completedSet = new Set(completedRegionKeys);
+  const newlyCompletedKeys = state.contributedRegionKeys.filter(
+    (key) => completedSet.has(key) && !state.unlockedSymphonyKeys.includes(key)
+  );
+
+  if (newlyCompletedKeys.length === 0) {
+    return { nextState: state, newlyCompletedKeys: [], xpGained: 0 };
+  }
+
+  const xpGained = newlyCompletedKeys.length * 50;
+  const nextSymphonies = [...state.unlockedSymphonyKeys, ...newlyCompletedKeys];
+  const nextHistory = state.contributionHistory.map((item) =>
+    completedSet.has(item.regionKey) ? { ...item, isRegionComplete5of5: true } : item
+  );
+
+  return {
+    nextState: {
+      ...state,
+      xp: state.xp + xpGained,
+      unlockedSymphonyKeys: nextSymphonies,
+      contributionHistory: nextHistory,
+    },
+    newlyCompletedKeys,
+    xpGained,
+  };
+}
+
+/**
+ * Migrates any exploration XP, missions, and contributions earned as 'visitante'
+ * into a newly created explorer account, then resets the temporary guest slot.
+ */
+export function migrateGuestProgressionToUser(fromUserId: string, toUserId: string): void {
+  if (!fromUserId || !toUserId || fromUserId === toUserId) return;
+  const guestState = loadProgressionState(fromUserId);
+  if (
+    guestState.xp === 0 &&
+    guestState.exploredRegionKeys.length === 0 &&
+    guestState.contributedRegionKeys.length === 0
+  ) {
+    return;
+  }
+
+  const existingTarget = loadProgressionState(toUserId);
+  if (
+    existingTarget.xp === 0 &&
+    existingTarget.exploredRegionKeys.length === 0 &&
+    existingTarget.contributedRegionKeys.length === 0
+  ) {
+    saveProgressionState(toUserId, guestState);
+  }
+  saveProgressionState(fromUserId, createInitialProgressionState());
+}
+
+/**
+ * Preserves all exploration telemetry, discoveries, and contributions when an authenticated
+ * participant updates their @username in the Participant Data menu.
+ */
+export function renameUserProgression(fromUserId: string, toUserId: string): void {
+  const oldKey = fromUserId.trim().toLowerCase();
+  const newKey = toUserId.trim().toLowerCase();
+  if (!oldKey || !newKey || oldKey === newKey) return;
+  const currentState = loadProgressionState(oldKey);
+  saveProgressionState(newKey, currentState);
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.removeItem(`${STORAGE_PREFIX}${oldKey}`);
+    } catch {
+      // Ignore storage errors
+    }
+  }
 }
 
 export interface SonicPassportSummary {

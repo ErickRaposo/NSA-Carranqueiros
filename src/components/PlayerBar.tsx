@@ -1,14 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Disc3,
+  FlaskConical,
   Pause,
   Play,
   Repeat,
   RotateCcw,
+  Share2,
   SkipBack,
   SkipForward,
   SlidersHorizontal,
-  Sparkles,
   Volume2,
   VolumeX,
 } from 'lucide-react';
@@ -45,9 +46,10 @@ interface PlayerBarProps {
   onToggleLayer?: (datasetId: DatasetId) => void;
   masterVolume?: number;
   onChangeMasterVolume?: (vol: number) => void;
-  motionPaused?: boolean;
   isCelebrating5of5?: boolean;
-  onToggleMotionPaused?: () => void;
+  onShareMix?: () => void;
+  nasaCardOpen?: boolean;
+  onToggleNasaCard?: () => void;
   getAudioReactiveBands?: () => AudioReactiveFrame;
 }
 
@@ -77,9 +79,10 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
   onToggleLayer,
   masterVolume = 0.72,
   onChangeMasterVolume,
-  motionPaused = false,
   isCelebrating5of5 = false,
-  onToggleMotionPaused,
+  onShareMix,
+  nasaCardOpen = false,
+  onToggleNasaCard,
   getAudioReactiveBands,
 }) => {
   const safeDuration = duration > 0 ? duration : 1;
@@ -136,43 +139,56 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
         <div className="player-left-controls">
           <button
             type="button"
-            className="icon-btn primary-play-btn"
+            className="primary-play-btn cycle-play-btn is-icon-only"
             onClick={onTogglePlay}
-            title={isPlaying ? 'Pausar camadas (Espaço)' : 'Reproduzir camadas (Espaço)'}
-            aria-label={isPlaying ? 'Pausar animação' : 'Reproduzir animação'}
+            title={
+              isPlaying
+                ? 'Pausar evolução temporal dos satélites NASA (Espaço)'
+                : 'Reproduzir evolução temporal dos satélites NASA (Espaço)'
+            }
+            aria-label={
+              isPlaying ? 'Pausar ciclo de satélite NASA' : 'Reproduzir ciclo de satélite NASA'
+            }
             aria-pressed={isPlaying}
             data-testid="play-pause-btn"
           >
-            {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+            {isPlaying ? <Pause size={15} /> : <Play size={15} />}
           </button>
 
-          <div className="capsule-identity" aria-live="off">
-            <Disc3
-              size={14}
-              className={`ribbon-disc ${jukeboxPlaying ? 'is-spinning' : ''}`}
-              aria-hidden="true"
-            />
-            {activeRegionLabel && soundscapeTelemetry ? (
+          {onToggleNasaCard && (
+            <button
+              type="button"
+              className={`nasa-scale-trigger-btn is-icon-only ${nasaCardOpen ? 'is-active' : ''}`}
+              onClick={onToggleNasaCard}
+              aria-pressed={nasaCardOpen}
+              aria-label="Escala científica e dados oficiais da NASA"
+              title="Escala NASA — abrir explicação científica da base e escala oficial de cores"
+              data-testid="open-nasa-card-btn"
+            >
+              <FlaskConical size={15} aria-hidden="true" />
+            </button>
+          )}
+
+          {activeRegionLabel && soundscapeTelemetry && (
+            <div className="capsule-identity" aria-live="off">
+              <Disc3
+                size={14}
+                className={`ribbon-disc ${jukeboxPlaying ? 'is-spinning' : ''}`}
+                aria-hidden="true"
+              />
               <div className="capsule-telemetry">
                 <strong className="capsule-region-name">{activeRegionLabel}</strong>
                 <span className="capsule-chip" style={{ color: STEM_METAS.harmony.accentHex }}>
                   {soundscapeTelemetry.chordName}
                 </span>
-                <span className="capsule-chip" style={{ color: STEM_METAS.rhythm.accentHex }}>
-                  {soundscapeTelemetry.bpm} BPM
-                </span>
                 {isCelebrating5of5 && (
                   <span className="ribbon-symphony-pill" data-testid="player-celebrating-5of5">
-                    5/5 Sinfonia
+                    5/5
                   </span>
                 )}
               </div>
-            ) : (
-              <div className="capsule-telemetry is-idle">
-                <span className="capsule-idle-msg">Selecione um país ou acenda camadas</span>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         <div className="ribbon-spectrum" role="group" aria-label="Alternar as 5 vozes musicais e camadas do globo">
@@ -263,17 +279,16 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({
             </div>
           )}
 
-          {onToggleMotionPaused && (
+          {onShareMix && (
             <button
               type="button"
-              className={`motion-pause-btn ${motionPaused ? 'is-paused' : ''}`}
-              onClick={onToggleMotionPaused}
-              aria-pressed={motionPaused}
-              title="Pausar órbita automática e animações visuais"
-              data-testid="motion-pause-btn"
+              className="motion-pause-btn share-mix-pill"
+              onClick={onShareMix}
+              title="Compartilhar link da sua arte planetária (camadas, cores e estilo)"
+              data-testid="player-share-mix-btn"
             >
-              <Sparkles size={13} aria-hidden="true" />
-              <span>{motionPaused ? 'Retomar' : 'Órbita'}</span>
+              <Share2 size={13} aria-hidden="true" />
+              <span className="share-mix-label">Compartilhar</span>
             </button>
           )}
 

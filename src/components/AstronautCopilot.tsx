@@ -1,385 +1,496 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  AudioLines,
-  Award,
-  Compass,
-  Contrast,
-  Crown,
-  Orbit,
-  PanelRightClose,
-  PanelRightOpen,
-  Sparkles,
+  ArrowUpRight,
+  ChevronDown,
+  ChevronUp,
+  Globe,
+  LogIn,
+  Trophy,
   User,
-  Volume2,
-  VolumeX,
+  Waypoints,
+  X,
 } from 'lucide-react';
 import { CountryEntry } from '../geo/countries';
 import {
+  EcosystemFeedEvent,
   GlobalEcosystemSummary,
   STEM_METAS,
   STEM_ORDER,
 } from '../community/unlockStore';
-import {
-  getExplorerRank,
-  ProgressionState,
-} from '../game/progressionStore';
-import { Mineiro3D } from './Mineiro3D';
+import { ProgressionState } from '../game/progressionStore';
+import { CountryFlagBadge } from './CountryFlag';
+import { GlobalRankingEntry } from './RankingPopover';
+
+export type CollectiveTabId = 'constellation' | 'ranking';
 
 interface AstronautCopilotProps {
   selectedCountry: CountryEntry | null;
   userName: string;
+  username?: string;
+  originCountryCode?: string;
   ecosystemSummary: GlobalEcosystemSummary;
   progression?: ProgressionState;
   jukeboxPlaying: boolean;
   motionPaused?: boolean;
-  compactByDefault?: boolean;
-  isGuestSession?: boolean;
-  onSelectCountry: (country: CountryEntry) => void;
-  voiceEnabled: boolean;
-  sonifyEnabled: boolean;
   highContrast: boolean;
-  fontScale: number;
+  isGuestSession?: boolean;
   liveAnnouncement: string;
-  onToggleVoice: () => void;
-  onToggleSonify: () => void;
-  onToggleHighContrast: () => void;
-  onCycleFontScale: () => void;
+  liveToastEvent?: EcosystemFeedEvent | null;
+  onDismissToast?: () => void;
+  externalOpenRequest?: { tab: CollectiveTabId; nonce: number } | null;
+  onSelectCountry: (country: CountryEntry) => void;
+  onOpenAuth?: () => void;
+  remoteRankingEntries?: GlobalRankingEntry[] | null;
 }
 
 export const AstronautCopilot: React.FC<AstronautCopilotProps> = ({
   selectedCountry,
   userName,
+  username = 'visitante',
+  originCountryCode,
   ecosystemSummary,
   progression,
-  jukeboxPlaying,
-  motionPaused = false,
-  compactByDefault = true,
   isGuestSession = false,
-  onSelectCountry,
-  voiceEnabled,
-  sonifyEnabled,
-  highContrast,
-  fontScale,
   liveAnnouncement,
-  onToggleVoice,
-  onToggleSonify,
-  onToggleHighContrast,
-  onCycleFontScale,
+  liveToastEvent = null,
+  onDismissToast,
+  externalOpenRequest = null,
+  onSelectCountry,
+  onOpenAuth,
+  remoteRankingEntries = null,
 }) => {
-  const [collapsed, setCollapsed] = useState(
-    () =>
-      compactByDefault ||
-      (typeof window !== 'undefined' && window.innerWidth <= 860)
-  );
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<CollectiveTabId>('constellation');
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
+  // Auto-recede when a country is selected so Focus Mode stays 100% clean
   useEffect(() => {
-    if (selectedCountry && !collapsed && typeof window !== 'undefined' && window.innerWidth <= 1180) {
-      setCollapsed(true);
+    if (selectedCountry) {
+      setSheetOpen(false);
     }
   }, [selectedCountry]);
 
-  const explorerRank = !isGuestSession && progression ? getExplorerRank(progression.xp) : null;
-  const hasMaestroHalo = Boolean(
-    !isGuestSession && progression && progression.unlockedSymphonyKeys.length > 0
-  );
+  // Allow PlayerHUD ("Ranking Global") or external triggers to open directly on a tab
+  useEffect(() => {
+    if (!externalOpenRequest || externalOpenRequest.nonce === 0) return;
+    setActiveTab(externalOpenRequest.tab);
+    setSheetOpen(true);
+  }, [externalOpenRequest]);
 
-  const planetPct = Math.min(
-    100,
-    Math.round(
-      (ecosystemSummary.unlockedVoicesCount /
-        Math.max(1, ecosystemSummary.totalVoicesTarget)) *
-        100
-    )
-  );
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSheetOpen(false);
+        requestAnimationFrame(() => triggerRef.current?.focus());
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sheetOpen]);
+
   const spotlight = ecosystemSummary.spotlightRegion;
-  const latestFeedItem = ecosystemSummary.recentFeed[0] ?? null;
+  const isBackendConnected =
+    Array.isArray(remoteRankingEntries) && remoteRankingEntries.length > 0;
+  const completionRatio01 = Math.min(
+    1,
+    ecosystemSummary.completedRegionsCount / Math.max(1, ecosystemSummary.litRegionsCount || 1)
+  );
 
-  const companionSpeechPt = (() => {
-    if (selectedCountry) {
-      return `Explorando ${selectedCountry.namePt}. Ouça os dados reais da NASA ou acenda uma frequência para a comunidade.`;
-    }
-    if (spotlight && !spotlight.isComplete) {
-      return `Faltam ${5 - spotlight.unlockedCount} vozes em ${spotlight.regionLabel} para despertar uma sinfonia 5/5. Vamos juntos?`;
-    }
-    return 'A Terra está viva! Passe o mouse nos faróis iluminados para ver quem colaborou ou escolha um país.';
-  })();
+  const hasPullToast = Boolean(!sheetOpen && liveToastEvent);
 
   return (
-    <aside
-      className={`right-side-panel planet-live-panel console-frame ${collapsed ? 'is-collapsed' : ''}`}
-      aria-label="Lounge do Astronauta, feed coletivo e acessibilidade"
+    <div
+      className={`collective-orbit-dock ${sheetOpen ? 'is-sheet-open' : 'is-collapsed'} ${
+        hasPullToast ? 'has-pull-toast' : ''
+      }`}
       data-testid="astronaut-copilot"
     >
-      <div className="panel-header lounge-header">
-        <button
-          type="button"
-          className="planet-pill-trigger"
-          onClick={() => setCollapsed((v) => !v)}
-          aria-expanded={!collapsed}
-          aria-label={
-            collapsed
-              ? 'Expandir Lounge do Astronauta e feed da comunidade'
-              : 'Recolher Lounge do Astronauta'
-          }
-          title={
-            collapsed
-              ? latestFeedItem
-                ? `Lounge do Astronauta · Última ação: ${latestFeedItem.contributorName} em ${latestFeedItem.regionLabel}`
-                : 'Expandir Lounge do Astronauta'
-              : 'Recolher Lounge do Astronauta'
-          }
-          data-testid="planet-live-toggle-btn"
-        >
-          <span className="lounge-live-pulse" aria-hidden="true" />
-          <Sparkles size={14} className="planet-spark-icon" aria-hidden="true" />
-          <span className="lounge-pill-label">Lounge</span>
-          <span className="planet-pill-count">
-            {ecosystemSummary.unlockedVoicesCount}/{ecosystemSummary.totalVoicesTarget}
-          </span>
-          <span className="planet-pill-chevron" aria-hidden="true">
-            {collapsed ? <PanelRightOpen size={14} /> : <PanelRightClose size={14} />}
-          </span>
-        </button>
-      </div>
-
       {/* Screen-reader-only live announcements */}
       <span className="sr-only" aria-live="polite">
         {liveAnnouncement}
       </span>
 
-      {!collapsed && (
-        <div className="panel-body planet-panel-body lounge-panel-body" data-testid="community-panel">
-          <div className="copilot-user-row">
+      {/* SUBTLE OBSIDIAN PULL-UP TAB DOCKED TO ÓRBITA GLOBAL */}
+      {hasPullToast && liveToastEvent && (
+        <div
+          className="collective-live-toast is-pull-tab console-frame"
+          role="status"
+          data-testid="collective-live-toast"
+        >
+          <button
+            type="button"
+            className="collective-toast-main"
+            onClick={() => {
+              onDismissToast?.();
+              setActiveTab('constellation');
+              setSheetOpen(true);
+            }}
+          >
             <span
-              className="copilot-user-tag"
-              title={`Sessão ativa: ${isGuestSession ? 'Visitante' : userName}`}
-            >
-              <User size={12} aria-hidden="true" />
-              <span>{isGuestSession ? 'Visitante · Sessão Livre' : userName}</span>
-            </span>
-            {!isGuestSession && progression && explorerRank && (
-              <span className="copilot-xp-pill" data-testid="explorer-xp-pill">
-                <Award size={12} aria-hidden="true" />
-                <span>
-                  {progression.xp.toLocaleString('pt-BR')} XP · {explorerRank.title}
-                </span>
-              </span>
-            )}
-          </div>
-
-          {/* MINEIRØ 3D COMPANION WITH OPTIONAL 5/5 MAESTRO AURA ACCESSORY */}
-          <div
-            className={`mineiro-companion-box ${hasMaestroHalo ? 'has-maestro-reward' : ''}`}
-            data-testid="mineiro-companion-box"
-          >
-            <div
-              className={`mineiro-avatar-orb ${hasMaestroHalo ? 'has-maestro-halo' : ''}`}
+              className="collective-avatar-badge"
               aria-hidden="true"
+              data-testid="collective-toast-avatar"
             >
-              {!highContrast && !motionPaused ? (
-                <Mineiro3D
-                  size="avatar"
-                  stepIndex={selectedCountry ? 2 : jukeboxPlaying ? 1 : 0}
-                  isExplaining={jukeboxPlaying || voiceEnabled}
+              {liveToastEvent.initial || <User size={11} />}
+            </span>
+            <span className="collective-toast-text">
+              <strong>{liveToastEvent.contributorName}</strong> desbloqueou{' '}
+              <span className="collective-stem-ref">
+                <i
+                  className="collective-stem-dot"
+                  style={{ background: liveToastEvent.accentHex }}
+                  aria-hidden="true"
                 />
-              ) : (
-                <span className="copilot-orbital-badge">
-                  <Orbit size={18} />
-                </span>
-              )}
-              {hasMaestroHalo && (
-                <span className="mineiro-crown-pip" title="Acessório desbloqueado: Halo de Maestro 5/5">
-                  <Crown size={10} />
-                </span>
-              )}
-            </div>
-            <div className="mineiro-dialogue-col">
-              <p className="copilot-title font-display">
-                {selectedCountry
-                  ? `Em órbita: ${selectedCountry.namePt}`
-                  : jukeboxPlaying
-                    ? 'Sinfonia Planetária Ativa'
-                    : 'Lounge do Astronauta'}
-              </p>
-              <p className="copilot-speech">{companionSpeechPt}</p>
-            </div>
-          </div>
-
-          {/* FEATURED COLLABORATIVE MISSION — CLICK FLIES TO REGION */}
-          {spotlight && spotlight.country && (
-            <button
-              type="button"
-              className="mission-spotlight-card"
-              onClick={() => onSelectCountry(spotlight.country!)}
-              data-testid="spotlight-mission-btn"
-            >
-              <div className="mission-spotlight-top">
-                <span className="mission-tag">
-                  <Compass size={12} aria-hidden="true" />
-                  <span>
-                    {spotlight.isComplete ? 'Região em Sinfonia' : 'Missão em Destaque'}
-                  </span>
-                </span>
-                <span className="mission-count">{spotlight.unlockedCount}/5 vozes</span>
-              </div>
-              <strong className="mission-country">{spotlight.regionLabel}</strong>
-              <span className="mission-cta">
-                {spotlight.isComplete
-                  ? '5/5 camadas acesas — clique para voar e ouvir'
-                  : `Faltam ${5 - spotlight.unlockedCount} pessoa(s) para iluminar 100% — Voar agora`}
-              </span>
-            </button>
-          )}
-
-          {/* LIVE SOCIAL FEED ("QUEM ESTÁ DESPERTANDO O PLANETA") */}
-          <section className="lounge-feed-section" aria-label="Feed social vivo de colaborações">
-            <div className="community-section-head">
-              <span>Pulso da Comunidade</span>
-              <span>
-                {ecosystemSummary.litRegionsCount} regiões · {ecosystemSummary.completedRegionsCount} 5/5
-              </span>
-            </div>
-
-            <div className="lounge-meter-inline" aria-hidden="true">
-              <div className="planet-meter-track">
-                <div
-                  className="planet-meter-fill"
-                  style={{ transform: `scaleX(${planetPct / 100})` }}
-                />
-              </div>
-            </div>
-
-            <div className="lounge-feed-list" role="list" data-testid="lounge-social-feed">
-              {ecosystemSummary.recentFeed.map((ev) => (
-                <button
-                  key={ev.id}
-                  type="button"
-                  role="listitem"
-                  disabled={!ev.country}
-                  onClick={() => ev.country && onSelectCountry(ev.country)}
-                  className="lounge-feed-row"
-                  title={ev.country ? `Voar para ${ev.regionLabel}` : ev.regionLabel}
-                >
-                  <span
-                    className="lounge-feed-avatar"
-                    style={{
-                      background: `color-mix(in srgb, ${ev.accentHex} 22%, rgba(8, 15, 32, 0.9))`,
-                      borderColor: ev.accentHex,
-                      color: ev.accentHex,
-                    }}
-                    aria-hidden="true"
-                  >
-                    {ev.initial}
-                  </span>
-                  <span className="lounge-feed-copy">
-                    <strong>{ev.contributorName}</strong> acendeu{' '}
-                    <span style={{ color: ev.accentHex, fontWeight: 700 }}>{ev.stemLabelPt}</span>{' '}
-                    em <strong>{ev.regionLabel}</strong>
-                  </span>
-                  {ev.isRegionComplete && (
-                    <span className="lounge-feed-star" title="Sinfonia 5/5 completa">
-                      5/5
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* COMPACT REGION CONSTELLATIONS STRIP */}
-            <div className="lounge-regions-pills" role="group" aria-label="Regiões iluminadas">
-              {ecosystemSummary.regions.map((item) => {
-                const isSelected = Boolean(
-                  selectedCountry && item.country?.id === selectedCountry.id
-                );
-                return (
-                  <button
-                    key={item.regionKey}
-                    type="button"
-                    disabled={!item.country}
-                    onClick={() => item.country && onSelectCountry(item.country)}
-                    className={`lounge-region-chip ${item.isComplete ? 'is-complete' : ''} ${
-                      isSelected ? 'is-selected' : ''
-                    }`}
-                  >
-                    <span>{item.regionLabel}</span>
-                    <span className="lounge-region-pips" aria-hidden="true">
-                      {STEM_ORDER.map((s) => (
-                        <span
-                          key={s}
-                          className="lounge-mini-dot"
-                          style={{
-                            background: item.unlockedStems[s]
-                              ? STEM_METAS[s].accentHex
-                              : 'rgba(148, 163, 184, 0.25)',
-                          }}
-                        />
-                      ))}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* ACCESSIBILITY DOCK INSIDE LOUNGE */}
-          <div
-            className="copilot-controls-grid"
-            role="group"
-            aria-label="Controles globais de acessibilidade"
+                {liveToastEvent.stemLabelPt}
+              </span>{' '}
+              em <strong>{liveToastEvent.regionLabel}</strong>
+            </span>
+          </button>
+          <button
+            type="button"
+            className="collective-toast-close"
+            onClick={() => onDismissToast?.()}
+            aria-label="Dispensar notificação"
           >
-            <button
-              type="button"
-              className={`copilot-btn ${voiceEnabled ? 'is-on' : ''}`}
-              onClick={onToggleVoice}
-              aria-pressed={voiceEnabled}
-              title="Ativar ou desativar narração por voz em PT-BR (Tecla V / R)"
-              data-testid="a11y-voice-btn"
-            >
-              {voiceEnabled ? (
-                <Volume2 size={12} aria-hidden="true" />
-              ) : (
-                <VolumeX size={12} aria-hidden="true" />
-              )}
-              <span>Voz (V)</span>
-            </button>
-
-            <button
-              type="button"
-              className={`copilot-btn ${sonifyEnabled ? 'is-on' : ''}`}
-              onClick={onToggleSonify}
-              aria-pressed={sonifyEnabled}
-              title="Sonificação: converter intensidade dos dados em som (Tecla S)"
-              data-testid="a11y-sonify-btn"
-            >
-              <AudioLines size={12} aria-hidden="true" />
-              <span>Som (S)</span>
-            </button>
-
-            <button
-              type="button"
-              className={`copilot-btn ${highContrast ? 'is-on' : ''}`}
-              onClick={onToggleHighContrast}
-              aria-pressed={highContrast}
-              title="Modo Alto Contraste (Tecla C)"
-              data-testid="a11y-contrast-btn"
-            >
-              <Contrast size={12} aria-hidden="true" />
-              <span>Contraste</span>
-            </button>
-
-            <button
-              type="button"
-              className="copilot-btn"
-              onClick={onCycleFontScale}
-              title="Alternar tamanho do texto da interface"
-              aria-label={`Tamanho da fonte atual ${Math.round(fontScale * 100)} por cento`}
-              data-testid="a11y-font-btn"
-            >
-              <span>A+{Math.round(fontScale * 100)}%</span>
-            </button>
-          </div>
+            <X size={12} aria-hidden="true" />
+          </button>
         </div>
       )}
-    </aside>
+
+      {/* EXPANDED SHEET MATCHING LEFT/RIGHT ORBITAL INSTRUMENT DRAWERS */}
+      {sheetOpen && (
+        <aside
+          className="collective-bottom-sheet console-frame"
+          role="dialog"
+          aria-label="Órbita Global e Ranking Global"
+          data-testid="collective-orbit-sheet"
+        >
+          <div className="collective-sheet-top">
+            <div
+              className="collective-tabs-bar"
+              role="tablist"
+              aria-label="Alternar entre Órbita Global e Ranking Global"
+            >
+              <button
+                type="button"
+                role="tab"
+                id="collective-tab-constellation"
+                aria-selected={activeTab === 'constellation'}
+                aria-controls="collective-panel-constellation"
+                className={`collective-tab-btn ${
+                  activeTab === 'constellation' ? 'is-active' : ''
+                }`}
+                onClick={() => setActiveTab('constellation')}
+                data-testid="collective-tab-constellation"
+              >
+                <Globe size={13} aria-hidden="true" />
+                <span>Órbita Global</span>
+              </button>
+
+              <button
+                type="button"
+                role="tab"
+                id="collective-tab-ranking"
+                aria-selected={activeTab === 'ranking'}
+                aria-controls="collective-panel-ranking"
+                className={`collective-tab-btn ${activeTab === 'ranking' ? 'is-active' : ''}`}
+                onClick={() => setActiveTab('ranking')}
+                data-testid="collective-tab-ranking"
+              >
+                <Trophy size={13} aria-hidden="true" />
+                <span>Ranking Global</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className="icon-btn-sm"
+              onClick={() => setSheetOpen(false)}
+              title="Recolher Órbita Global (Esc)"
+              aria-label="Fechar Órbita Global"
+              data-testid="close-collective-sheet-btn"
+            >
+              <ChevronDown size={15} aria-hidden="true" />
+            </button>
+          </div>
+
+          {/* TAB 1: REDE DE CONTRIBUIÇÃO GLOBAL */}
+          {activeTab === 'constellation' && (
+            <div
+              id="collective-panel-constellation"
+              role="tabpanel"
+              aria-labelledby="collective-tab-constellation"
+              className="collective-sheet-body"
+              data-testid="community-panel"
+            >
+              <div className="collective-telemetry-summary">
+                <div className="collective-summary-row">
+                  <span>{ecosystemSummary.litRegionsCount} países com camadas ativas</span>
+                  <strong>{ecosystemSummary.completedRegionsCount} em sinfonia 5/5</strong>
+                </div>
+                <div className="participant-hairline-track" aria-hidden="true">
+                  <div
+                    className="participant-hairline-fill"
+                    style={{ transform: `scaleX(${Math.max(0.08, completionRatio01)})` }}
+                  />
+                </div>
+              </div>
+
+              {spotlight && spotlight.country && (
+                <button
+                  type="button"
+                  className="collective-convergence-row"
+                  onClick={() => {
+                    setSheetOpen(false);
+                    onSelectCountry(spotlight.country!);
+                  }}
+                  data-testid="spotlight-mission-btn"
+                >
+                  <div className="collective-convergence-copy">
+                    <span className="collective-convergence-kicker">
+                      {spotlight.isComplete ? 'Sinfonia completa' : 'Próxima convergência'}
+                    </span>
+                    <strong>{spotlight.regionLabel}</strong>
+                  </div>
+                  <span className="collective-convergence-right">
+                    <span>{spotlight.unlockedCount}/5 camadas</span>
+                    <ArrowUpRight size={13} aria-hidden="true" />
+                  </span>
+                </button>
+              )}
+
+              <section className="lounge-feed-section" aria-label="Atividade recente na Terra">
+                <div className="participant-section-head">
+                  <span>Últimas transmissões</span>
+                  <span>{ecosystemSummary.unlockedVoicesCount} camadas</span>
+                </div>
+
+                <div className="lounge-feed-list" role="list" data-testid="lounge-social-feed">
+                  {ecosystemSummary.recentFeed.map((ev) => (
+                    <button
+                      key={ev.id}
+                      type="button"
+                      role="listitem"
+                      disabled={!ev.country}
+                      onClick={() => {
+                        if (!ev.country) return;
+                        setSheetOpen(false);
+                        onSelectCountry(ev.country);
+                      }}
+                      className="lounge-feed-row"
+                      title={ev.country ? `Ir para ${ev.regionLabel}` : ev.regionLabel}
+                    >
+                      <span className="lounge-feed-avatar" aria-hidden="true">
+                        {ev.initial}
+                      </span>
+                      <span className="lounge-feed-copy">
+                        <strong>{ev.contributorName}</strong> desbloqueou{' '}
+                        <span className="collective-stem-ref">
+                          <i
+                            className="collective-stem-dot"
+                            style={{ background: ev.accentHex }}
+                            aria-hidden="true"
+                          />
+                          {ev.stemLabelPt}
+                        </span>{' '}
+                        em <strong>{ev.regionLabel}</strong>
+                      </span>
+                      {ev.isRegionComplete && (
+                        <span className="lounge-feed-tag" title="Sinfonia 5/5 completa">
+                          5/5
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="lounge-regions-pills" role="group" aria-label="Países ativos">
+                  {ecosystemSummary.regions.map((item) => (
+                    <button
+                      key={item.regionKey}
+                      type="button"
+                      disabled={!item.country}
+                      onClick={() => {
+                        if (!item.country) return;
+                        setSheetOpen(false);
+                        onSelectCountry(item.country);
+                      }}
+                      className={`lounge-region-chip ${item.isComplete ? 'is-complete' : ''}`}
+                    >
+                      <span>{item.regionLabel}</span>
+                      <span className="lounge-region-pips" aria-hidden="true">
+                        {STEM_ORDER.map((s) => (
+                          <span
+                            key={s}
+                            className="lounge-mini-dot"
+                            style={{
+                              background: item.unlockedStems[s]
+                                ? STEM_METAS[s].accentHex
+                                : 'rgba(148, 163, 184, 0.22)',
+                            }}
+                          />
+                        ))}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* TAB 2: RANKING GLOBAL HONESTA E SÓBRIA */}
+          {activeTab === 'ranking' && (
+            <div
+              id="collective-panel-ranking"
+              role="tabpanel"
+              aria-labelledby="collective-tab-ranking"
+              className="collective-sheet-body"
+              data-testid="ranking-global-popover"
+            >
+              <div
+                className="collective-sync-note"
+                role="status"
+                data-testid="ranking-availability-banner"
+              >
+                <Waypoints size={13} aria-hidden="true" />
+                <span>
+                  {isBackendConnected
+                    ? 'Sincronizado em tempo real com a rede global.'
+                    : 'Modo local ativo — aguardando conexão com o servidor Realtime.'}
+                </span>
+              </div>
+
+              <div className="ranking-table-shell" role="table" aria-label="Tabela do Ranking Global">
+                <div className="ranking-table-head" role="row">
+                  <span role="columnheader">#</span>
+                  <span role="columnheader">Participante</span>
+                  <span role="columnheader">Regiões</span>
+                  <span role="columnheader">5/5</span>
+                  <span role="columnheader">Camadas</span>
+                </div>
+
+                {isBackendConnected ? (
+                  <div className="ranking-table-body" role="rowgroup">
+                    {remoteRankingEntries!.map((entry) => (
+                      <div key={entry.username} className="ranking-row" role="row">
+                        <span role="cell" className="ranking-pos">
+                          #{entry.position}
+                        </span>
+                        <span role="cell" className="ranking-explorer-cell">
+                          <CountryFlagBadge code={entry.originCountryCode} showName={false} />
+                          <span className="ranking-explorer-names">
+                            <strong>{entry.explorerName}</strong>
+                            <small>@{entry.username}</small>
+                          </span>
+                        </span>
+                        <span role="cell">{entry.contributionsCount}</span>
+                        <span role="cell">{entry.achievementsCount}</span>
+                        <span role="cell" className="ranking-xp-val">
+                          {entry.xp.toLocaleString('pt-BR')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="ranking-empty-state" data-testid="ranking-empty-state">
+                    <p className="ranking-empty-title">Rede multiusuário pronta para conexão</p>
+                    <p className="ranking-empty-desc">
+                      Nenhum placar fictício é exibido antes da conexão com o banco de dados.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {!isGuestSession ? (
+                <div className="ranking-local-self-card" data-testid="ranking-local-self">
+                  <div className="ranking-local-top">
+                    <div className="ranking-local-identity">
+                      <strong>{userName}</strong>
+                      <span>@{username}</span>
+                    </div>
+                    <CountryFlagBadge code={originCountryCode} showName />
+                  </div>
+                  <div className="participant-metrics-strip is-compact">
+                    <div className="participant-metric-cell">
+                      <strong className="participant-metric-val">
+                        {progression?.exploredRegionKeys.length ?? 0}
+                      </strong>
+                      <span className="participant-metric-lbl">Regiões</span>
+                    </div>
+                    <div className="participant-metric-cell">
+                      <strong className="participant-metric-val">
+                        {progression?.contributedRegionKeys.length ?? 0}
+                      </strong>
+                      <span className="participant-metric-lbl">Camadas</span>
+                    </div>
+                    <div className="participant-metric-cell">
+                      <strong className="participant-metric-val">
+                        {progression?.unlockedSymphonyKeys.length ?? 0}
+                      </strong>
+                      <span className="participant-metric-lbl">Sinfonias 5/5</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="ranking-guest-cta-box">
+                  <p>
+                    Crie sua conta no menu do participante para registrar suas contribuições na rede.
+                  </p>
+                  {onOpenAuth && (
+                    <button
+                      type="button"
+                      className="hud-auth-cta-btn"
+                      onClick={() => {
+                        setSheetOpen(false);
+                        onOpenAuth();
+                      }}
+                    >
+                      <LogIn size={13} aria-hidden="true" />
+                      <span>Entrar ou criar conta</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </aside>
+      )}
+
+      {/* QUIET ORBITAL INSTRUMENT CAPSULE FOR ÓRBITA GLOBAL */}
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`collective-orbit-pill console-frame ${sheetOpen ? 'is-active' : ''} ${
+          hasPullToast ? 'is-toast-docked' : ''
+        }`}
+        onClick={() => {
+          onDismissToast?.();
+          setSheetOpen((v) => !v);
+        }}
+        title="Órbita Global — rede coletiva e Ranking Global"
+        aria-expanded={sheetOpen}
+        aria-haspopup="dialog"
+        aria-label={
+          sheetOpen
+            ? 'Recolher Órbita Global e Ranking Global'
+            : 'Abrir Órbita Global e Ranking Global'
+        }
+        data-testid="planet-live-toggle-btn"
+      >
+        <span
+          className="collective-connection-icon"
+          aria-hidden="true"
+          data-testid="collective-connection-icon"
+        >
+          <Waypoints size={13} />
+        </span>
+        <span className="collective-pill-title">Órbita Global</span>
+        <span className="collective-pill-meta">{ecosystemSummary.litRegionsCount} países</span>
+        <span className="planet-pill-chevron" aria-hidden="true">
+          {sheetOpen ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+        </span>
+      </button>
+    </div>
   );
 };

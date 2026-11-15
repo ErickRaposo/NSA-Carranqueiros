@@ -3,30 +3,37 @@ import mineiroLogo from '../assets/mineiro-logo.png';
 import {
   ArrowDown,
   ArrowUp,
+  AudioLines,
   Award,
   Compass,
+  Contrast,
   Crown,
+  Download,
   Eye,
   EyeOff,
   Flag,
   Globe,
   HelpCircle,
   Map as MapIcon,
+  Orbit,
+  Palette,
   PanelLeftClose,
   Search,
   Settings2,
+  Share2,
   SlidersHorizontal,
   Sparkles,
   Sun,
-  Trophy,
   Type,
   Volume2,
+  VolumeX,
   X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
 import { PlayerHUD } from './PlayerHUD';
-import { RankingPopover } from './RankingPopover';
+import type { VisualArtStyle } from './EarthCanvas';
+import type { CollectiveTabId } from './AstronautCopilot';
 import {
   GraticuleIcon,
   PolygonBorderIcon,
@@ -36,7 +43,6 @@ import {
 import { CountryEntry, searchCountries } from '../geo/countries';
 import { formatLatLon } from '../geo/projection';
 import {
-  BLEND_MODE_OPTIONS,
   BlendMode,
   DatasetId,
   LayerConfig,
@@ -116,9 +122,33 @@ const MISSION_TARGET_HINTS: Record<MissionId, string[]> = {
   guardiao_planetario: ['Brazil', 'United States of America', 'Japan', 'South Africa'],
 };
 
+const VISUAL_STYLE_OPTIONS: { id: VisualArtStyle; label: string; shortLabel: string }[] = [
+  { id: 'bioluminescent', label: 'Noturno Bioluminescente', shortLabel: 'Bioluminescente' },
+  { id: 'infrared', label: 'Infravermelho Orbital', shortLabel: 'Infravermelho' },
+  { id: 'blueprint', label: 'Blueprint Cartográfico', shortLabel: 'Blueprint' },
+  { id: 'satellite', label: 'Satélite Diurno', shortLabel: 'Satélite' },
+];
+
+const ART_BLEND_SHORT: { value: BlendMode; label: string }[] = [
+  { value: 'add', label: 'Soma' },
+  { value: 'screen', label: 'Clarear' },
+  { value: 'overlay', label: 'Contraste' },
+  { value: 'difference', label: 'Arte Pop' },
+  { value: 'normal', label: 'Normal' },
+];
+
 interface HudOverlayProps {
   viewMode: '3d' | '2d';
   onToggleViewMode: (mode: '3d' | '2d') => void;
+  visualStyle?: VisualArtStyle;
+  onChangeVisualStyle?: (style: VisualArtStyle) => void;
+  onApplyArtPreset?: (presetId: 'storm' | 'currents' | 'five') => void;
+  onShareMix?: () => void;
+  onDownloadPoster?: () => void;
+  orbitAutoRotate?: boolean;
+  onToggleOrbitAutoRotate?: () => void;
+  onOpenCollectiveTab?: (tab: CollectiveTabId) => void;
+  externalAreaRequest?: { area: LaunchpadAreaId; nonce: number } | null;
   layers: LayerConfig[];
   onToggleLayer: (id: DatasetId) => void;
   onSoloLayer: (id: DatasetId) => void;
@@ -150,8 +180,21 @@ interface HudOverlayProps {
   onLogout: () => void;
   userName?: string;
   username?: string;
+  userEmail?: string;
   originCountryCode?: string;
   onChangeOriginCountry?: (countryCode: string) => void;
+  onUpdateProfile?: (input: {
+    name: string;
+    username: string;
+    email: string;
+    originCountryCode?: string;
+  }) => { ok: boolean; errorPt?: string };
+  onUpdatePassword?: (
+    currentPassword: string,
+    newPassword: string
+  ) => { ok: boolean; errorPt?: string };
+  onExportParticipantData?: () => void;
+  onResetProgression?: () => void;
   isGuestSession?: boolean;
   onOpenAuth?: () => void;
   onOpenRegister?: () => void;
@@ -173,12 +216,22 @@ interface HudOverlayProps {
   onDismissDiscovery?: () => void;
   copilotWidget?: React.ReactNode;
   detailCard?: React.ReactNode;
+  nasaDatasetCard?: React.ReactNode;
   playerBar?: React.ReactNode;
 }
 
 export const HudOverlay: React.FC<HudOverlayProps> = ({
   viewMode,
   onToggleViewMode,
+  visualStyle = 'satellite',
+  onChangeVisualStyle,
+  onApplyArtPreset,
+  onShareMix,
+  onDownloadPoster,
+  orbitAutoRotate = true,
+  onToggleOrbitAutoRotate,
+  onOpenCollectiveTab,
+  externalAreaRequest = null,
   layers,
   onToggleLayer,
   onSoloLayer,
@@ -194,8 +247,6 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
   onToggleLabels,
   hdEnhance,
   onToggleHdEnhance,
-  selectionMode,
-  onChangeSelectionMode,
   showUnlockMap,
   onToggleUnlockMap,
   countries,
@@ -210,8 +261,13 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
   onLogout,
   userName = 'Visitante',
   username = 'visitante',
+  userEmail,
   originCountryCode,
   onChangeOriginCountry,
+  onUpdateProfile,
+  onUpdatePassword,
+  onExportParticipantData,
+  onResetProgression,
   isGuestSession = false,
   onOpenAuth,
   onOpenRegister,
@@ -233,6 +289,7 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
   onDismissDiscovery,
   copilotWidget,
   detailCard,
+  nasaDatasetCard,
   playerBar,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -240,19 +297,29 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
   const [activeArea, setActiveArea] = useState<LaunchpadAreaId | null>(null);
   const [visualMenuOpen, setVisualMenuOpen] = useState(false);
   const [playerPopoverOpen, setPlayerPopoverOpen] = useState(false);
-  const [rankingPopoverOpen, setRankingPopoverOpen] = useState(false);
   const [mobileCenterMenuOpen, setMobileCenterMenuOpen] = useState(false);
   const [samplingLayerId, setSamplingLayerId] = useState<DatasetId | null>(null);
   const [draggedLayerId, setDraggedLayerId] = useState<DatasetId | null>(null);
   const [dragOverLayerId, setDragOverLayerId] = useState<DatasetId | null>(null);
   const [zenMode, setZenMode] = useState(false);
+  const [edgePeekZone, setEdgePeekZone] = useState<'top' | 'left' | 'bottom' | null>(null);
 
   const visualMenuRef = useRef<HTMLDivElement | null>(null);
-  const rankingWrapRef = useRef<HTMLDivElement | null>(null);
-  const rankingBtnRef = useRef<HTMLButtonElement | null>(null);
   const mobileCenterWrapRef = useRef<HTMLDivElement | null>(null);
   const mobileCenterBtnRef = useRef<HTMLButtonElement | null>(null);
   const launchpadRefs = useRef<Partial<Record<LaunchpadAreaId, HTMLButtonElement | null>>>({});
+
+  // Auto-recede left studio drawer when selecting a country so Focus Mode highlights the country card
+  useEffect(() => {
+    if (selectedCountry) {
+      setActiveArea(null);
+    }
+  }, [selectedCountry]);
+
+  useEffect(() => {
+    if (!externalAreaRequest || externalAreaRequest.nonce === 0) return;
+    setActiveArea(externalAreaRequest.area);
+  }, [externalAreaRequest]);
 
   // Keyboard shortcut: Z toggles Modo Zen (Esc exits Zen)
   useEffect(() => {
@@ -271,6 +338,13 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
   }, [zenMode]);
 
   useEffect(() => {
+    if (selectedCountry) {
+      setActiveArea(null);
+      setVisualMenuOpen(false);
+    }
+  }, [selectedCountry]);
+
+  useEffect(() => {
     if (!visualMenuOpen) return;
     const onPointerDown = (e: MouseEvent) => {
       if (visualMenuRef.current && !visualMenuRef.current.contains(e.target as Node)) {
@@ -287,27 +361,6 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [visualMenuOpen]);
-
-  useEffect(() => {
-    if (!rankingPopoverOpen) return;
-    const onPointerDown = (e: MouseEvent) => {
-      if (rankingWrapRef.current && !rankingWrapRef.current.contains(e.target as Node)) {
-        setRankingPopoverOpen(false);
-      }
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setRankingPopoverOpen(false);
-        requestAnimationFrame(() => rankingBtnRef.current?.focus());
-      }
-    };
-    window.addEventListener('mousedown', onPointerDown);
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('mousedown', onPointerDown);
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [rankingPopoverOpen]);
 
   useEffect(() => {
     if (!mobileCenterMenuOpen) return;
@@ -390,7 +443,7 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
   const nextUnexploredCountry = useMemo(() => {
     const exploredSet = new Set(progression?.exploredRegionKeys ?? []);
     return (
-      countries.find((c) => !exploredSet.has(buildCountryRegionKey(c))) ??
+      countries.find((c) => !c.isMinorUninhabited && !exploredSet.has(buildCountryRegionKey(c))) ??
       countries[0] ??
       null
     );
@@ -427,7 +480,7 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
       }
     }
     return (
-      countries.find((c) => !matchedSet.has(buildCountryRegionKey(c))) ??
+      countries.find((c) => !c.isMinorUninhabited && !matchedSet.has(buildCountryRegionKey(c))) ??
       countries[0] ??
       null
     );
@@ -474,18 +527,18 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
       id: 'explorar',
       label: 'Explorar',
       shortLabel: 'Explorar',
-      description: 'Globo, voos rápidos, modo raio e regiões para descobrir',
-      badge: selectionMode === 'country' ? 'País' : 'Raio',
+      description: 'Globo 3D/2D, voos rápidos e regiões para descobrir',
+      badge: viewMode.toUpperCase(),
       icon: <Compass size={16} aria-hidden="true" />,
       testId: 'launchpad-area-explorar',
     },
     {
       id: 'frequencias',
-      label: 'Mesa de Som do Planeta',
-      shortLabel: 'Mesa',
-      description: 'Pads bioluminescentes que pulsam e mesclam os 5 fenômenos NASA',
+      label: 'Estúdio Visual',
+      shortLabel: 'Estúdio',
+      description: 'Estilos artísticos, ordem das camadas, cores e compartilhamento',
       badge: `${enabledLayers.length}/5`,
-      icon: <SlidersHorizontal size={16} aria-hidden="true" />,
+      icon: <Palette size={16} aria-hidden="true" />,
       testId: 'expand-layers-btn',
     },
     {
@@ -527,13 +580,35 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
     }
   };
 
-  const dominantHoverReading = useMemo(() => {
-    if (!hoverReadings || hoverReadings.length === 0) return null;
-    return [...hoverReadings].sort((a, b) => b.intensity01 - a.intensity01)[0] ?? null;
+  const topHoverReadings = useMemo(() => {
+    if (!hoverReadings || hoverReadings.length === 0) return [];
+    return [...hoverReadings].sort((a, b) => b.intensity01 - a.intensity01).slice(0, 2);
   }, [hoverReadings]);
 
+  const currentStyleMeta =
+    VISUAL_STYLE_OPTIONS.find((s) => s.id === visualStyle) ?? VISUAL_STYLE_OPTIONS[0];
+
+  const cycleNextVisualStyle = () => {
+    if (!onChangeVisualStyle) return;
+    const idx = VISUAL_STYLE_OPTIONS.findIndex((s) => s.id === visualStyle);
+    const next = VISUAL_STYLE_OPTIONS[(idx + 1) % VISUAL_STYLE_OPTIONS.length];
+    onChangeVisualStyle(next.id);
+  };
+
+  const isCountryFocusMode = Boolean(
+    selectedCountry &&
+      !activeArea &&
+      !playerPopoverOpen &&
+      !visualMenuOpen &&
+      !mobileCenterMenuOpen
+  );
+
   return (
-    <div className={`hud-chrome ${zenMode ? 'is-zen' : ''}`}>
+    <div
+      className={`hud-chrome ${zenMode ? 'is-zen' : ''} ${
+        isCountryFocusMode ? 'is-country-focus' : ''
+      } ${edgePeekZone ? `is-peeking-${edgePeekZone}` : ''}`}
+    >
       <a href="#main-earth-region" className="skip-link">
         Pular para o mapa interativo
       </a>
@@ -554,8 +629,10 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
       {/* TOP BAR — 3 CONTEXTUAL FLOATING ISLANDS (GLOBE IS KING) */}
       <header
         className="top-hud top-hud-islands"
-        aria-label="Ilhas superiores de identidade, controles contextuais e progressão"
+        aria-label="Ilhas superiores de identidade, estilos visuais e perfil"
         data-testid="explorer-topbar"
+        onMouseEnter={() => setEdgePeekZone('top')}
+        onMouseLeave={() => setEdgePeekZone((curr) => (curr === 'top' ? null : curr))}
       >
         {/* ILHA ESQUERDA: LOGO MINEIRØ + BUSCA COMPACTA */}
         <div
@@ -657,28 +734,19 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
               </button>
             </div>
 
-            <div className="segmented-control" role="group" aria-label="Modo País ou Raio">
+            {onChangeVisualStyle && (
               <button
                 type="button"
-                className={`seg-btn ${selectionMode === 'country' ? 'active' : ''}`}
-                onClick={() => onChangeSelectionMode('country')}
-                aria-pressed={selectionMode === 'country'}
-                title="Clicar no mapa escolhe um país para tocar e acender"
-                data-testid="target-country-btn"
+                className="toggle-chip art-style-cycle-chip"
+                onClick={cycleNextVisualStyle}
+                title={`Estilo artístico atual: ${currentStyleMeta.label} — clique para alternar a arte do globo`}
+                aria-label={`Alternar estilo visual do globo (atual: ${currentStyleMeta.label})`}
+                data-testid="cycle-visual-style-btn"
               >
-                <span>País</span>
+                <Palette size={14} aria-hidden="true" />
+                <span>{currentStyleMeta.shortLabel}</span>
               </button>
-              <button
-                type="button"
-                className={`seg-btn ${selectionMode === 'radius' ? 'active' : ''}`}
-                onClick={() => onChangeSelectionMode('radius')}
-                aria-pressed={selectionMode === 'radius'}
-                title="Clicar no mapa posiciona um raio geográfico livre"
-                data-testid="target-radius-btn"
-              >
-                <span>Raio</span>
-              </button>
-            </div>
+            )}
 
             <div className="map-visual-popover-wrap" ref={visualMenuRef}>
               <button
@@ -687,7 +755,6 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                 onClick={() => {
                   setVisualMenuOpen((v) => !v);
                   setPlayerPopoverOpen(false);
-                  setRankingPopoverOpen(false);
                   setMobileCenterMenuOpen(false);
                 }}
                 aria-expanded={visualMenuOpen}
@@ -795,7 +862,6 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
               onClick={() => {
                 setMobileCenterMenuOpen((v) => !v);
                 setPlayerPopoverOpen(false);
-                setRankingPopoverOpen(false);
                 setVisualMenuOpen(false);
               }}
               aria-expanded={mobileCenterMenuOpen}
@@ -848,24 +914,16 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                     </button>
                   </div>
 
-                  <div className="segmented-control" role="group" aria-label="Alvo">
+                  {onChangeVisualStyle && (
                     <button
                       type="button"
-                      className={`seg-btn ${selectionMode === 'country' ? 'active' : ''}`}
-                      onClick={() => onChangeSelectionMode('country')}
-                      aria-pressed={selectionMode === 'country'}
+                      className="popover-toggle-item is-on"
+                      onClick={cycleNextVisualStyle}
                     >
-                      <span>País</span>
+                      <Palette size={14} aria-hidden="true" />
+                      <span>Estilo: {currentStyleMeta.shortLabel}</span>
                     </button>
-                    <button
-                      type="button"
-                      className={`seg-btn ${selectionMode === 'radius' ? 'active' : ''}`}
-                      onClick={() => onChangeSelectionMode('radius')}
-                      aria-pressed={selectionMode === 'radius'}
-                    >
-                      <span>Raio</span>
-                    </button>
-                  </div>
+                  )}
 
                   <button
                     type="button"
@@ -943,81 +1001,15 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
           </div>
         </div>
 
-        {/* ILHA DIREITA: INDICADOR DE XP + RANKING GLOBAL + PERFIL DO JOGADOR */}
+        {/* ILHA DIREITA DO PARTICIPANTE (CÁPSULA ÚNICA COESA, SEM BORDA DUPLA) */}
         <div
-          className="topbar-zone topbar-zone-right topbar-island"
+          className="topbar-zone topbar-zone-right"
           data-testid="topbar-zone-right"
         >
-          {isGuestSession ? (
-            <div
-              className="topbar-xp-pill is-guest"
-              role="status"
-              aria-label="Modo Visitante: entre ou cadastre-se para acumular XP na conta"
-              title="Entre ou crie sua conta para registrar XP e conquistas permanentes"
-              data-testid="topbar-xp-indicator"
-            >
-              <Sparkles size={13} aria-hidden="true" />
-              <span>XP · Entrar</span>
-            </div>
-          ) : (
-            <div
-              className="topbar-xp-pill is-authenticated"
-              role="status"
-              aria-label={`XP acumulado: ${(progression?.xp ?? 0).toLocaleString('pt-BR')} XP, Nível ${
-                explorerRank?.level ?? 1
-              }`}
-              title={`${(progression?.xp ?? 0).toLocaleString('pt-BR')} XP · ${
-                explorerRank?.title ?? 'Ouvinte Orbital'
-              }`}
-              data-testid="topbar-xp-indicator"
-            >
-              <Sparkles size={13} aria-hidden="true" />
-              <strong>{(progression?.xp ?? 0).toLocaleString('pt-BR')} XP</strong>
-            </div>
-          )}
-
-          <div className="topbar-ranking-wrap" ref={rankingWrapRef}>
-            <button
-              ref={rankingBtnRef}
-              type="button"
-              className={`topbar-ranking-btn ${rankingPopoverOpen ? 'active' : ''}`}
-              onClick={() => {
-                setRankingPopoverOpen((v) => !v);
-                setPlayerPopoverOpen(false);
-                setVisualMenuOpen(false);
-                setMobileCenterMenuOpen(false);
-              }}
-              aria-expanded={rankingPopoverOpen}
-              aria-haspopup="dialog"
-              aria-label="Abrir ranking global de exploradores"
-              title="Ranking global de exploradores"
-              data-testid="topbar-ranking-btn"
-            >
-              <Trophy size={14} aria-hidden="true" />
-              <span className="topbar-ranking-label">Ranking</span>
-            </button>
-
-            {rankingPopoverOpen && (
-              <RankingPopover
-                onClose={() => {
-                  setRankingPopoverOpen(false);
-                  requestAnimationFrame(() => rankingBtnRef.current?.focus());
-                }}
-                isGuestSession={isGuestSession}
-                userName={userName}
-                username={username}
-                originCountryCode={originCountryCode}
-                realXp={progression?.xp ?? 0}
-                contributionsCount={progression?.contributedRegionKeys.length ?? 0}
-                achievementsCount={unlockedBadgesCount}
-                onOpenAuth={onOpenAuth}
-              />
-            )}
-          </div>
-
           <PlayerHUD
             userName={userName}
             username={username}
+            userEmail={userEmail}
             originCountryCode={originCountryCode}
             isGuestSession={isGuestSession}
             xp={progression?.xp ?? 0}
@@ -1031,10 +1023,14 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
             contributionHistory={progression?.contributionHistory ?? []}
             sonicPassport={sonicPassport}
             onChangeOriginCountry={onChangeOriginCountry}
+            onUpdateProfile={onUpdateProfile}
+            onUpdatePassword={onUpdatePassword}
+            onExportParticipantData={onExportParticipantData}
+            onResetProgression={onResetProgression}
             onOpenCollection={() => setActiveArea('colecao')}
             onOpenRanking={() => {
               setPlayerPopoverOpen(false);
-              setRankingPopoverOpen(true);
+              onOpenCollectiveTab?.('ranking');
             }}
             onOpenAuth={onOpenAuth}
             onOpenRegister={onOpenRegister}
@@ -1050,7 +1046,6 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
             isOpen={playerPopoverOpen}
             onToggleOpen={() => {
               setPlayerPopoverOpen((v) => !v);
-              setRankingPopoverOpen(false);
               setVisualMenuOpen(false);
               setMobileCenterMenuOpen(false);
             }}
@@ -1060,7 +1055,11 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
       </header>
 
       <div className="hud-middle">
-        <div className="hud-left-col launchpad-shell">
+        <div
+          className="hud-left-col launchpad-shell"
+          onMouseEnter={() => setEdgePeekZone('left')}
+          onMouseLeave={() => setEdgePeekZone((curr) => (curr === 'left' ? null : curr))}
+        >
           {/* COMPACT 4-AREA EXPLORER LAUNCHPAD RAIL */}
           <nav
             className="launchpad-floating-dock console-frame"
@@ -1191,30 +1190,8 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                 {activeArea === 'explorar' && (
                   <div className="launchpad-section-stack" data-testid="launchpad-panel-explorar">
                     <p className="launchpad-section-lead">
-                      Gire o planeta vivo, passe o cursor para sentir os fenômenos em tempo real ou voe para regiões prontas para despertar.
+                      Gire o planeta vivo, passe o cursor para sentir os fenômenos em tempo real ou voe para países prontos para despertar.
                     </p>
-
-                    <div className="launchpad-subsection">
-                      <span className="launchpad-subhead">Modo de captura no mapa</span>
-                      <div className="launchpad-mode-grid">
-                        <button
-                          type="button"
-                          className={`preset-ledger-btn ${selectionMode === 'country' ? 'is-active' : ''}`}
-                          onClick={() => onChangeSelectionMode('country')}
-                          aria-pressed={selectionMode === 'country'}
-                        >
-                          País / Fronteira
-                        </button>
-                        <button
-                          type="button"
-                          className={`preset-ledger-btn ${selectionMode === 'radius' ? 'is-active' : ''}`}
-                          onClick={() => onChangeSelectionMode('radius')}
-                          aria-pressed={selectionMode === 'radius'}
-                        >
-                          Raio Livre no Mapa
-                        </button>
-                      </div>
-                    </div>
 
                     <div className="launchpad-subsection">
                       <span className="launchpad-subhead">Voos rápidos pelo globo</span>
@@ -1259,14 +1236,99 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
 
                 {activeArea === 'frequencias' && (
                   <div className="launchpad-section-stack" data-testid="launchpad-panel-frequencias">
-                    <p className="launchpad-section-lead">
-                      Toque nos pads orgânicos para despertar cada camada ou arraste a coluna luminosa verticalmente para modular o brilho no globo:
-                    </p>
+                    {/* ESTILOS VISUAIS GENERATIVOS + PRESETS + COMPARTILHAMENTO */}
+                    <div className="studio-art-header">
+                      {onChangeVisualStyle && (
+                        <div className="launchpad-subsection">
+                          <span className="launchpad-subhead">Estilo de Arte Planetária</span>
+                          <div className="studio-style-grid" role="group" aria-label="Estilos visuais do globo">
+                            {VISUAL_STYLE_OPTIONS.map((opt) => (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                className={`preset-ledger-btn ${
+                                  visualStyle === opt.id ? 'is-active' : ''
+                                }`}
+                                onClick={() => onChangeVisualStyle(opt.id)}
+                                aria-pressed={visualStyle === opt.id}
+                                data-testid={`art-style-${opt.id}`}
+                              >
+                                {opt.shortLabel}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {onApplyArtPreset && (
+                        <div className="launchpad-subsection">
+                          <span className="launchpad-subhead">Combinações Artísticas Rápidas</span>
+                          <div className="studio-preset-row">
+                            <button
+                              type="button"
+                              className="tiny-btn"
+                              onClick={() => onApplyArtPreset('storm')}
+                              data-testid="art-preset-storm"
+                            >
+                              ⚡ Tempestade Áurea
+                            </button>
+                            <button
+                              type="button"
+                              className="tiny-btn"
+                              onClick={() => onApplyArtPreset('currents')}
+                              data-testid="art-preset-currents"
+                            >
+                              🌬 Correntes Neon
+                            </button>
+                            <button
+                              type="button"
+                              className="tiny-btn"
+                              onClick={() => onApplyArtPreset('five')}
+                              data-testid="art-preset-five"
+                            >
+                              ✦ 5 Elementos
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {(onShareMix || onDownloadPoster) && (
+                        <div className="studio-share-bar">
+                          {onShareMix && (
+                            <button
+                              type="button"
+                              className="studio-action-btn is-primary"
+                              onClick={onShareMix}
+                              data-testid="studio-share-link-btn"
+                            >
+                              <Share2 size={13} aria-hidden="true" />
+                              <span>Compartilhar Obra</span>
+                            </button>
+                          )}
+                          {onDownloadPoster && (
+                            <button
+                              type="button"
+                              className="studio-action-btn"
+                              onClick={onDownloadPoster}
+                              title="Baixar imagem PNG da sua composição planetária"
+                              data-testid="studio-download-poster-btn"
+                            >
+                              <Download size={13} aria-hidden="true" />
+                              <span>Postal PNG</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="studio-stack-order-banner">
+                      <span>Topo da Pintura ↑ (arraste ou use ↑↓ para mudar a ordem)</span>
+                    </div>
 
                     <div
                       className="layer-stack-list organic-soundboard-list"
                       role="list"
-                      aria-label="Mesa de som bioluminescente do planeta"
+                      aria-label="Estúdio de camadas visuais e sonoras da NASA"
                     >
                       {displayLayers.map((cfg, displayIdx) => {
                         const ds = NASA_DATASETS[cfg.id];
@@ -1385,12 +1447,14 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                                     }}
                                   >
                                     {cfg.enabled
-                                      ? `● Brilho ${Math.round(cfg.opacity * 100)}%`
-                                      : '○ Adormecida no globo'}
+                                      ? enabledLayers.length === 1
+                                        ? '● 100% · Mapa Puro NASA'
+                                        : `● Fusão ${Math.round(cfg.opacity * 100)}%`
+                                      : '○ Oculta no globo'}
                                   </span>
                                   <span className="freq-community-count">
-                                    Acesa em {litRegionsCount}{' '}
-                                    {litRegionsCount === 1 ? 'região' : 'regiões'}
+                                    Desbloqueada em {litRegionsCount}{' '}
+                                    {litRegionsCount === 1 ? 'país' : 'países'}
                                   </span>
                                 </div>
                               </div>
@@ -1399,11 +1463,21 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                               <div
                                 role="slider"
                                 tabIndex={0}
-                                aria-label={`Intensidade bioluminescente de ${meta.headline}`}
+                                aria-label={`Intensidade de mesclagem de ${meta.headline}`}
                                 aria-valuemin={8}
                                 aria-valuemax={100}
-                                aria-valuenow={Math.round((cfg.enabled ? cfg.opacity : 0) * 100)}
-                                title="Arraste verticalmente (ou use Setas ↑/↓) para mesclar o brilho da camada"
+                                aria-valuenow={Math.round(
+                                  (cfg.enabled
+                                    ? enabledLayers.length === 1
+                                      ? 1
+                                      : cfg.opacity
+                                    : 0) * 100
+                                )}
+                                title={
+                                  enabledLayers.length === 1 && cfg.enabled
+                                    ? '100% opacidade pura NASA (ative uma 2ª camada para mesclar)'
+                                    : 'Arraste verticalmente (ou use Setas ↑/↓) para mesclar a camada'
+                                }
                                 className={`pad-vertical-fader ${cfg.enabled ? 'is-lit' : ''}`}
                                 data-testid={`vertical-fader-${cfg.id}`}
                                 onPointerDown={(e) => {
@@ -1437,13 +1511,23 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                                 <span
                                   className="pad-vertical-fader-fill"
                                   style={{
-                                    transform: `scaleY(${cfg.enabled ? cfg.opacity : 0.06})`,
+                                    transform: `scaleY(${
+                                      cfg.enabled
+                                        ? enabledLayers.length === 1
+                                          ? 1
+                                          : cfg.opacity
+                                        : 0.06
+                                    })`,
                                     background: stemMeta.accentHex,
                                   }}
                                   aria-hidden="true"
                                 />
                                 <span className="pad-vertical-fader-pct" aria-hidden="true">
-                                  {cfg.enabled ? `${Math.round(cfg.opacity * 100)}` : '—'}
+                                  {cfg.enabled
+                                    ? `${Math.round(
+                                        (enabledLayers.length === 1 ? 1 : cfg.opacity) * 100
+                                      )}`
+                                    : '—'}
                                 </span>
                               </div>
                             </div>
@@ -1459,68 +1543,69 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                               </div>
                             )}
 
-                            {/* Secondary Collapsible Blending & Order Controls */}
-                            <details className="composer-advanced-details">
-                              <summary>Mesclagem Óptica &amp; {ds.svsId}</summary>
-                              <div className="launchpad-drawer">
-                                <div className="composer-drawer-actions">
-                                  <label className="blend-inline-label">
-                                    <span>Mescla:</span>
-                                    <select
-                                      value={cfg.blendMode}
-                                      onChange={(e) =>
-                                        onChangeLayerBlendMode(cfg.id, e.target.value as BlendMode)
-                                      }
-                                      className="blend-select-sm"
-                                      aria-label={`Método de mesclagem para ${ds.shortName}`}
-                                      data-testid={`blend-mode-${cfg.id}`}
-                                    >
-                                      {BLEND_MODE_OPTIONS.map((opt) => (
-                                        <option key={opt.value} value={opt.value}>
-                                          {opt.labelPt}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </label>
-
-                                  <div className="mixer-reorder-btns">
-                                    <button
-                                      type="button"
-                                      className="tiny-btn"
-                                      onClick={() => onSoloLayer(cfg.id)}
-                                      title="Isolar apenas esta frequência no globo"
-                                      data-testid={`solo-${cfg.id}`}
-                                    >
-                                      Solo
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="tiny-icon-btn"
-                                      disabled={!prevDisplayLayer}
-                                      onClick={() =>
-                                        prevDisplayLayer && onReorderLayer(cfg.id, prevDisplayLayer.id)
-                                      }
-                                      title="Mover camada para cima"
-                                      aria-label={`Mover ${meta.headline} para cima`}
-                                    >
-                                      <ArrowUp size={11} aria-hidden="true" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="tiny-icon-btn"
-                                      disabled={!nextDisplayLayer}
-                                      onClick={() =>
-                                        nextDisplayLayer && onReorderLayer(cfg.id, nextDisplayLayer.id)
-                                      }
-                                      title="Mover camada para baixo"
-                                      aria-label={`Mover ${meta.headline} para baixo`}
-                                    >
-                                      <ArrowDown size={11} aria-hidden="true" />
-                                    </button>
-                                  </div>
-                                </div>
+                            {/* DIRECT LAYER ORDER + BLEND MODE + SOLO CONTROLS ON CARD SURFACE */}
+                            <div className="studio-pad-controls-bar">
+                              <div
+                                className="studio-blend-pills"
+                                role="group"
+                                aria-label={`Fusão de cores de ${ds.shortName}`}
+                              >
+                                {ART_BLEND_SHORT.map((bm) => (
+                                  <button
+                                    key={bm.value}
+                                    type="button"
+                                    className={`studio-blend-chip ${
+                                      cfg.blendMode === bm.value ? 'is-active' : ''
+                                    }`}
+                                    onClick={() => onChangeLayerBlendMode(cfg.id, bm.value)}
+                                    aria-pressed={cfg.blendMode === bm.value}
+                                    data-testid={
+                                      cfg.blendMode === bm.value ? `blend-active-${cfg.id}` : undefined
+                                    }
+                                  >
+                                    {bm.label}
+                                  </button>
+                                ))}
                               </div>
-                            </details>
+
+                              <div className="mixer-reorder-btns">
+                                <button
+                                  type="button"
+                                  className="tiny-btn"
+                                  onClick={() => onSoloLayer(cfg.id)}
+                                  title="Isolar apenas esta camada no globo"
+                                  data-testid={`solo-${cfg.id}`}
+                                >
+                                  Solo
+                                </button>
+                                <button
+                                  type="button"
+                                  className="tiny-icon-btn"
+                                  disabled={!prevDisplayLayer}
+                                  onClick={() =>
+                                    prevDisplayLayer && onReorderLayer(cfg.id, prevDisplayLayer.id)
+                                  }
+                                  title="Subir camada na pilha de arte"
+                                  aria-label={`Mover ${meta.headline} para cima na ordem`}
+                                  data-testid={`move-up-${cfg.id}`}
+                                >
+                                  <ArrowUp size={11} aria-hidden="true" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="tiny-icon-btn"
+                                  disabled={!nextDisplayLayer}
+                                  onClick={() =>
+                                    nextDisplayLayer && onReorderLayer(cfg.id, nextDisplayLayer.id)
+                                  }
+                                  title="Descer camada na pilha de arte"
+                                  aria-label={`Mover ${meta.headline} para baixo na ordem`}
+                                  data-testid={`move-down-${cfg.id}`}
+                                >
+                                  <ArrowDown size={11} aria-hidden="true" />
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         );
                       })}
@@ -1762,6 +1847,13 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
               </div>
             </aside>
           )}
+
+          {/* CARD DE DESCOBERTA DO PAÍS (ANCORADO NA ESQUERDA PARA O PAÍS 2D OCUPAR A DIREITA) */}
+          {!activeArea && detailCard && (
+            <div className="hud-left-detail-slot" data-testid="hud-left-detail-slot">
+              {detailCard}
+            </div>
+          )}
         </div>
 
         <div className="hud-center-col">
@@ -1780,7 +1872,8 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
               />
               <div className="discovery-toast-copy">
                 <strong>
-                  {discoveryToast.label} · +{discoveryToast.xpGained} XP
+                  {discoveryToast.label}
+                  {discoveryToast.xpGained > 0 ? ` · +${discoveryToast.xpGained} XP` : ''}
                 </strong>
                 <span>{discoveryToast.phenomenonPt}</span>
               </div>
@@ -1797,79 +1890,207 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
             </div>
           )}
 
-          {/* RIGHT ZOOM STEPPER */}
-          <div className="right-zoom-stack console-frame" role="group" aria-label="Controles de zoom do mapa">
-            <button
-              type="button"
-              className="zoom-btn"
-              onClick={() => onZoomStep(-0.28)}
-              title="Aproximar zoom (Tecla +)"
-              aria-label="Aproximar zoom"
-            >
-              <ZoomIn size={17} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="zoom-btn"
-              onClick={() => onZoomStep(0.28)}
-              title="Afastar zoom (Tecla -)"
-              aria-label="Afastar zoom"
-            >
-              <ZoomOut size={17} aria-hidden="true" />
-            </button>
-          </div>
+          {/* CARD CIENTÍFICO DA BASE NASA & ESCALA DE CORES */}
+          {nasaDatasetCard && (
+            <div className="nasa-dataset-card-slot" data-testid="nasa-dataset-card-slot">
+              {nasaDatasetCard}
+            </div>
+          )}
 
-          {/* OLHO ORBITAL — LIVE PLANETARY CURSOR & ALTITUDE SENSOR */}
-          <div
-            className="orbital-eye-pill console-frame"
-            data-testid="orbital-eye-hud"
-            aria-live="off"
+          {/* ZONA 4 — ESTAÇÃO VERTICAL DEDICADA DE ACESSIBILIDADE + GIRO ORBITAL + ZOOM (MEIO-DIREITA) */}
+          <aside
+            className="a11y-spatial-dock console-frame"
+            role="toolbar"
+            aria-label="Estação de acessibilidade, giro orbital e zoom"
+            data-testid="a11y-spatial-dock"
           >
-            {hoverInfo ? (
-              <>
-                <span className="orbital-eye-target">
-                  <Compass size={12} aria-hidden="true" />
-                  <strong>
-                    {hoverInfo.country ? hoverInfo.country.namePt : 'Oceano / Atmosfera'}
-                  </strong>
-                </span>
-                <span className="orbital-eye-coords">
-                  {formatLatLon(hoverInfo.lat, hoverInfo.lon)}
-                </span>
-                {dominantHoverReading && (
-                  <span
-                    className="orbital-eye-reading"
-                    style={{
-                      color:
-                        STEM_METAS[DATASET_TO_STEM[dominantHoverReading.datasetId]].accentHex,
-                    }}
-                  >
-                    ● {dominantHoverReading.labelPt}
-                  </span>
+            {onToggleVoice && (
+              <button
+                type="button"
+                className={`spatial-dock-btn ${voiceEnabled ? 'is-on' : ''}`}
+                onClick={onToggleVoice}
+                aria-pressed={voiceEnabled}
+                title="Narração por voz em português (Tecla V / R)"
+                aria-label="Alternar narração por voz em português"
+                data-testid="a11y-voice-btn"
+              >
+                {voiceEnabled ? (
+                  <Volume2 size={15} aria-hidden="true" />
+                ) : (
+                  <VolumeX size={15} aria-hidden="true" />
                 )}
-              </>
-            ) : (
-              <>
-                <span className="orbital-eye-target">
-                  <Globe size={12} aria-hidden="true" />
-                  <strong>Altitude ~{approxAltKm.toLocaleString('pt-BR')} km</strong>
-                </span>
-                <span className="orbital-eye-hint">
-                  Passe o cursor sobre o globo ou clique em um farol coletivo
-                </span>
-              </>
+                <span>Voz</span>
+              </button>
             )}
-          </div>
-        </div>
 
-        <div className="hud-right-col">
-          {detailCard}
-          {copilotWidget}
+            {onToggleSonify && (
+              <button
+                type="button"
+                className={`spatial-dock-btn ${sonifyEnabled ? 'is-on' : ''}`}
+                onClick={onToggleSonify}
+                aria-pressed={sonifyEnabled}
+                title="Sonificação tátil de dados da NASA (Tecla S)"
+                aria-label="Alternar sonificação de dados"
+                data-testid="a11y-sonify-btn"
+              >
+                <AudioLines size={15} aria-hidden="true" />
+                <span>Som</span>
+              </button>
+            )}
+
+            {onToggleHighContrast && (
+              <button
+                type="button"
+                className={`spatial-dock-btn ${highContrast ? 'is-on' : ''}`}
+                onClick={onToggleHighContrast}
+                aria-pressed={highContrast}
+                title="Modo Alto Contraste WCAG (Tecla C)"
+                aria-label="Alternar modo de alto contraste"
+                data-testid="a11y-contrast-btn"
+              >
+                <Contrast size={15} aria-hidden="true" />
+                <span>Contraste</span>
+              </button>
+            )}
+
+            {onCycleFontScale && (
+              <button
+                type="button"
+                className={`spatial-dock-btn ${fontScale > 1 ? 'is-on' : ''}`}
+                onClick={onCycleFontScale}
+                title="Ampliar escala de texto da interface"
+                aria-label={`Escala de texto atual ${Math.round(fontScale * 100)} por cento`}
+                data-testid="a11y-font-btn"
+              >
+                <strong className="spatial-font-glyph">A+</strong>
+                <span>{Math.round(fontScale * 100)}%</span>
+              </button>
+            )}
+
+            <span className="spatial-dock-divider" aria-hidden="true" />
+
+            {onToggleOrbitAutoRotate && (
+              <button
+                type="button"
+                className={`spatial-dock-btn is-orbit-spin ${orbitAutoRotate ? 'is-on' : ''}`}
+                onClick={onToggleOrbitAutoRotate}
+                aria-pressed={orbitAutoRotate}
+                title={
+                  orbitAutoRotate
+                    ? 'Rotação automática do globo ativa — clique para parar o giro'
+                    : 'Rotação do globo parada — clique para girar suavemente'
+                }
+                aria-label={
+                  orbitAutoRotate ? 'Parar giro orbital do globo' : 'Ativar giro orbital do globo'
+                }
+                data-testid="orbit-spin-toggle-btn"
+              >
+                <Orbit size={15} aria-hidden="true" />
+                <span>{orbitAutoRotate ? 'Girando' : 'Parado'}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="spatial-dock-btn is-zoom"
+              onClick={() => onZoomStep(-0.28)}
+              title="Aproximar zoom no planeta (Tecla +)"
+              aria-label="Aproximar zoom"
+              data-testid="dock-zoom-in-btn"
+            >
+              <ZoomIn size={16} aria-hidden="true" />
+            </button>
+
+            <button
+              type="button"
+              className="spatial-dock-btn is-zoom"
+              onClick={() => onZoomStep(0.28)}
+              title="Afastar zoom do planeta (Tecla -)"
+              aria-label="Afastar zoom"
+              data-testid="dock-zoom-out-btn"
+            >
+              <ZoomOut size={16} aria-hidden="true" />
+            </button>
+          </aside>
         </div>
       </div>
 
-      {/* DOCKED BOTTOM PLAYER CONSOLE */}
-      <div className="bottom-console-dock">{playerBar}</div>
+      {/* ZONA 5 — SENSOR OLHO ORBITAL ACOPLADO ACIMA DO CONSOLE INFERIOR */}
+      <div
+        className="bottom-console-dock"
+        onMouseEnter={() => setEdgePeekZone('bottom')}
+        onMouseLeave={() => setEdgePeekZone((curr) => (curr === 'bottom' ? null : curr))}
+      >
+        <div
+          className="orbital-eye-pill is-coupled-bottom console-frame"
+          data-testid="orbital-eye-hud"
+          aria-live="off"
+        >
+          {hoverInfo ? (
+            <>
+              <span className="orbital-eye-target">
+                <Compass size={12} aria-hidden="true" />
+                <strong>
+                  {hoverInfo.country ? hoverInfo.country.namePt : 'Oceano / Atmosfera'}
+                </strong>
+              </span>
+              {hoverInfo.country && ecosystemSummary && (() => {
+                const hoverRegion = ecosystemSummary.regions.find(
+                  (r) => r.regionKey === buildCountryRegionKey(hoverInfo.country!)
+                );
+                if (!hoverRegion || hoverRegion.unlockedCount === 0) return null;
+                return (
+                  <span
+                    className={`orbital-eye-unlock-tag ${
+                      hoverRegion.isComplete ? 'is-complete' : ''
+                    }`}
+                  >
+                    {hoverRegion.isComplete
+                      ? '5/5 Sinfonia'
+                      : `${hoverRegion.unlockedCount}/5 camadas`}
+                  </span>
+                );
+              })()}
+              <span className="orbital-eye-coords">
+                {formatLatLon(hoverInfo.lat, hoverInfo.lon)}
+              </span>
+              {topHoverReadings.length > 0 ? (
+                topHoverReadings.map((reading) => {
+                  const stem = STEM_METAS[DATASET_TO_STEM[reading.datasetId]];
+                  return (
+                    <span
+                      key={reading.datasetId}
+                      className="orbital-eye-reading"
+                      style={{ color: stem.accentHex }}
+                    >
+                      ● {stem.labelPt}: {reading.labelPt}
+                    </span>
+                  );
+                })
+              ) : (
+                <span className="orbital-eye-hint">
+                  Ative camadas no Estúdio para inspecionar este ponto
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="orbital-eye-target">
+                <Globe size={12} aria-hidden="true" />
+                <strong>Altitude ~{approxAltKm.toLocaleString('pt-BR')} km</strong>
+              </span>
+              <span className="orbital-eye-hint">
+                Aponte qualquer ponto da Terra para ler os fenômenos NASA em tempo real
+              </span>
+            </>
+          )}
+        </div>
+
+        {playerBar}
+      </div>
+
+      {/* ZONA 6 — ÓRBITA COLETIVA + RANKING GLOBAL (CANTO INFERIOR DIREITO) */}
+      {copilotWidget && <div className="bottom-right-collective-slot">{copilotWidget}</div>}
     </div>
   );
 };

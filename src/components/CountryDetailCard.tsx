@@ -1,10 +1,10 @@
 import React from 'react';
-import { ChevronDown, FlaskConical, Radar, Volume2, X } from 'lucide-react';
+import { ChevronDown, FlaskConical, Share2, Sparkles, Volume2, X } from 'lucide-react';
 import { OrbitalReticleIcon } from './CartographicIcons';
 import { CountryEntry } from '../geo/countries';
-import { getCountryLogistics } from '../geo/countryLogistics';
 import { formatLatLon } from '../geo/projection';
 import { SampledReading } from '../accessibility/a11yEngine';
+import { DATASET_TO_STEM, STEM_METAS } from '../community/unlockStore';
 import {
   SoundscapeRadiusTarget,
   SoundscapeVisualTelemetry,
@@ -19,39 +19,39 @@ interface CountryDetailCardProps {
   onClose: () => void;
   onZoomIntoCountry: () => void;
   onSpeakSummary: () => void;
+  onShareMix?: () => void;
 }
 
 export const CountryDetailCard: React.FC<CountryDetailCardProps> = ({
   country,
   radiusTarget,
   liveReadings,
-  telemetry,
   jukeboxSlot,
   onClose,
   onZoomIntoCountry,
   onSpeakSummary,
+  onShareMix,
 }) => {
   if (!country && !radiusTarget) return null;
 
   const isRadius = Boolean(radiusTarget && !country);
-  const logistics = country ? getCountryLogistics(country) : null;
 
   return (
     <aside
-      className="country-detail-card console-frame"
+      className="country-detail-card is-discovery-card console-frame"
       aria-label={
         country
-          ? `Exploração regional de ${country.namePt}`
-          : `Exploração regional do raio ${radiusTarget?.label}`
+          ? `Card de descoberta planetária de ${country.namePt}`
+          : `Card de descoberta regional ${radiusTarget?.label}`
       }
       data-testid="country-detail-card"
     >
-      {/* SEÇÃO A: IDENTIDADE REGIONAL */}
+      {/* BLOCO A: IDENTIDADE ATMOSFÉRICA DO TERRITÓRIO */}
       <header className="detail-card-header">
         <div className="detail-identity-col">
           <div className="detail-context-row">
             <span className="detail-region-pill">
-              {isRadius ? 'Raio Geográfico' : country?.regionPt ?? 'Região Ativa'}
+              {isRadius ? 'Região Orbital' : country?.regionPt ?? 'Território'}
             </span>
             {country && (
               <span className="detail-hemisphere-tag">{country.hemispherePt}</span>
@@ -61,8 +61,8 @@ export const CountryDetailCard: React.FC<CountryDetailCardProps> = ({
             {country ? country.namePt : radiusTarget?.label}
           </h2>
           <p className="detail-subtitle">
-            {country && logistics
-              ? `${logistics.subregionPt.replace(/\s*•\s*/g, ' · ')}`
+            {country
+              ? `Coordenadas orbitais ${formatLatLon(country.lat, country.lon)}`
               : radiusTarget
                 ? `Centro ${formatLatLon(radiusTarget.centerLat, radiusTarget.centerLon)}`
                 : ''}
@@ -73,7 +73,7 @@ export const CountryDetailCard: React.FC<CountryDetailCardProps> = ({
           type="button"
           className="icon-btn"
           onClick={onClose}
-          title="Fechar painel da região (Esc)"
+          title="Fechar card do país e restaurar menus (Esc)"
           aria-label="Fechar painel da região"
           data-testid="close-detail-card-btn"
         >
@@ -86,36 +86,88 @@ export const CountryDetailCard: React.FC<CountryDetailCardProps> = ({
           type="button"
           className="detail-mini-action"
           onClick={onSpeakSummary}
-          aria-label="Ouvir resumo da região em áudio"
+          aria-label="Ouvir leitura em voz alta dos fenômenos deste país"
           data-testid="speak-country-btn"
         >
           <Volume2 size={13} aria-hidden="true" />
-          <span>Ouvir resumo</span>
+          <span>Ouvir leitura</span>
         </button>
+
         {country && (
           <button
             type="button"
             className="detail-mini-action"
             onClick={onZoomIntoCountry}
-            title="Aproximar câmera dentro do país"
+            title="Mergulhar câmera sobre o território"
             data-testid="zoom-country-btn"
           >
             <OrbitalReticleIcon size={13} />
             <span>Aproximar</span>
           </button>
         )}
+
+        {onShareMix && (
+          <button
+            type="button"
+            className="detail-mini-action"
+            onClick={onShareMix}
+            title="Copiar link desta composição visual e país para compartilhar"
+            data-testid="share-country-mix-btn"
+          >
+            <Share2 size={13} aria-hidden="true" />
+            <span>Compartilhar</span>
+          </button>
+        )}
       </div>
 
-      {/* SEÇÕES B, C e D: PROGRESSO DA SINFONIA, FREQUÊNCIAS ADORMECIDAS E PRÓXIMA MISSÃO */}
       <div className="detail-scroll-body">
+        {/* PULSO VISUAL AO VIVO DOS SATÉLITES NASA (FUNCIONA MESMO EM SILÊNCIO) */}
+        {liveReadings.length > 0 && (
+          <section
+            className="discovery-live-phenomena"
+            aria-label="Fenômenos atmosféricos captados agora pelos satélites da NASA"
+          >
+            <div className="discovery-phenomena-head">
+              <Sparkles size={12} aria-hidden="true" />
+              <span>O que a NASA vê aqui agora</span>
+            </div>
+            <div className="discovery-phenomena-chips">
+              {liveReadings.slice(0, 3).map((reading) => {
+                const stem = STEM_METAS[DATASET_TO_STEM[reading.datasetId]];
+                return (
+                  <div
+                    key={reading.datasetId}
+                    className="discovery-phenomenon-pill"
+                    style={{
+                      borderColor: `color-mix(in srgb, ${stem.accentHex} 48%, transparent)`,
+                      background: `color-mix(in srgb, ${stem.accentHex} 11%, rgba(8, 15, 32, 0.72))`,
+                    }}
+                  >
+                    <span
+                      className="discovery-phenomenon-dot"
+                      style={{ background: stem.accentHex }}
+                      aria-hidden="true"
+                    />
+                    <span className="discovery-phenomenon-text">
+                      <strong style={{ color: stem.accentHex }}>{stem.labelPt}:</strong>{' '}
+                      {reading.labelPt}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* BLOCO B: CONSTELAÇÃO COLETIVA 5/5 & CAMADAS */}
         {jukeboxSlot}
 
-        {/* INFORMAÇÕES CIENTÍFICAS EXPANSÍVEIS (METADADOS TÉCNICOS, ISO, LOGÍSTICA & SVS) */}
+        {/* BLOCO C: RAIO-X CIENTÍFICO LEVE SOB DEMANDA */}
         <details className="scientific-details-drawer" data-testid="scientific-info-details">
           <summary className="scientific-details-summary">
             <span className="scientific-summary-left">
               <FlaskConical size={13} aria-hidden="true" />
-              <span>Informações científicas</span>
+              <span>Raio-X Científico NASA (SVS)</span>
             </span>
             <ChevronDown size={14} className="scientific-chevron" aria-hidden="true" />
           </summary>
@@ -128,69 +180,28 @@ export const CountryDetailCard: React.FC<CountryDetailCardProps> = ({
                   <strong className="metric-value">{country.id}</strong>
                 </div>
                 <div className="metric-box">
-                  <span className="metric-label">Coordenadas</span>
-                  <strong className="metric-value">{formatLatLon(country.lat, country.lon)}</strong>
-                </div>
-                <div className="metric-box">
-                  <span className="metric-label">Área estimada</span>
+                  <span className="metric-label">Área aproximada</span>
                   <strong className="metric-value">
                     {country.areaApproxKm2.toLocaleString('pt-BR')} km²
                   </strong>
                 </div>
                 <div className="metric-box">
-                  <span className="metric-label">Fuso estimado</span>
+                  <span className="metric-label">Fuso referencial</span>
                   <strong className="metric-value">{country.timezoneApprox}</strong>
                 </div>
-              </div>
-            )}
-
-            {telemetry && (
-              <div className="detail-metrics-grid">
                 <div className="metric-box">
-                  <span className="metric-label">Sintetizador &amp; Escala</span>
+                  <span className="metric-label">Vizinhos terrestres</span>
                   <strong className="metric-value">
-                    {telemetry.chordName} ({telemetry.modeName})
-                  </strong>
-                </div>
-                <div className="metric-box">
-                  <span className="metric-label">Filtro NO₂ / Brisa</span>
-                  <strong className="metric-value">
-                    {telemetry.bassCutoffHz} Hz · {telemetry.windWetPct}% eco
+                    {country.neighborsPt.length > 0
+                      ? country.neighborsPt.slice(0, 3).join(', ')
+                      : 'Insular / Oceânico'}
                   </strong>
                 </div>
               </div>
-            )}
-
-            {logistics && country && (
-              <>
-                <section className="detail-section">
-                  <h3 className="detail-section-title">Panorama &amp; Logística Regional</h3>
-                  <p className="detail-text">{logistics.summaryPt}</p>
-                  {country.neighborsPt.length > 0 && (
-                    <p className="detail-neighbors">
-                      <strong>Fronteiras terrestres:</strong> {country.neighborsPt.join(', ')}
-                    </p>
-                  )}
-                </section>
-
-                <section className="detail-section">
-                  <h3 className="detail-section-title">Portos e Corredores</h3>
-                  <p className="detail-text">{logistics.maritimePortsPt}</p>
-                  <p className="detail-text">{logistics.airAndLandCorridorsPt}</p>
-                </section>
-
-                <section className="detail-section">
-                  <h3 className="detail-section-title">
-                    <Radar size={12} aria-hidden="true" />
-                    <span>Datasets NASA &amp; Clima</span>
-                  </h3>
-                  <p className="detail-text">{logistics.climateAndRiskImpactPt}</p>
-                </section>
-              </>
             )}
 
             {liveReadings.length > 0 && (
-              <ul className="live-readings-list" aria-label="Leitura ao vivo dos datasets NASA">
+              <ul className="live-readings-list" aria-label="Fontes de satélite SVS da NASA">
                 {liveReadings.map((reading) => (
                   <li key={reading.datasetId} className="live-reading-item">
                     <span className="reading-badge">{reading.svsId}</span>

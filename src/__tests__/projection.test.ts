@@ -60,14 +60,17 @@ describe('geo/projection', () => {
     expect(geo.index?.count).toBe(36 * 18 * 6);
   });
 
-  it('skips antimeridian jumps when building border line segments', () => {
+  it('skips antimeridian jumps and subdivides valid straight arcs on the 3D sphere', () => {
     const ring = [
       [179, 10],
-      [-179, 10], // 358 deg jump -> should be skipped!
-      [-170, 12], // 9 deg jump -> should produce 1 segment (2 vertices)
+      [-179, 10], // 358 deg jump -> skipped!
+      [-170, 12], // ~9.22 deg arc -> subdivided into <= 1.0 deg steps (10 segments = 20 or 9 segments = 18 vertices)
     ];
-    const geo = buildMorphLinesFromRings([ring]);
-    expect(geo.getAttribute('position').count).toBe(2);
+    const geoCoarse = buildMorphLinesFromRings([ring], GLOBE_RADIUS * 1.003, FLAT_WIDTH, FLAT_HEIGHT, 0.004, 20);
+    expect(geoCoarse.getAttribute('position').count).toBe(2);
+
+    const geoSubdivided = buildMorphLinesFromRings([ring]);
+    expect(geoSubdivided.getAttribute('position').count).toBeGreaterThanOrEqual(18);
   });
 
   it('formats lat/lon cleanly with hemisphere letters', () => {

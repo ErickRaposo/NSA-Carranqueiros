@@ -24,13 +24,14 @@ export function splitAntimeridianRing(ring: number[][]): number[][][] {
 }
 
 /**
- * Rasterizes the selected country's rings into an equirectangular CanvasTexture
- * (white = inside selected country, black = rest of world).
+ * Rasterizes the selected country's polygons (respecting enclave holes via evenodd fill rule!)
+ * into an equirectangular CanvasTexture (white = inside selected country, black = rest of world).
  */
 export function createCountryMaskTexture(
   rings: number[][][],
   width = 1024,
-  height = 512
+  height = 512,
+  polygons?: number[][][][]
 ): THREE.CanvasTexture | null {
   if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
@@ -44,24 +45,27 @@ export function createCountryMaskTexture(
 
   ctx.fillStyle = '#ffffff';
   ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 1.2;
 
-  for (const ring of rings) {
-    const subRings = splitAntimeridianRing(ring);
-    for (const sub of subRings) {
-      ctx.beginPath();
-      for (let i = 0; i < sub.length; i++) {
-        const { u, v } = lonLatToUV(sub[i][0], sub[i][1]);
-        const x = u * width;
-        // Canvas Y=0 is top (North Pole, v=1), Y=height is bottom (South Pole, v=0)
-        const y = (1 - v) * height;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+  const polyList: number[][][][] =
+    polygons && polygons.length > 0 ? polygons : rings.map((r) => [r]);
+
+  for (const poly of polyList) {
+    ctx.beginPath();
+    for (const ring of poly) {
+      const subRings = splitAntimeridianRing(ring);
+      for (const sub of subRings) {
+        for (let i = 0; i < sub.length; i++) {
+          const { u, v } = lonLatToUV(sub[i][0], sub[i][1]);
+          const x = u * width;
+          const y = (1 - v) * height;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
       }
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
     }
+    ctx.fill('evenodd');
   }
 
   const texture = new THREE.CanvasTexture(canvas);

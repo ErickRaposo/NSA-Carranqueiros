@@ -169,15 +169,17 @@ export interface GeoRingCoordinates {
 }
 
 /**
- * Builds morphable line segments (3D sphere + 2D flat) from polygon rings,
- * skipping segments that cross the antimeridian (|dlon| > 180°) to avoid horizontal artifacts.
+ * Builds morphable line segments (3D sphere + 2D flat) from polygon/arc rings,
+ * subdividing segments > maxStepDeg so straight political borders follow the 3D sphere
+ * curvature instead of sinking below GLOBE_RADIUS, while skipping antimeridian jumps.
  */
 export function buildMorphLinesFromRings(
   rings: number[][][],
   radius = GLOBE_RADIUS * 1.003,
   flatWidth = FLAT_WIDTH,
   flatHeight = FLAT_HEIGHT,
-  flatZ = 0.004
+  flatZ = 0.004,
+  maxStepDeg = 1.0
 ): THREE.BufferGeometry {
   const pos3: number[] = [];
   const pos2: number[] = [];
@@ -187,16 +189,35 @@ export function buildMorphLinesFromRings(
       const [lon1, lat1] = ring[i];
       const [lon2, lat2] = ring[i + 1];
 
+      const dLon = lon2 - lon1;
+      const dLat = lat2 - lat1;
       // Avoid antimeridian wrap lines in 2D and distorted long jumps
-      if (Math.abs(lon2 - lon1) > 180) continue;
+      if (Math.abs(dLon) > 180) continue;
 
-      const s1 = lonLatToSphere(lon1, lat1, radius);
-      const s2 = lonLatToSphere(lon2, lat2, radius);
-      const f1 = lonLatToFlat(lon1, lat1, flatWidth, flatHeight, flatZ);
-      const f2 = lonLatToFlat(lon2, lat2, flatWidth, flatHeight, flatZ);
+      const maxDelta = Math.max(Math.abs(dLon), Math.abs(dLat));
+      const steps = maxDelta > maxStepDeg ? Math.min(96, Math.ceil(maxDelta / maxStepDeg)) : 1;
 
-      pos3.push(s1.x, s1.y, s1.z, s2.x, s2.y, s2.z);
-      pos2.push(f1.x, f1.y, f1.z, f2.x, f2.y, f2.z);
+      let prevLon = lon1;
+      let prevLat = lat1;
+      let sPrev = lonLatToSphere(prevLon, prevLat, radius);
+      let fPrev = lonLatToFlat(prevLon, prevLat, flatWidth, flatHeight, flatZ);
+
+      for (let step = 1; step <= steps; step++) {
+        const t = step / steps;
+        const curLon = step === steps ? lon2 : lon1 + dLon * t;
+        const curLat = step === steps ? lat2 : lat1 + dLat * t;
+
+        const sCur = lonLatToSphere(curLon, curLat, radius);
+        const fCur = lonLatToFlat(curLon, curLat, flatWidth, flatHeight, flatZ);
+
+        pos3.push(sPrev.x, sPrev.y, sPrev.z, sCur.x, sCur.y, sCur.z);
+        pos2.push(fPrev.x, fPrev.y, fPrev.z, fCur.x, fCur.y, fCur.z);
+
+        prevLon = curLon;
+        prevLat = curLat;
+        sPrev = sCur;
+        fPrev = fCur;
+      }
     }
   }
 

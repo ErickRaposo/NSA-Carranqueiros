@@ -184,6 +184,41 @@ export function createSeededUnlockState(countries: CountryEntry[]): CommunityUnl
     };
   }
 
+  const portugal = byNameEn('Portugal');
+  if (portugal) {
+    // 4/5 region ready for an explorer to awaken the final 5th voice ("fx") in a single click
+    regions[buildCountryRegionKey(portugal)] = {
+      regionKey: buildCountryRegionKey(portugal),
+      regionLabel: portugal.namePt,
+      contributions: {
+        melody: {
+          stemId: 'melody',
+          contributorId: 'seed-ines',
+          contributorName: 'Inês (Lisboa)',
+          unlockedAt: '2026-10-03T12:22:00.000Z',
+        },
+        harmony: {
+          stemId: 'harmony',
+          contributorId: 'seed-diogo',
+          contributorName: 'Diogo (Clima)',
+          unlockedAt: '2026-10-03T12:24:00.000Z',
+        },
+        rhythm: {
+          stemId: 'rhythm',
+          contributorId: 'seed-beatriz',
+          contributorName: 'Beatriz (Oceano)',
+          unlockedAt: '2026-10-03T12:26:00.000Z',
+        },
+        bass: {
+          stemId: 'bass',
+          contributorId: 'seed-tiago',
+          contributorName: 'Tiago (Sintonia)',
+          unlockedAt: '2026-10-03T12:28:00.000Z',
+        },
+      },
+    };
+  }
+
   const france = byNameEn('France');
   if (france) {
     // Full 5/5 illuminated reference region unlocked by the community
@@ -257,6 +292,45 @@ export const localUnlockAdapter: UnlockSyncAdapter = {
     }
   },
 };
+
+/**
+ * Transfers or updates local contributions (e.g. Guest -> Registered account, or when a
+ * participant edits their @username or display name in Meus Dados) so co-authorship stays intact.
+ */
+export function migrateGuestContributionsToUser(
+  fromUserId: string,
+  toUserId: string,
+  toDisplayName: string
+): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  const fromNorm = fromUserId.trim().toLowerCase();
+  const toNorm = toUserId.trim().toLowerCase();
+  if (!fromNorm || !toNorm) return;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as CommunityUnlockState;
+    if (!parsed || typeof parsed.regions !== 'object') return;
+
+    let changed = false;
+    for (const rec of Object.values(parsed.regions)) {
+      for (const stem of STEM_ORDER) {
+        const c = rec.contributions[stem];
+        if (c && c.contributorId.toLowerCase() === fromNorm) {
+          c.contributorId = toNorm;
+          c.contributorName = toDisplayName.trim() || toDisplayName;
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 export interface RegionUnlockSummary {
   unlockedCount: number;

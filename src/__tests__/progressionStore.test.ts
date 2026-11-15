@@ -6,6 +6,7 @@ import {
   getMissionProgressList,
   getSonicPassportSummary,
   localProgressionAdapter,
+  reconcileCoauthoredSymphonies,
   recordCollectiveContribution,
   recordRegionDiscovery,
 } from '../game/progressionStore';
@@ -180,5 +181,27 @@ describe('progressionStore (XP anti-spam, 5 NASA missions & badges)', () => {
       regionLabel: 'Brasil',
       isComplete5of5: true,
     });
+  });
+
+  it('reconciles co-authored 5/5 symphonies so contributors 1–4 also receive 5/5 credit and +50 XP', () => {
+    let state = createInitialProgressionState();
+    // User contributes the 2nd stem (not yet 5/5)
+    const c2 = recordCollectiveContribution(state, {
+      regionKey: 'country:PRT',
+      regionLabel: 'Portugal',
+      stemId: 'harmony',
+      isRegionComplete5of5: false,
+    });
+    expect(c2.xpGained).toBe(40);
+    expect(c2.nextState.unlockedSymphonyKeys).not.toContain('country:PRT');
+
+    // Later, community finishes 5/5 on Portugal -> co-author immediately earns +50 XP & Maestro reward!
+    const reconciled = reconcileCoauthoredSymphonies(c2.nextState, ['country:PRT']);
+    expect(reconciled.xpGained).toBe(50);
+    expect(reconciled.nextState.unlockedSymphonyKeys).toContain('country:PRT');
+
+    // Idempotent on subsequent renders
+    const repeat = reconcileCoauthoredSymphonies(reconciled.nextState, ['country:PRT']);
+    expect(repeat.xpGained).toBe(0);
   });
 });

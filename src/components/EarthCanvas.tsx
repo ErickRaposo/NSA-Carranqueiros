@@ -16,7 +16,7 @@ import { CountryEntry, findCountryAtLonLat } from '../geo/countries';
 import { createCountryMaskTexture } from '../geo/countryMask';
 import { createUnlockIlluminationTexture } from '../geo/unlockMapTexture';
 import { BlendMode, DatasetId, LayerConfig } from '../datasets/nasaDatasets';
-import { CommunityUnlockState, STEM_METAS, STEM_ORDER, StemId } from '../community/unlockStore';
+import { CommunityUnlockState, StemId } from '../community/unlockStore';
 import {
   AudioReactiveFrame,
   EMPTY_AUDIO_FRAME,
@@ -42,10 +42,14 @@ export interface RadiusTargetConfig {
   radiusKm: number;
 }
 
+export type VisualArtStyle = 'bioluminescent' | 'infrared' | 'blueprint' | 'satellite';
+
 interface EarthCanvasProps {
   videoElements: Partial<Record<DatasetId, HTMLVideoElement | null>>;
   layers: LayerConfig[];
   viewMode: '3d' | '2d';
+  visualStyle?: VisualArtStyle;
+  orbitAutoRotate?: boolean;
   showBorders: boolean;
   showGrid: boolean;
   showLabels: boolean;
@@ -53,6 +57,8 @@ interface EarthCanvasProps {
   hdEnhance?: boolean;
   countries: CountryEntry[];
   allRings: number[][][];
+  landBorderRings?: number[][][];
+  coastlineRings?: number[][][];
   selectedCountry: CountryEntry | null;
   selectionMode?: 'country' | 'radius';
   radiusTarget?: RadiusTargetConfig | null;
@@ -74,7 +80,17 @@ interface EarthCanvasProps {
   onCameraDistanceChange: (distance: number) => void;
   onCameraCenterChange?: (lon: number, lat: number) => void;
   onSelectCountry: (country: CountryEntry | null) => void;
+  onRegisterPosterCapture?: (
+    fn: (() => { glCanvas: HTMLCanvasElement; fxCanvas: HTMLCanvasElement | null } | null) | null
+  ) => void;
 }
+
+const VISUAL_STYLE_INDEX: Record<VisualArtStyle, number> = {
+  bioluminescent: 0,
+  infrared: 1,
+  blueprint: 2,
+  satellite: 3,
+};
 
 const BLEND_MODE_INDEX: Record<BlendMode, number> = {
   normal: 0,
@@ -151,6 +167,7 @@ const EARTH_FRAGMENT_SHADER = /* glsl */ `
   uniform float uShowUnlockMap;
   uniform float uHighContrast;
   uniform float uFlatMix;
+  uniform int uVisualStyle;
 
   varying vec2 vUv;
   varying vec3 vNormalDir;
@@ -260,32 +277,57 @@ const EARTH_FRAGMENT_SHADER = /* glsl */ `
       hasAny = true;
     }
 
-    // Nocturnal bioluminescent grading: transform chalk-grey basemap land into deep obsidian-indigo
-    // while keeping 100% of colorful NASA atmospheric plumes and lightning telemetry intact.
+    // Generative Visual Art Styles (0: Bioluminescent, 1: Infrared, 2: Blueprint, 3: Satellite)
     if (hasAny && uHighContrast < 0.5) {
       float maxC = max(color.r, max(color.g, color.b));
       float minC = min(color.r, min(color.g, color.b));
       float chroma = maxC - minC;
       float lum = dot(color, vec3(0.299, 0.587, 0.114));
       float neutralLand = (1.0 - smoothstep(0.035, 0.11, chroma)) * smoothstep(0.32, 0.48, maxC);
-      vec3 nightLand = vec3(0.036, 0.064, 0.132) + vec3(0.032, 0.052, 0.092) * lum;
-      color = mix(color, nightLand, neutralLand * 0.92);
+
+      if (uVisualStyle == 0) {
+        vec3 nightLand = vec3(0.036, 0.064, 0.132) + vec3(0.032, 0.052, 0.092) * lum;
+        color = mix(color, nightLand, neutralLand * 0.92);
+      } else if (uVisualStyle == 1) {
+        // Orbital Infrared: false-color thermal gallery mapping
+        vec3 baseNight = mix(color, vec3(0.05, 0.02, 0.11) + vec3(0.04, 0.01, 0.08) * lum, neutralLand * 0.9);
+        float energy = clamp(lum * 0.65 + chroma * 1.15, 0.0, 1.0);
+        vec3 cold = vec3(0.07, 0.03, 0.20);
+        vec3 mid = vec3(0.78, 0.12, 0.38);
+        vec3 hot = vec3(1.0, 0.78, 0.18);
+        vec3 peak = vec3(1.0, 0.97, 0.88);
+        vec3 thermal = energy < 0.45
+          ? mix(cold, mid, energy / 0.45)
+          : energy < 0.82
+            ? mix(mid, hot, (energy - 0.45) / 0.37)
+            : mix(hot, peak, (energy - 0.82) / 0.18);
+        color = mix(baseNight, thermal, clamp(0.45 + chroma * 0.9, 0.0, 0.94));
+      } else if (uVisualStyle == 2) {
+        // Cartographic Blueprint: abyssal cyan observatory + golden signal peaks
+        vec3 bpLand = vec3(0.02, 0.075, 0.145) + vec3(0.03, 0.11, 0.19) * lum;
+        vec3 baseBp = mix(color, bpLand, neutralLand * 0.94);
+        float sig = clamp(chroma * 1.35 + lum * 0.38, 0.0, 1.0);
+        vec3 cyanInk = mix(vec3(0.02, 0.08, 0.16), vec3(0.16, 0.76, 0.98), smoothstep(0.08, 0.65, sig));
+        vec3 goldPeak = mix(cyanInk, vec3(0.99, 0.82, 0.30), smoothstep(0.58, 0.94, sig));
+        color = mix(baseBp, goldPeak, 0.82);
+      } else {
+        // Daylight Satellite: 100% pure NASA SVS colorimetry matching official colorbars
+        color = clamp(color, 0.0, 1.0);
+      }
     }
 
-    // Highlight selected country via equirectangular mask, darkening the rest of the world
+    // Highlight selected country via equirectangular mask, subtly softening surrounding context
     if (uHasMask > 0.5) {
       float maskVal = texture2D(uMaskTex, vUv).r;
       float factor = mix(uMaskDim, 1.0, maskVal);
       color *= factor;
     }
 
-    // Collective Unlock / Illumination Map layer: lights up 1/5 -> 5/5 unlocked regions
+    // Collective Unlock Frontier Outline: crisp border glow only — never dims or tints NASA interior pixels
     if (uShowUnlockMap > 0.5 && uHasUnlockTex > 0.5) {
       vec4 unlockCol = texture2D(uUnlockTex, vUv);
       if (unlockCol.a > 0.02) {
-        color = mix(color, color * 0.62 + unlockCol.rgb * 1.25, clamp(unlockCol.a * 1.4, 0.0, 0.82));
-      } else if (uHasMask < 0.5) {
-        color *= 0.52;
+        color = mix(color, unlockCol.rgb, clamp(unlockCol.a * 0.92, 0.0, 0.90));
       }
     }
 
@@ -352,6 +394,9 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   videoElements,
   layers,
   viewMode,
+  visualStyle = 'bioluminescent',
+  orbitAutoRotate = true,
+  onRegisterPosterCapture,
   showBorders,
   showGrid,
   showLabels,
@@ -359,6 +404,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   hdEnhance = true,
   countries,
   allRings,
+  landBorderRings,
+  coastlineRings,
   selectedCountry,
   selectionMode = 'country',
   radiusTarget = null,
@@ -392,6 +439,9 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     videoElements,
     layers,
     viewMode,
+    visualStyle,
+    orbitAutoRotate,
+    onRegisterPosterCapture,
     showBorders,
     showGrid,
     showLabels,
@@ -421,6 +471,9 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     videoElements,
     layers,
     viewMode,
+    visualStyle,
+    orbitAutoRotate,
+    onRegisterPosterCapture,
     showBorders,
     showGrid,
     showLabels,
@@ -548,7 +601,12 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       line.visible = true;
     }
 
-    const maskTex = createCountryMaskTexture(selectedCountry.rings, 4096, 2048);
+    const maskTex = createCountryMaskTexture(
+      selectedCountry.rings,
+      2048,
+      1024,
+      selectedCountry.polygons
+    );
     sceneRefs.current.maskTex = maskTex;
     if (earthUniforms && maskTex) {
       earthUniforms.uMaskTex.value = maskTex;
@@ -620,42 +678,51 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     const stars = new THREE.Points(starGeo, starMat);
     scene.add(stars);
 
-    // Atmospheric audio-reactive particle aura (5 NASA stem colors orbiting the globe)
-    const STEM_PALETTE = [
-      new THREE.Color('#FBBF24'),
-      new THREE.Color('#FB923C'),
-      new THREE.Color('#FB7185'),
-      new THREE.Color('#34D399'),
-      new THREE.Color('#38BDF8'),
+    // Layer-reactive atmospheric obsidian particles (1:1 mapped to the 5 NASA map layers)
+    const LAYER_ORBITAL_PALETTE: { id: DatasetId; hex: string }[] = [
+      { id: 'svs5011', hex: '#FBBF24' }, // Melodia — Raios (Dourado)
+      { id: 'svs5153', hex: '#FB923C' }, // Harmonia — CO (Laranja)
+      { id: 'svs5147', hex: '#FB7185' }, // Ritmo — Temperatura (Coral/Rosa)
+      { id: 'svs5154', hex: '#34D399' }, // Baixo — NO2 (Verde Esmeralda)
+      { id: 'svs5148', hex: '#38BDF8' }, // Efeitos — Ventos (Azul Ciano)
     ];
-    const atmoCount = 340;
-    const atmoPos = new Float32Array(atmoCount * 3);
-    const atmoCol = new Float32Array(atmoCount * 3);
-    for (let i = 0; i < atmoCount; i++) {
-      const r = GLOBE_RADIUS * (1.14 + Math.random() * 0.24);
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      atmoPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      atmoPos[i * 3 + 1] = r * Math.cos(phi);
-      atmoPos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
-      const col = STEM_PALETTE[i % STEM_PALETTE.length];
-      atmoCol[i * 3] = col.r;
-      atmoCol[i * 3 + 1] = col.g;
-      atmoCol[i * 3 + 2] = col.b;
-    }
-    const atmoGeo = new THREE.BufferGeometry();
-    atmoGeo.setAttribute('position', new THREE.BufferAttribute(atmoPos, 3));
-    atmoGeo.setAttribute('color', new THREE.BufferAttribute(atmoCol, 3));
-    const atmoMat = new THREE.PointsMaterial({
-      size: 0.026,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.48,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
+    const atmoGroup = new THREE.Group();
+    const atmoLayerClouds = LAYER_ORBITAL_PALETTE.map(({ id, hex }, layerIdx) => {
+      const count = 76;
+      const pos = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        const r = GLOBE_RADIUS * (1.13 + ((i * 17 + layerIdx * 7) % 26) * 0.01);
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+        pos[i * 3 + 1] = r * Math.cos(phi);
+        pos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const mat = new THREE.PointsMaterial({
+        color: new THREE.Color(hex),
+        size: 0.028,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      const points = new THREE.Points(geo, mat);
+      points.visible = false;
+      atmoGroup.add(points);
+      return {
+        id,
+        color: new THREE.Color(hex),
+        geo,
+        mat,
+        points,
+        fade: 0,
+        spinSpeed: 0.0007 + layerIdx * 0.00014,
+        tiltSpeed: (layerIdx % 2 === 0 ? 1 : -1) * 0.00018,
+      };
     });
-    const atmoPoints = new THREE.Points(atmoGeo, atmoMat);
-    scene.add(atmoPoints);
+    scene.add(atmoGroup);
 
     const haloGeo = new THREE.SphereGeometry(GLOBE_RADIUS * 1.07, 48, 32);
     const haloMat = new THREE.MeshBasicMaterial({
@@ -713,6 +780,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       uShowUnlockMap: { value: 1 },
       uHighContrast: { value: 0 },
       uFlatMix: { value: navRef.current.flatMix },
+      uVisualStyle: { value: 0 },
     };
 
     const earthGeo = buildMorphEarthGeometry(192, 96, GLOBE_RADIUS, FLAT_WIDTH, FLAT_HEIGHT);
@@ -739,14 +807,81 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       depthWrite: false,
     });
     const gridLine = new THREE.LineSegments(gridGeo, gridMat);
+    gridLine.renderOrder = 1;
     scene.add(gridLine);
+
+    // Dual-contrast cartographic border system:
+    // 1. Dark casing (#020617) underneath so borders remain sharp over white/mint/yellow NASA maps
+    // 2. Crisp coastlines (#cbd5e1) separating land from ocean
+    // 3. High-contrast international land frontiers (#f8fafc) country by country
+    const effectiveLandRings =
+      landBorderRings && landBorderRings.length > 0 ? landBorderRings : allRings;
+    const effectiveCoastRings = coastlineRings ?? [];
+
+    const bordersGroup = new THREE.Group();
+
+    const bordersCasingUniforms: Record<string, THREE.IUniform> = {
+      uFlatMix: { value: navRef.current.flatMix },
+      uColor: { value: new THREE.Color('#020617') },
+      uOpacity: { value: 0.62 },
+    };
+    const bordersCasingGeo = buildMorphLinesFromRings(
+      effectiveLandRings,
+      GLOBE_RADIUS * 1.0024,
+      FLAT_WIDTH,
+      FLAT_HEIGHT,
+      0.0032
+    );
+    const bordersCasingMat = new THREE.ShaderMaterial({
+      vertexShader: LINE_VERTEX_SHADER,
+      fragmentShader: LINE_FRAGMENT_SHADER,
+      uniforms: bordersCasingUniforms,
+      transparent: true,
+      depthWrite: false,
+    });
+    const bordersCasingLine = new THREE.LineSegments(bordersCasingGeo, bordersCasingMat);
+    bordersCasingLine.renderOrder = 2;
+    bordersGroup.add(bordersCasingLine);
+
+    const coastlinesUniforms: Record<string, THREE.IUniform> = {
+      uFlatMix: { value: navRef.current.flatMix },
+      uColor: { value: new THREE.Color('#cbd5e1') },
+      uOpacity: { value: 0.38 },
+    };
+    const coastlinesGeo =
+      effectiveCoastRings.length > 0
+        ? buildMorphLinesFromRings(
+            effectiveCoastRings,
+            GLOBE_RADIUS * 1.0028,
+            FLAT_WIDTH,
+            FLAT_HEIGHT,
+            0.0037
+          )
+        : new THREE.BufferGeometry();
+    const coastlinesMat = new THREE.ShaderMaterial({
+      vertexShader: LINE_VERTEX_SHADER,
+      fragmentShader: LINE_FRAGMENT_SHADER,
+      uniforms: coastlinesUniforms,
+      transparent: true,
+      depthWrite: false,
+    });
+    const coastlinesLine = new THREE.LineSegments(coastlinesGeo, coastlinesMat);
+    coastlinesLine.renderOrder = 3;
+    coastlinesLine.visible = effectiveCoastRings.length > 0;
+    bordersGroup.add(coastlinesLine);
 
     const bordersUniforms: Record<string, THREE.IUniform> = {
       uFlatMix: { value: navRef.current.flatMix },
-      uColor: { value: new THREE.Color('#e2e8f0') },
-      uOpacity: { value: 0.45 },
+      uColor: { value: new THREE.Color('#f8fafc') },
+      uOpacity: { value: 0.68 },
     };
-    const bordersGeo = buildMorphLinesFromRings(allRings);
+    const bordersGeo = buildMorphLinesFromRings(
+      effectiveLandRings,
+      GLOBE_RADIUS * 1.0033,
+      FLAT_WIDTH,
+      FLAT_HEIGHT,
+      0.0043
+    );
     const bordersMat = new THREE.ShaderMaterial({
       vertexShader: LINE_VERTEX_SHADER,
       fragmentShader: LINE_FRAGMENT_SHADER,
@@ -755,7 +890,9 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       depthWrite: false,
     });
     const bordersLine = new THREE.LineSegments(bordersGeo, bordersMat);
-    scene.add(bordersLine);
+    bordersLine.renderOrder = 4;
+    bordersGroup.add(bordersLine);
+    scene.add(bordersGroup);
 
     const highlightUniforms: Record<string, THREE.IUniform> = {
       uFlatMix: { value: navRef.current.flatMix },
@@ -770,6 +907,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       depthWrite: false,
     });
     const highlightLine = new THREE.LineSegments(new THREE.BufferGeometry(), highlightMat);
+    highlightLine.renderOrder = 5;
     highlightLine.visible = false;
     scene.add(highlightLine);
 
@@ -851,10 +989,12 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
           hoverLiveRef.current = null;
           propsRef.current.onHoverChange(null);
         } else {
+          const proxDeg = Math.max(0.08, Math.min(0.32, (nav.distance - 1.0) * 0.22));
           const country = findCountryAtLonLat(
             coords.lon,
             coords.lat,
-            propsRef.current.countries
+            propsRef.current.countries,
+            proxDeg
           );
           const nextHover: HoverInfo = {
             lon: coords.lon,
@@ -899,10 +1039,12 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
           ) {
             propsRef.current.onPickRadiusCenter(coords.lon, coords.lat);
           } else {
+            const proxDeg = Math.max(0.08, Math.min(0.32, (nav.distance - 1.0) * 0.22));
             const country = findCountryAtLonLat(
               coords.lon,
               coords.lat,
-              propsRef.current.countries
+              propsRef.current.countries,
+              proxDeg
             );
             propsRef.current.onSelectCountry(country);
           }
@@ -956,9 +1098,23 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
     (window as unknown as Record<string, unknown>).__NASA_EARTH_DEBUG__ = {
       getCameraState: () => ({ ...navRef.current }),
+      setCameraTarget: (lon: number, lat: number, distance: number) => {
+        navRef.current.lon = lon;
+        navRef.current.targetLon = lon;
+        navRef.current.lat = lat;
+        navRef.current.targetLat = lat;
+        navRef.current.distance = distance;
+        navRef.current.targetDistance = distance;
+      },
     };
 
+    propsRef.current.onRegisterPosterCapture?.(() => {
+      renderer.render(scene, camera);
+      return { glCanvas: renderer.domElement, fxCanvas: fxOverlayRef.current };
+    });
+
     let rafId = 0;
+    let lastFrameMs = performance.now();
     const tempSphereCam = new THREE.Vector3();
     const tempFlatCam = new THREE.Vector3();
     const tempLookAt = new THREE.Vector3();
@@ -967,27 +1123,34 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
     const animate = () => {
       rafId = requestAnimationFrame(animate);
+      const nowFrameMs = performance.now();
+      const dtSec = Math.min(0.12, Math.max(0.004, (nowFrameMs - lastFrameMs) / 1000));
+      lastFrameMs = nowFrameMs;
+      const smoothPos = 1 - Math.exp(-dtSec * 8.8);
+      const smoothFlat = 1 - Math.exp(-dtSec * 7.8);
+
       const nav = navRef.current;
       const p = propsRef.current;
       const prefersReducedMotion =
         typeof window !== 'undefined' &&
         window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const motionAllowed = !p.motionPaused && !prefersReducedMotion;
+      const orbitSpinAllowed = (p.orbitAutoRotate ?? true) && motionAllowed;
 
-      // Gentle ambient orbital drift when idle in 3D globe mode
+      // Gentle ambient orbital drift when idle in 3D globe mode (decoupled from video cycle)
       if (
-        motionAllowed &&
+        orbitSpinAllowed &&
         !nav.isDragging &&
         !p.selectedCountry &&
         !p.radiusTarget &&
         nav.flatMix < 0.05
       ) {
-        nav.targetLon += 0.032;
+        nav.targetLon += 1.92 * dtSec;
       }
 
-      nav.lon += (nav.targetLon - nav.lon) * 0.14;
-      nav.lat += (nav.targetLat - nav.lat) * 0.14;
-      nav.distance += (nav.targetDistance - nav.distance) * 0.14;
+      nav.lon += (nav.targetLon - nav.lon) * smoothPos;
+      nav.lat += (nav.targetLat - nav.lat) * smoothPos;
+      nav.distance += (nav.targetDistance - nav.distance) * smoothPos;
 
       if (Math.abs(nav.lon) > 360) {
         const normalized = wrapLon(nav.lon);
@@ -997,8 +1160,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       }
 
       const targetFlat = p.viewMode === '2d' ? 1 : 0;
-      nav.flatMix += (targetFlat - nav.flatMix) * 0.12;
-      if (Math.abs(targetFlat - nav.flatMix) < 0.0005) nav.flatMix = targetFlat;
+      nav.flatMix += (targetFlat - nav.flatMix) * (prefersReducedMotion ? 1 : smoothFlat);
+      if (Math.abs(targetFlat - nav.flatMix) < 0.002) nav.flatMix = targetFlat;
 
       if (Math.abs(nav.distance - nav.lastReportedDist) > 0.01) {
         nav.lastReportedDist = nav.distance;
@@ -1015,11 +1178,11 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
         p.onCameraCenterChange?.(normalizedLon, nav.lat);
       }
 
-      // Smoothly shift viewport frustum so selected country or radius lands on the left side when right card opens
+      // Smoothly shift viewport frustum so selected country lands cleanly on the RIGHT side beside the left-anchored CountryDetailCard
       const w = container.clientWidth;
       const h = Math.max(1, container.clientHeight);
-      const desiredOffsetRatio = (p.selectedCountry || p.radiusTarget) && w >= 960 ? 0.115 : 0.0;
-      nav.viewOffsetX += (desiredOffsetRatio - nav.viewOffsetX) * 0.12;
+      const desiredOffsetRatio = (p.selectedCountry || p.radiusTarget) && w >= 960 ? -0.14 : 0.0;
+      nav.viewOffsetX += (desiredOffsetRatio - nav.viewOffsetX) * smoothFlat;
       if (Math.abs(nav.viewOffsetX) > 0.001) {
         camera.setViewOffset(w, h, Math.round(w * nav.viewOffsetX), 0, w, h);
       } else {
@@ -1028,35 +1191,54 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
       tempSphereCam.copy(lonLatToSphere(normalizedLon, nav.lat, nav.distance));
       const flatFocus = lonLatToFlat(normalizedLon, nav.lat, FLAT_WIDTH, FLAT_HEIGHT, 0);
+      const clampedFlatX = THREE.MathUtils.clamp(
+        flatFocus.x,
+        -FLAT_WIDTH * 0.44,
+        FLAT_WIDTH * 0.44
+      );
       const flatCamZ = (nav.distance - 1.0) * 1.9 + 0.16;
-      tempFlatCam.set(flatFocus.x, flatFocus.y, flatCamZ);
+      tempFlatCam.set(clampedFlatX, flatFocus.y, flatCamZ);
 
       camera.position.lerpVectors(tempSphereCam, tempFlatCam, nav.flatMix);
-      tempLookAt.set(flatFocus.x * nav.flatMix, flatFocus.y * nav.flatMix, 0);
+      tempLookAt.set(clampedFlatX * nav.flatMix, flatFocus.y * nav.flatMix, 0);
       camera.up.set(0, 1, 0);
       camera.lookAt(tempLookAt);
 
       earthUniforms.uFlatMix.value = nav.flatMix;
+      bordersCasingUniforms.uFlatMix.value = nav.flatMix;
+      coastlinesUniforms.uFlatMix.value = nav.flatMix;
       bordersUniforms.uFlatMix.value = nav.flatMix;
       highlightUniforms.uFlatMix.value = nav.flatMix;
       gridUniforms.uFlatMix.value = nav.flatMix;
 
-      // High-contrast / mask adjustments
+      // High-contrast / mask / visual style adjustments
       earthUniforms.uHighContrast.value = p.highContrast ? 1.0 : 0.0;
-      earthUniforms.uMaskDim.value = p.highContrast ? 0.14 : 0.24;
+      earthUniforms.uVisualStyle.value = VISUAL_STYLE_INDEX[p.visualStyle ?? 'satellite'];
+      earthUniforms.uMaskDim.value = p.highContrast ? 0.22 : 0.42;
       earthUniforms.uShowUnlockMap.value = p.showUnlockMap ? 1.0 : 0.0;
-      (bordersUniforms.uColor.value as THREE.Color).set(p.highContrast ? '#ffffff' : '#7dd3fc');
+      (bordersCasingUniforms.uColor.value as THREE.Color).set('#020617');
+      bordersCasingUniforms.uOpacity.value = p.highContrast ? 0.88 : 0.62;
+      (coastlinesUniforms.uColor.value as THREE.Color).set(
+        p.highContrast ? '#e2e8f0' : '#cbd5e1'
+      );
+      coastlinesUniforms.uOpacity.value = p.highContrast ? 0.72 : 0.38;
+      (bordersUniforms.uColor.value as THREE.Color).set(p.highContrast ? '#ffffff' : '#f8fafc');
       bordersUniforms.uOpacity.value = p.highContrast
-        ? 0.8
-        : p.selectedCountry
-          ? 0.24
-          : 0.36;
+        ? 0.96
+        : nav.flatMix > 0.45
+          ? 0.76
+          : p.selectedCountry
+            ? 0.58
+            : 0.66;
       (highlightUniforms.uColor.value as THREE.Color).set(
         p.highContrast ? '#facc15' : '#38bdf8'
       );
 
-      // Bind up to 5 stacked layer uniforms bottom-to-top
+      // Bind up to 5 stacked layer uniforms bottom-to-top:
+      // Rule: 1 active layer = 100% pure NASA opacity (1.0, normal); 2+ layers = bottom solid + upper blended
       earthUniforms.uHdEnhance.value = p.hdEnhance ? 1.0 : 0.0;
+      const enabledCount = p.layers.reduce((acc, l) => acc + (l.enabled ? 1 : 0), 0);
+      let seenEnabledBase = false;
       for (let i = 0; i < 5; i++) {
         const cfg = p.layers[i];
         if (!cfg) {
@@ -1066,9 +1248,17 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
         }
         const vid = p.videoElements[cfg.id] ?? null;
         const ready = Boolean(vid && vid.readyState >= 2);
+        const isFirstEnabled = cfg.enabled && !seenEnabledBase;
+        if (cfg.enabled) {
+          seenEnabledBase = true;
+        }
+        const effectiveOpacity = enabledCount === 1 || isFirstEnabled ? 1.0 : cfg.opacity;
+        const effectiveMode =
+          enabledCount === 1 || isFirstEnabled ? 0 : BLEND_MODE_INDEX[cfg.blendMode];
+
         earthUniforms[`uEnabled${i}`].value = cfg.enabled ? 1.0 : 0.0;
-        earthUniforms[`uOpacity${i}`].value = cfg.opacity;
-        earthUniforms[`uMode${i}`].value = BLEND_MODE_INDEX[cfg.blendMode];
+        earthUniforms[`uOpacity${i}`].value = effectiveOpacity;
+        earthUniforms[`uMode${i}`].value = effectiveMode;
         earthUniforms[`uHasTex${i}`].value = ready ? 1.0 : 0.0;
         if (vid && vid.videoWidth > 0 && vid.videoHeight > 0) {
           (earthUniforms[`uTexSize${i}`].value as THREE.Vector2).set(
@@ -1081,46 +1271,93 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
           : fallbackTex;
       }
 
-      bordersLine.visible = p.showBorders;
+      bordersGroup.visible = p.showBorders;
       gridLine.visible = p.showGrid;
       stars.visible = nav.flatMix < 0.85;
 
-      // Audio-reactive atmospheric particles & halo aura driven by real AnalyserNode bands
+      // Layer-reactive orbiting colored obsidian particles & halo aura
       const audioFrame = p.jukeboxPlaying && p.getAudioReactiveBands
         ? p.getAudioReactiveBands()
         : EMPTY_AUDIO_FRAME;
       const visualActive = nav.flatMix < 0.35 && !p.highContrast;
-      atmoPoints.visible = visualActive;
+      atmoGroup.visible = visualActive;
       haloMesh.visible = visualActive;
       if (visualActive) {
         const celebrating = Boolean(p.isCelebrating5of5);
-        if (motionAllowed) {
-          atmoPoints.rotation.y += (celebrating ? 0.0014 : 0.0008) + audioFrame.highFreq * 0.0028;
-          atmoPoints.rotation.x += 0.0002;
+        const enabledLayerSet = new Set(p.layers.filter((l) => l.enabled).map((l) => l.id));
+        const baseParticleOpacity = (celebrating ? 0.68 : 0.56) + audioFrame.rms * 0.34;
+        const baseParticleSize = (celebrating ? 0.034 : 0.027) + audioFrame.highFreq * 0.024;
+        let firstActiveColor: THREE.Color | null = null;
+
+        for (const cloud of atmoLayerClouds) {
+          const isLayerOn = enabledLayerSet.has(cloud.id);
+          if (isLayerOn && !firstActiveColor) {
+            firstActiveColor = cloud.color;
+          }
+          const targetFade = isLayerOn ? 1 : 0;
+          cloud.fade += (targetFade - cloud.fade) * smoothFlat;
+          if (Math.abs(targetFade - cloud.fade) < 0.005) {
+            cloud.fade = targetFade;
+          }
+          cloud.points.visible = cloud.fade > 0.01;
+          if (cloud.points.visible) {
+            if (motionAllowed) {
+              cloud.points.rotation.y +=
+                (celebrating ? cloud.spinSpeed * 1.65 : cloud.spinSpeed) +
+                audioFrame.highFreq * 0.0026;
+              cloud.points.rotation.x += cloud.tiltSpeed;
+            }
+            cloud.mat.size = baseParticleSize;
+            cloud.mat.opacity = Math.min(0.95, baseParticleOpacity * cloud.fade);
+          }
         }
-        atmoMat.size = (celebrating ? 0.032 : 0.024) + audioFrame.highFreq * 0.024;
-        atmoMat.opacity = (celebrating ? 0.54 : 0.36) + audioFrame.rms * 0.42;
-        const targetColorHex = celebrating ? 0xfbbf24 : 0x38bdf8;
-        haloMat.color.lerp(new THREE.Color(targetColorHex), 0.08);
+
+        const haloTargetColor = celebrating
+          ? new THREE.Color(0xfbbf24)
+          : enabledLayerSet.size === 1 && firstActiveColor
+            ? firstActiveColor
+            : new THREE.Color(0x38bdf8);
+        haloMat.color.lerp(haloTargetColor, 0.08);
         const haloScale = (celebrating ? 1.02 : 1) + audioFrame.subBass * 0.055;
         haloMesh.scale.setScalar(haloScale);
-        haloMat.opacity = (celebrating ? 0.11 : 0.05) + audioFrame.lowMid * 0.11;
+        haloMat.opacity =
+          enabledLayerSet.size === 0
+            ? 0.02
+            : (celebrating ? 0.11 : 0.055) + audioFrame.lowMid * 0.11;
       }
 
-      // Update projected HTML country labels with collision avoidance & smaller default sizing
+      // Update projected HTML country labels with progressive area-based LOD & character-width collision avoidance
       if (labelsLayer) {
         labelsLayer.style.display = p.showLabels ? 'block' : 'none';
         if (p.showLabels) {
           tempCamDir.copy(camera.position).normalize();
           const placedBoxes: { x1: number; y1: number; x2: number; y2: number }[] = [];
-          const padX = p.highContrast ? 38 : 26;
-          const padY = p.highContrast ? 14 : 9;
+          const charW = p.highContrast ? 7.4 : 5.3;
+          const halfH = p.highContrast ? 9.5 : 6.2;
+          const hoveredId = hoverLiveRef.current?.country?.id ?? null;
+          const effectiveDist = nav.distance - nav.flatMix * 0.45;
+          const minKm2 =
+            effectiveDist > 2.45
+              ? 150_000
+              : effectiveDist > 2.0
+                ? 48_000
+                : effectiveDist > 1.6
+                  ? 8_500
+                  : effectiveDist > 1.28
+                    ? 600
+                    : 0;
+          const labelSphereR = GLOBE_RADIUS * 1.01;
 
-          // Sort so selected country is placed first, then larger countries
+          // Sort: selected country first, hovered country second, inhabited nations before minor coral/polar islands, then descending real area
           const orderedLabels = [...labelPool].sort((a, b) => {
             if (p.selectedCountry?.id === a.id) return -1;
             if (p.selectedCountry?.id === b.id) return 1;
-            return b.lonSpan * b.latSpan - a.lonSpan * a.latSpan;
+            if (hoveredId === a.id) return -1;
+            if (hoveredId === b.id) return 1;
+            if (Boolean(a.isMinorUninhabited) !== Boolean(b.isMinorUninhabited)) {
+              return a.isMinorUninhabited ? 1 : -1;
+            }
+            return b.areaApproxKm2 - a.areaApproxKm2;
           });
 
           for (const country of orderedLabels) {
@@ -1128,22 +1365,27 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
             if (!el) continue;
 
             const isSelected = p.selectedCountry?.id === country.id;
-            const areaApprox = country.lonSpan * country.latSpan;
-            const minAreaForZoom =
-              nav.distance > 2.3 ? 42 : nav.distance > 1.75 ? 14 : nav.distance > 1.35 ? 3 : 0;
+            const isHovered = hoveredId === country.id;
 
-            if (!isSelected && areaApprox < minAreaForZoom) {
+            if (country.isMinorUninhabited && !isSelected && !isHovered && nav.distance > 1.18) {
               el.style.opacity = '0';
               continue;
             }
 
-            const sPos = lonLatToSphere(country.lon, country.lat, GLOBE_RADIUS * 1.01);
+            if (!isSelected && !isHovered && country.areaApproxKm2 < minKm2) {
+              el.style.opacity = '0';
+              continue;
+            }
+
+            const sPos = lonLatToSphere(country.lon, country.lat, labelSphereR);
             const fPos = lonLatToFlat(country.lon, country.lat, FLAT_WIDTH, FLAT_HEIGHT, 0.01);
             tempLabelPos.lerpVectors(sPos, fPos, nav.flatMix);
 
             if (nav.flatMix < 0.5) {
-              const dot = sPos.clone().normalize().dot(tempCamDir);
-              if (dot < 0.36) {
+              const dot =
+                (sPos.x * tempCamDir.x + sPos.y * tempCamDir.y + sPos.z * tempCamDir.z) /
+                labelSphereR;
+              if (dot < 0.34) {
                 el.style.opacity = '0';
                 continue;
               }
@@ -1163,29 +1405,45 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
               continue;
             }
 
-            // Simple screen-space collision avoidance so labels never overlap
-            const box = {
-              x1: sx - padX,
-              y1: sy - padY,
-              x2: sx + padX,
-              y2: sy + padY,
-            };
-            const collides =
-              !isSelected &&
-              placedBoxes.some(
-                (b) => !(box.x2 < b.x1 || box.x1 > b.x2 || box.y2 < b.y1 || box.y1 > b.y2)
-              );
+            const halfW = Math.max(13, country.namePt.length * charW * 0.48 + 4);
+            const pxPerDegApprox = h / (Math.max(0.22, nav.distance - 0.95) * 48);
+            const polyHeightPx = country.latSpan * pxPerDegApprox;
+            const candidateDys =
+              !isSelected && polyHeightPx >= 22 ? [0, 10, -10] : [0];
 
-            if (collides) {
+            let placedSy: number | null = null;
+            let chosenBox: { x1: number; y1: number; x2: number; y2: number } | null = null;
+            for (const dy of candidateDys) {
+              const testSy = sy + dy;
+              const box = {
+                x1: sx - halfW,
+                y1: testSy - halfH,
+                x2: sx + halfW,
+                y2: testSy + halfH,
+              };
+              const hit =
+                !isSelected &&
+                placedBoxes.some(
+                  (b) => !(box.x2 < b.x1 || box.x1 > b.x2 || box.y2 < b.y1 || box.y1 > b.y2)
+                );
+              if (!hit) {
+                placedSy = testSy;
+                chosenBox = box;
+                break;
+              }
+            }
+
+            if (placedSy === null || !chosenBox) {
               el.style.opacity = '0';
               continue;
             }
-            placedBoxes.push(box);
+            placedBoxes.push(chosenBox);
 
-            el.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translate(-50%, -50%)`;
-            const baseOpacity = p.selectedCountry ? 0.38 : nav.distance < 2.2 ? 0.84 : 0.62;
-            el.style.opacity = isSelected ? '1' : String(baseOpacity);
+            el.style.transform = `translate3d(${sx.toFixed(1)}px, ${placedSy.toFixed(1)}px, 0) translate(-50%, -50%)`;
+            const baseOpacity = p.selectedCountry ? 0.66 : nav.distance < 2.2 ? 0.9 : 0.74;
+            el.style.opacity = isSelected || isHovered ? '1' : String(baseOpacity);
             el.classList.toggle('is-selected', isSelected);
+            el.classList.toggle('is-hovered', isHovered && !isSelected);
           }
         }
       }
@@ -1238,209 +1496,6 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
           };
 
           const nowMs = performance.now();
-
-          // 0. Collective 3D Planetary Beacons (visible in global view when showUnlockMap is active)
-          if (p.showUnlockMap && p.unlockState && !p.selectedCountry && !p.radiusTarget) {
-            const regionRecords = Object.values(p.unlockState.regions);
-            fxCtx.save();
-            for (const rec of regionRecords) {
-              if (!rec.regionKey.startsWith('country:')) continue;
-              const countryId = rec.regionKey.slice(8);
-              const c = p.countries.find((item) => item.id === countryId);
-              if (!c) continue;
-              const unlockedCount = STEM_ORDER.filter((s) => Boolean(rec.contributions[s])).length;
-              if (unlockedCount === 0) continue;
-
-              const pt = projectGeo(c.lon, c.lat, 0.008);
-              if (!pt) continue;
-
-              const isFull = unlockedCount >= 5;
-              const breath = p.motionPaused ? 0 : 0.5 + 0.5 * Math.sin(nowMs * 0.0028 + c.lon * 0.1);
-              const baseR = isFull ? 13 : 10.5;
-
-              // Soft outer halo
-              fxCtx.beginPath();
-              fxCtx.arc(pt.x, pt.y, baseR + 4 + breath * 3.5, 0, Math.PI * 2);
-              fxCtx.strokeStyle = p.highContrast
-                ? '#facc15'
-                : isFull
-                  ? `rgba(251, 191, 36, ${(0.22 + breath * 0.25).toFixed(2)})`
-                  : `rgba(56, 189, 248, ${(0.16 + breath * 0.18).toFixed(2)})`;
-              fxCtx.lineWidth = 1.2;
-              fxCtx.stroke();
-
-              // 5-segment orbital ring representing the 5 voices
-              const segSpan = (Math.PI * 2) / 5;
-              const gap = 0.14;
-              for (let idx = 0; idx < 5; idx++) {
-                const stemId = STEM_ORDER[idx];
-                const isLit = Boolean(rec.contributions[stemId]);
-                const startA = -Math.PI * 0.5 + idx * segSpan + gap * 0.5;
-                const endA = startA + segSpan - gap;
-                fxCtx.beginPath();
-                fxCtx.arc(pt.x, pt.y, baseR, startA, endA);
-                fxCtx.strokeStyle = p.highContrast
-                  ? isLit
-                    ? '#facc15'
-                    : 'rgba(255,255,255,0.28)'
-                  : isLit
-                    ? STEM_METAS[stemId].accentHex
-                    : 'rgba(148, 163, 184, 0.28)';
-                fxCtx.lineWidth = isLit ? 2.4 : 1.4;
-                fxCtx.stroke();
-              }
-
-              // Center luminous core
-              fxCtx.beginPath();
-              fxCtx.arc(pt.x, pt.y, isFull ? 3.4 : 2.6, 0, Math.PI * 2);
-              fxCtx.fillStyle = p.highContrast
-                ? '#ffffff'
-                : isFull
-                  ? '#fbbf24'
-                  : '#38bdf8';
-              fxCtx.fill();
-
-              // Compact beacon crown badge centered above the 5-segment ring (zero collision with map labels)
-              const badgeText = p.showLabels
-                ? isFull
-                  ? '5/5 ★ Sinfonia'
-                  : `${unlockedCount}/5 vozes`
-                : isFull
-                  ? `${c.namePt} · 5/5 ★`
-                  : `${c.namePt} · ${unlockedCount}/5`;
-              fxCtx.font = '700 10px "Space Grotesk", sans-serif';
-              const badgeTw = fxCtx.measureText(badgeText).width;
-              drawPill(
-                pt.x - (badgeTw + 10) * 0.5 - 9,
-                pt.y - baseR - 13,
-                badgeText,
-                p.highContrast ? '#facc15' : isFull ? '#fbbf24' : '#7dd3fc',
-                p.highContrast ? '#000000' : 'rgba(6, 12, 24, 0.9)'
-              );
-            }
-            fxCtx.restore();
-          }
-
-          // 0a-2. Human Connections Map ("Mapa de Conexões Humanas"):
-          // Ephemeral contributor constellation & geodesic arcs when hovering/focusing an illuminated region
-          const constellationCountry = hoverLiveRef.current?.country ?? p.selectedCountry;
-          if (p.showUnlockMap && p.unlockState && constellationCountry) {
-            const focusKey = `country:${constellationCountry.id}`;
-            const focusRec = p.unlockState.regions[focusKey];
-            const contribEntries = focusRec
-              ? STEM_ORDER.flatMap((s) => {
-                  const item = focusRec.contributions[s];
-                  return item ? [{ stemId: s, item }] : [];
-                })
-              : [];
-
-            if (contribEntries.length > 0) {
-              const originPt = projectGeo(constellationCountry.lon, constellationCountry.lat, 0.01);
-              if (originPt) {
-                fxCtx.save();
-
-                // Geodesic screen-space arcs connecting this illuminated region to other lit regions
-                for (const otherRec of Object.values(p.unlockState.regions)) {
-                  if (otherRec.regionKey === focusKey || !otherRec.regionKey.startsWith('country:')) {
-                    continue;
-                  }
-                  const hasAny = STEM_ORDER.some((s) => Boolean(otherRec.contributions[s]));
-                  if (!hasAny) continue;
-                  const otherCountry = p.countries.find(
-                    (cItem) => cItem.id === otherRec.regionKey.slice(8)
-                  );
-                  if (!otherCountry) continue;
-                  const targetPt = projectGeo(otherCountry.lon, otherCountry.lat, 0.01);
-                  if (!targetPt) continue;
-
-                  const midX = (originPt.x + targetPt.x) * 0.5;
-                  const distPx = Math.hypot(targetPt.x - originPt.x, targetPt.y - originPt.y);
-                  const midY = (originPt.y + targetPt.y) * 0.5 - Math.min(72, distPx * 0.24);
-
-                  fxCtx.beginPath();
-                  fxCtx.moveTo(originPt.x, originPt.y);
-                  fxCtx.quadraticCurveTo(midX, midY, targetPt.x, targetPt.y);
-                  fxCtx.strokeStyle = p.highContrast
-                    ? 'rgba(250, 204, 21, 0.7)'
-                    : 'rgba(56, 189, 248, 0.34)';
-                  fxCtx.lineWidth = 1.25;
-                  fxCtx.setLineDash([4, 4]);
-                  fxCtx.stroke();
-                  fxCtx.setLineDash([]);
-                }
-
-                // Ephemeral Contributor Constellation orbiting the region
-                const orbitRadius = 38;
-                const slowDrift = p.motionPaused ? 0 : nowMs * 0.00035;
-                const nodes: {
-                  x: number;
-                  y: number;
-                  initial: string;
-                  shortName: string;
-                  accentHex: string;
-                }[] = [];
-
-                contribEntries.forEach(({ stemId, item }, idx) => {
-                  const angle =
-                    -Math.PI * 0.5 +
-                    (idx / Math.max(1, contribEntries.length)) * Math.PI * 2 +
-                    slowDrift;
-                  const nx = originPt.x + Math.cos(angle) * orbitRadius;
-                  const ny = originPt.y + Math.sin(angle) * (orbitRadius * 0.84);
-                  const rawName = item.contributorName.trim();
-                  const firstWord = rawName.split(/[\s(]+/)[0] || rawName;
-                  nodes.push({
-                    x: nx,
-                    y: ny,
-                    initial: (rawName[0] ?? 'E').toUpperCase(),
-                    shortName: firstWord.slice(0, 10),
-                    accentHex: STEM_METAS[stemId].accentHex,
-                  });
-                });
-
-                // Constellation filaments (center -> nodes & ring polygon)
-                fxCtx.strokeStyle = p.highContrast
-                  ? 'rgba(255, 255, 255, 0.65)'
-                  : 'rgba(186, 230, 253, 0.35)';
-                fxCtx.lineWidth = 1;
-                for (let i = 0; i < nodes.length; i++) {
-                  const curr = nodes[i];
-                  const next = nodes[(i + 1) % nodes.length];
-                  fxCtx.beginPath();
-                  fxCtx.moveTo(originPt.x, originPt.y);
-                  fxCtx.lineTo(curr.x, curr.y);
-                  if (nodes.length > 1) {
-                    fxCtx.lineTo(next.x, next.y);
-                  }
-                  fxCtx.stroke();
-                }
-
-                // Translucent contributor avatar nodes
-                for (const node of nodes) {
-                  fxCtx.beginPath();
-                  fxCtx.arc(node.x, node.y, 9.5, 0, Math.PI * 2);
-                  fxCtx.fillStyle = p.highContrast ? '#000000' : 'rgba(6, 13, 28, 0.88)';
-                  fxCtx.fill();
-                  fxCtx.lineWidth = 1.6;
-                  fxCtx.strokeStyle = p.highContrast ? '#facc15' : node.accentHex;
-                  fxCtx.stroke();
-
-                  fxCtx.fillStyle = p.highContrast ? '#ffffff' : node.accentHex;
-                  fxCtx.font = '700 9.5px "Space Grotesk", sans-serif';
-                  fxCtx.textAlign = 'center';
-                  fxCtx.textBaseline = 'middle';
-                  fxCtx.fillText(node.initial, node.x, node.y + 0.5);
-
-                  // Subtle contributor tag
-                  fxCtx.font = '600 9px "Space Grotesk", sans-serif';
-                  fxCtx.fillStyle = p.highContrast ? '#facc15' : 'rgba(226, 232, 240, 0.9)';
-                  fxCtx.fillText(node.shortName, node.x, node.y + 16);
-                }
-                fxCtx.textAlign = 'start';
-                fxCtx.restore();
-              }
-            }
-          }
 
           // 0a-3. Exclusive 5/5 Maestro Visual Trail Reward on Globe Hover
           if (
@@ -1694,6 +1749,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
 
     return () => {
       cancelAnimationFrame(rafId);
+      propsRef.current.onRegisterPosterCapture?.(null);
       dom.removeEventListener('pointerdown', onPointerDown);
       dom.removeEventListener('pointermove', onPointerMove);
       dom.removeEventListener('pointerup', onPointerUp);
@@ -1706,14 +1762,20 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       earthMat.dispose();
       gridGeo.dispose();
       gridMat.dispose();
+      bordersCasingGeo.dispose();
+      bordersCasingMat.dispose();
+      coastlinesGeo.dispose();
+      coastlinesMat.dispose();
       bordersGeo.dispose();
       bordersMat.dispose();
       highlightLine.geometry.dispose();
       highlightMat.dispose();
       starGeo.dispose();
       starMat.dispose();
-      atmoGeo.dispose();
-      atmoMat.dispose();
+      for (const cloud of atmoLayerClouds) {
+        cloud.geo.dispose();
+        cloud.mat.dispose();
+      }
       haloGeo.dispose();
       haloMat.dispose();
       fallbackTex.dispose();
@@ -1728,7 +1790,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
         container.removeChild(dom);
       }
     };
-  }, [allRings, countries]);
+  }, [allRings, coastlineRings, countries, landBorderRings]);
 
   return (
     <div
