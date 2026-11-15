@@ -23,6 +23,7 @@ import {
   SurfaceId,
 } from '../experience/types';
 import { encodeQrMatrix } from '../lan/qrCodeSvg';
+import { buildViewUrl } from '../lan/roomCode';
 import {
   QuadCorners,
 } from '../projection/homography';
@@ -35,7 +36,11 @@ import { NetworkModule } from './admin/NetworkModule';
 import { OverviewModule } from './admin/OverviewModule';
 import { ProjectionModule, RemoteWarpDragTarget } from './admin/ProjectionModule';
 
-export const SetupView: React.FC = () => {
+interface SetupViewProps {
+  onOpenSetupWizard?: () => void;
+}
+
+export const SetupView: React.FC<SetupViewProps> = ({ onOpenSetupWizard }) => {
   const {
     country,
     allCountries,
@@ -65,6 +70,9 @@ export const SetupView: React.FC = () => {
     audioSourceKind,
     lanConnected,
     lanClients,
+    roomCode,
+    syncNetworkMode,
+    regenerateRoomCode,
     playback,
     liveEvents,
     audioLevels,
@@ -80,16 +88,19 @@ export const SetupView: React.FC = () => {
   const {
     speakerCalibration,
     calibTestMode,
+    calibBeatSeq,
     outputDevices,
     outputSupportStatus,
     isSetSinkIdSupported,
+    speakerSinkStatuses,
     unlockOutputDevices,
     updateSpeakerConfig,
+    retrySpeakerSink,
+    updateAvOffsetMs,
     setReferenceSpeaker,
     resetSpeakerCalibration,
-    startPinkNoiseSingle,
-    startPinkNoiseAB,
-    startDelayClickTest,
+    togglePinkNoiseSpeaker,
+    toggleDelayClickSpeaker,
     startPinkNoiseAll,
     startDelayClickAll,
     stopCalibrationSignal,
@@ -102,6 +113,7 @@ export const SetupView: React.FC = () => {
     toggleOutputSurface,
     updateOutputConfig,
     updateSurfaceQuad,
+    translateOutputMesh,
     updateEdgeMask,
     resetSingleOutputQuads,
     resetAllProjectionQuads,
@@ -122,7 +134,6 @@ export const SetupView: React.FC = () => {
     renderedCountryCount: 3,
     renderedCountryIds: [...PILOT_COUNTRY_IDS],
   });
-  const [selectedHostIp, setSelectedHostIp] = useState<string>('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const remoteWarpRef = useRef<HTMLDivElement | null>(null);
@@ -218,15 +229,15 @@ export const SetupView: React.FC = () => {
     ) {
       return;
     }
+    const lanInfoUrl = roomCode
+      ? `/api/lan-info?room=${encodeURIComponent(roomCode)}`
+      : '/api/lan-info';
     window
-      .fetch('/api/lan-info')
+      .fetch(lanInfoUrl)
       .then((r) => (r.ok ? (r.json() as Promise<LanServerInfo>) : null))
       .then((info) => {
         if (!info) return;
         setLanInfo(info);
-        if (!selectedHostIp && info.lanIps.length > 0) {
-          setSelectedHostIp(info.lanIps[0]);
-        }
       })
       .catch(() => {
         // Fallback silencioso em ambiente estático
@@ -274,11 +285,19 @@ export const SetupView: React.FC = () => {
 
       const rawDx = nx - draggingRemoteWarp.startMouse.x;
       const rawDy = ny - draggingRemoteWarp.startMouse.y;
+
+      if (draggingRemoteWarp.kind === 'mesh') {
+        translateOutputMesh(
+          draggingRemoteWarp.outId,
+          draggingRemoteWarp.startQuads,
+          rawDx,
+          rawDy
+        );
+        return;
+      }
+
       const base = draggingRemoteWarp.startQuad;
-      const activeIndices: ReadonlyArray<0 | 1 | 2 | 3> =
-        draggingRemoteWarp.kind === 'mesh'
-          ? [0, 1, 2, 3]
-          : edgePairs[draggingRemoteWarp.edgeIdx];
+      const activeIndices: ReadonlyArray<0 | 1 | 2 | 3> = edgePairs[draggingRemoteWarp.edgeIdx];
 
       const minDx = Math.max(...activeIndices.map((i) => -base[i].x));
       const maxDx = Math.min(...activeIndices.map((i) => 1 - base[i].x));
@@ -304,20 +323,19 @@ export const SetupView: React.FC = () => {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
     };
-  }, [draggingRemoteWarp, projectionState.quads, updateSurfaceQuad]);
+  }, [draggingRemoteWarp, projectionState.quads, translateOutputMesh, updateSurfaceQuad]);
 
   const baseOrigin = useMemo(() => {
-    if (selectedHostIp.trim()) {
-      const portPart = lanInfo.port ? `:${lanInfo.port}` : '';
-      return `http://${selectedHostIp.trim()}${portPart}`;
-    }
     if (typeof window !== 'undefined' && window.location?.origin && window.location.origin !== 'null') {
       return window.location.origin;
     }
     return 'http://localhost:5173';
-  }, [lanInfo.port, selectedHostIp]);
+  }, []);
 
-  const tabletUrl = `${baseOrigin}/?view=controller`;
+  const tabletUrl = useMemo(
+    () => buildViewUrl(baseOrigin, 'controller', { roomCode }),
+    [baseOrigin, roomCode]
+  );
   const qrModules = useMemo(() => encodeQrMatrix(tabletUrl), [tabletUrl]);
 
   const copyText = (key: string, text: string) => {
@@ -427,6 +445,7 @@ export const SetupView: React.FC = () => {
           resetExperienceToDefault();
         }}
         onToggleLang={() => setLang(isPt ? 'en' : 'pt')}
+        onOpenSetupWizard={onOpenSetupWizard}
       />
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -434,6 +453,7 @@ export const SetupView: React.FC = () => {
           isPt={isPt}
           activeModule={activeModule}
           navItems={navItems}
+          roomCode={roomCode}
           onSelectModule={setActiveModule}
         />
 
@@ -519,6 +539,7 @@ export const SetupView: React.FC = () => {
                 roomDimensions={roomDimensions}
                 remoteWarpRef={remoteWarpRef}
                 baseOrigin={baseOrigin}
+                roomCode={roomCode}
                 copiedKey={copiedKey}
                 onSelectPreset={selectProjectionPreset}
                 onIdentifyOutputs={() => triggerIdentifyOutputs(7000)}
@@ -543,6 +564,7 @@ export const SetupView: React.FC = () => {
                 speakerCalibration={speakerCalibration}
                 speakerLiveLevels={speakerLiveLevels}
                 calibTestMode={calibTestMode}
+                calibBeatSeq={calibBeatSeq}
                 audioMode={audioMode}
                 audioOwner={audioOwner}
                 realAudioRms01={realAudioRms01}
@@ -552,8 +574,10 @@ export const SetupView: React.FC = () => {
                 outputSupportStatus={outputSupportStatus}
                 outputDevices={outputDevices}
                 isSetSinkIdSupported={isSetSinkIdSupported}
+                speakerSinkStatuses={speakerSinkStatuses}
                 lanPort={lanInfo.port}
                 baseOrigin={baseOrigin}
+                roomCode={roomCode}
                 lanClients={lanClients}
                 copiedKey={copiedKey}
                 onUnlockOutputDevices={unlockOutputDevices}
@@ -563,9 +587,10 @@ export const SetupView: React.FC = () => {
                 onStopCalibrationSignal={stopCalibrationSignal}
                 onSetReferenceSpeaker={setReferenceSpeaker}
                 onUpdateSpeakerConfig={updateSpeakerConfig}
-                onStartPinkNoiseSingle={startPinkNoiseSingle}
-                onStartPinkNoiseAB={startPinkNoiseAB}
-                onStartDelayClickTest={startDelayClickTest}
+                onRetrySpeakerSink={retrySpeakerSink}
+                onUpdateAvOffsetMs={updateAvOffsetMs}
+                onTogglePinkNoiseSpeaker={togglePinkNoiseSpeaker}
+                onToggleDelayClickSpeaker={toggleDelayClickSpeaker}
                 onStartPinkNoiseAll={startPinkNoiseAll}
                 onStartDelayClickAll={startDelayClickAll}
                 onCopyText={copyText}
@@ -577,12 +602,16 @@ export const SetupView: React.FC = () => {
               <NetworkModule
                 isPt={isPt}
                 lanInfo={lanInfo}
-                selectedHostIp={selectedHostIp}
                 tabletUrl={tabletUrl}
                 qrModules={qrModules}
                 copiedKey={copiedKey}
                 lanClients={lanClients}
-                onSetSelectedHostIp={setSelectedHostIp}
+                roomCode={roomCode}
+                syncNetworkMode={syncNetworkMode}
+                lanConnected={lanConnected}
+                onRegenerateRoomCode={() => {
+                  regenerateRoomCode();
+                }}
                 onCopyText={copyText}
                 onRefreshLan={fetchLanDiagnostics}
               />

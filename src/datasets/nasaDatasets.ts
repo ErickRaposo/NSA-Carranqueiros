@@ -26,11 +26,11 @@ export const DEFAULT_LAYER_STACK: LayerConfig[] = [
 ];
 
 export function resolveAssetUrl(relativePath: string): string {
-  const rawBase =
-    (typeof import.meta !== 'undefined' &&
-      (import.meta as unknown as { env?: Record<string, string | undefined> }).env
-        ?.VITE_ASSETS_BASE_URL) ||
-    '';
+  const env =
+    typeof import.meta !== 'undefined'
+      ? ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {})
+      : {};
+  const rawBase = env.VITE_ASSETS_BASE_URL || env.BASE_URL || '';
   const cleanBase = rawBase.replace(/\/+$/, '');
   const cleanPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
   return cleanBase ? `${cleanBase}${cleanPath}` : cleanPath;

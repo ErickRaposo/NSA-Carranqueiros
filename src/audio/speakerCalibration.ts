@@ -12,7 +12,7 @@ export interface SpeakerSlotConfig {
   posY: number;
   /** Ganho de calibração acústica por Ruído Rosa: 0.0 a 2.0 (0% a 200%) */
   calibrationGain: number;
-  /** Compensação de atraso Bluetooth/DSP em milissegundos: 0 a 400 ms */
+  /** Compensação de atraso em milissegundos: -400 a +400 ms (negativo adianta a caixa / atrasa o vídeo) */
   delayMs: number;
   /** Destino físico: 'local' (este PC Mestre via setSinkId) ou 'lan-node' (outro PC/celular em ?view=audio-node&spk=1..3) */
   routeTarget: SpeakerRouteTarget;
@@ -23,6 +23,8 @@ export interface SpeakerSlotConfig {
 
 export interface AudioCalibrationState {
   referenceSpeakerId: SpeakerSlotId;
+  /** Offset global Imagem × Som (-400 a +400 ms): negativo atrasa o vídeo p/ esperar som BT; positivo atrasa o som p/ esperar projetor */
+  avOffsetMs: number;
   speakers: Record<SpeakerSlotId, SpeakerSlotConfig>;
 }
 
@@ -39,9 +41,15 @@ export function speakerSlotIdToIndex(slotId: SpeakerSlotId): 1 | 2 | 3 {
   return slotId === 'speaker2' ? 2 : slotId === 'speaker3' ? 3 : 1;
 }
 
+export function clampCalibrationDelayMs(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(-400, Math.min(400, Math.round(value)));
+}
+
 export function createDefaultAudioCalibration(): AudioCalibrationState {
   return {
     referenceSpeakerId: 'speaker1',
+    avOffsetMs: 0,
     speakers: {
       speaker1: {
         id: 'speaker1',
@@ -99,10 +107,23 @@ export function loadAudioCalibration(): AudioCalibrationState {
     if (!parsed?.speakers) return fallback;
     return {
       referenceSpeakerId: parsed.referenceSpeakerId ?? 'speaker1',
+      avOffsetMs: clampCalibrationDelayMs(parsed.avOffsetMs ?? 0),
       speakers: {
-        speaker1: { ...fallback.speakers.speaker1, ...parsed.speakers.speaker1 },
-        speaker2: { ...fallback.speakers.speaker2, ...parsed.speakers.speaker2 },
-        speaker3: { ...fallback.speakers.speaker3, ...parsed.speakers.speaker3 },
+        speaker1: {
+          ...fallback.speakers.speaker1,
+          ...parsed.speakers.speaker1,
+          delayMs: clampCalibrationDelayMs(parsed.speakers.speaker1?.delayMs ?? 0),
+        },
+        speaker2: {
+          ...fallback.speakers.speaker2,
+          ...parsed.speakers.speaker2,
+          delayMs: clampCalibrationDelayMs(parsed.speakers.speaker2?.delayMs ?? 0),
+        },
+        speaker3: {
+          ...fallback.speakers.speaker3,
+          ...parsed.speakers.speaker3,
+          delayMs: clampCalibrationDelayMs(parsed.speakers.speaker3?.delayMs ?? 0),
+        },
       },
     };
   } catch {
@@ -166,5 +187,55 @@ export function computeVbap3Gains(
     speaker1: Number((rawWeights.speaker1 * norm).toFixed(4)),
     speaker2: Number((rawWeights.speaker2 * norm).toFixed(4)),
     speaker3: Number((rawWeights.speaker3 * norm).toFixed(4)),
+  };
+}
+
+export interface EffectiveAudioVisualDelays {
+  speakerDelaySec: Record<SpeakerSlotId, number>;
+  masterDirectDelaySec: number;
+  visualDelayMs: number;
+}
+
+/**
+ * Converte delays assinados (-400..+400 ms por caixa + avOffsetMs global) em:
+ * - atrasos não-negativos reais (`DelayNode`, em segundos) para cada caixa e saída direta (Fone);
+ * - `visualDelayMs` (>= 0) para atrasar o vídeo e o pulso visual na tela/projetor quando o som tem latência Bluetooth.
+ */
+export function computeEffectiveAudioVisualDelays(
+  calibration: AudioCalibrationState,
+  audioMode: 'hrtf' | 'room3' | 'stereo' | '5.1',
+  isolatedSpeakerSlot: SpeakerSlotId | null = null
+): EffectiveAudioVisualDelays {
+  const av = clampCalibrationDelayMs(calibration.avOffsetMs ?? 0);
+  const useRoom = audioMode === 'room3' || isolatedSpeakerSlot !== null;
+
+  if (useRoom) {
+    const s1 = clampCalibrationDelayMs(calibration.speakers.speaker1.delayMs) + av;
+    const s2 = clampCalibrationDelayMs(calibration.speakers.speaker2.delayMs) + av;
+    const s3 = clampCalibrationDelayMs(calibration.speakers.speaker3.delayMs) + av;
+    const minSigned = Math.min(s1, s2, s3);
+    const visualDelayMs = minSigned < 0 ? -minSigned : 0;
+
+    return {
+      speakerDelaySec: {
+        speaker1: Math.min(1.4, Math.max(0, (s1 + visualDelayMs) / 1000)),
+        speaker2: Math.min(1.4, Math.max(0, (s2 + visualDelayMs) / 1000)),
+        speaker3: Math.min(1.4, Math.max(0, (s3 + visualDelayMs) / 1000)),
+      },
+      masterDirectDelaySec: Math.min(1.4, Math.max(0, av / 1000)),
+      visualDelayMs,
+    };
+  }
+
+  const visualDelayMs = av < 0 ? -av : 0;
+  const masterDirectDelaySec = Math.min(1.4, Math.max(0, (av + visualDelayMs) / 1000));
+  return {
+    speakerDelaySec: {
+      speaker1: masterDirectDelaySec,
+      speaker2: masterDirectDelaySec,
+      speaker3: masterDirectDelaySec,
+    },
+    masterDirectDelaySec,
+    visualDelayMs,
   };
 }

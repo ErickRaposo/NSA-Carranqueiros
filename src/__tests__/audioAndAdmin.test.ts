@@ -29,9 +29,11 @@ import {
 } from '../projection/homography';
 
 describe('Show Control Admin (?view=admin), Matriz de Projetores Out 1..4, Nós LAN e Motor 8D', () => {
-  it('resolve ?view=admin, ?view=projector&out=1..4 e ?view=audio-node&spk=1..3', () => {
-    expect(parseRouteFromSearch('?view=admin').view).toBe('setup');
+  it('resolve ?view=admin, ?view=setup, ?view=projector&out=1..4 e ?view=audio-node&spk=1..3', () => {
+    expect(parseRouteFromSearch('?view=admin').view).toBe('admin');
+    expect(parseRouteFromSearch('', '/admin').view).toBe('admin');
     expect(parseRouteFromSearch('?view=setup').view).toBe('setup');
+    expect(parseRouteFromSearch('', '/setup').view).toBe('setup');
     expect(parseRouteFromSearch('?view=projector&out=4')).toEqual({
       view: 'projector',
       outId: 4,

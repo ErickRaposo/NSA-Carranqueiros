@@ -1,3 +1,4 @@
+import { getActiveUnmutedAudioEngine, stopAllSpatialSpeech } from '../audio/spatialAudioEngine';
 import { DatasetId, NASA_DATASETS } from '../datasets/nasaDatasets';
 import { lonLatToUV } from '../geo/projection';
 
@@ -236,6 +237,8 @@ let activeSpeechOnEnd: (() => void) | null = null;
 let speechRequestNonce = 0;
 let speechVolume01 = 1.0;
 const piperAudioCache = new Map<string, string>();
+const piperWavBufferCache = new Map<string, ArrayBuffer>();
+const piperPreloadPromises = new Map<'pt' | 'en', Promise<boolean>>();
 
 export function setSpeechVolume(volume: number): void {
   const clamped = Math.min(1, Math.max(0, Number.isFinite(volume) ? volume : 1));
@@ -257,6 +260,7 @@ export function isSpeechSupported(): boolean {
 
 export function stopSpeech(): void {
   speechRequestNonce += 1;
+  stopAllSpatialSpeech();
   if (activePiperAudio) {
     try {
       activePiperAudio.onplay = null;
@@ -378,21 +382,30 @@ function speakWithWebSpeechFallback(
 /**
  * Pré-carrega e armazena em cache OPFS a voz neural Piper (`en_US-bryce-medium` ou `pt_BR-faber-medium`).
  */
-export function preloadPiperVoice(lang: 'pt' | 'en'): void {
-  if (typeof window === 'undefined' || piperPreloadStarted.has(lang)) return;
-  piperPreloadStarted.add(lang);
+export function preloadPiperVoice(lang: 'pt' | 'en'): Promise<boolean> {
+  if (typeof window === 'undefined') return Promise.resolve(false);
   const voiceId = PIPER_VOICE_IDS[lang];
-  void import('@mintplex-labs/piper-tts-web')
+  if (piperReadyVoices.has(voiceId)) return Promise.resolve(true);
+  const existing = piperPreloadPromises.get(lang);
+  if (existing) return existing;
+
+  piperPreloadStarted.add(lang);
+  const job = import('@mintplex-labs/piper-tts-web')
     .then(async (tts) => {
       const storedVoices = await tts.stored();
       if (!storedVoices.includes(voiceId)) {
         await tts.download(voiceId);
       }
       piperReadyVoices.add(voiceId);
+      return true;
     })
     .catch(() => {
-      // Fallback silencioso para Web Speech API caso offline ou sem suporte OPFS
+      piperPreloadPromises.delete(lang);
+      return false;
     });
+
+  piperPreloadPromises.set(lang, job);
+  return job;
 }
 
 export function speakTextPt(
@@ -401,6 +414,8 @@ export function speakTextPt(
   options?: { maleVoice?: boolean; lang?: 'pt' | 'en'; onStart?: () => void; onEnd?: () => void }
 ): void {
   if (!text.trim() || typeof window === 'undefined') return;
+  if (speechVolume01 <= 0.001) return;
+
   const lang = options?.lang ?? 'pt';
   const voiceId = PIPER_VOICE_IDS[lang];
   const cacheKey = `${voiceId}:${text}`;
@@ -410,8 +425,8 @@ export function speakTextPt(
   }
   const currentNonce = ++speechRequestNonce;
 
-  const playUrl = (url: string): void => {
-    if (currentNonce !== speechRequestNonce) return;
+  const playUrlFallback = (url: string): void => {
+    if (currentNonce !== speechRequestNonce || speechVolume01 <= 0.001) return;
     try {
       const audio = new Audio(url);
       audio.volume = speechVolume01;
@@ -441,43 +456,76 @@ export function speakTextPt(
     }
   };
 
-  const cachedUrl = piperAudioCache.get(cacheKey);
-  if (cachedUrl) {
-    playUrl(cachedUrl);
-    return;
-  }
+  const playMultiSpeakerBuffer = async (
+    wavBuffer: ArrayBuffer,
+    fallbackUrl: string
+  ): Promise<void> => {
+    if (currentNonce !== speechRequestNonce || speechVolume01 <= 0.001) return;
+    const spatialEngine = getActiveUnmutedAudioEngine();
+    if (spatialEngine) {
+      activeSpeechOnEnd = options?.onEnd ?? null;
+      try {
+        const ok = await spatialEngine.playSpeechWavBuffer(wavBuffer, speechVolume01, {
+          onStart: () => {
+            if (currentNonce !== speechRequestNonce) {
+              spatialEngine.stopSpeechPlayback();
+              return;
+            }
+            options?.onStart?.();
+          },
+          onEnd: () => {
+            if (activeSpeechOnEnd === options?.onEnd) activeSpeechOnEnd = null;
+            options?.onEnd?.();
+          },
+        });
+        if (ok) return;
+      } catch {
+        // fallback below
+      }
+    }
+    playUrlFallback(fallbackUrl);
+  };
 
-  // Se o modelo Piper (~60MB) ainda estiver baixando em segundo plano, fala imediatamente
-  // via Web Speech API para nunca deixar a animação muda.
-  if (!piperReadyVoices.has(voiceId)) {
-    preloadPiperVoice(lang);
-    speakWithWebSpeechFallback(text, lang, interrupt, currentNonce, options);
+  const cachedBuf = piperWavBufferCache.get(cacheKey);
+  const cachedUrl = piperAudioCache.get(cacheKey);
+  if (cachedBuf && cachedUrl) {
+    void playMultiSpeakerBuffer(cachedBuf, cachedUrl);
     return;
   }
 
   let settled = false;
+  const timeoutMs = piperReadyVoices.has(voiceId) ? 6000 : 4500;
   const fallbackTimer = window.setTimeout(() => {
     if (settled || currentNonce !== speechRequestNonce) return;
     settled = true;
     speakWithWebSpeechFallback(text, lang, interrupt, currentNonce, options);
-  }, 2500);
+  }, timeoutMs);
 
-  void import('@mintplex-labs/piper-tts-web')
-    .then(async (tts) => {
+  void (async () => {
+    try {
+      const ready = piperReadyVoices.has(voiceId) ? true : await preloadPiperVoice(lang);
+      if (!ready) throw new Error('Piper voice unavailable');
+      if (settled || currentNonce !== speechRequestNonce) return;
+
+      const tts = await import('@mintplex-labs/piper-tts-web');
       const wavBlob = await tts.predict({ text, voiceId });
+      const wavBuffer = await wavBlob.arrayBuffer();
+
       if (settled || currentNonce !== speechRequestNonce) return;
       settled = true;
       window.clearTimeout(fallbackTimer);
+
       const url = URL.createObjectURL(wavBlob);
+      piperWavBufferCache.set(cacheKey, wavBuffer);
       piperAudioCache.set(cacheKey, url);
-      playUrl(url);
-    })
-    .catch(() => {
+      await playMultiSpeakerBuffer(wavBuffer, url);
+    } catch {
       if (settled || currentNonce !== speechRequestNonce) return;
       settled = true;
       window.clearTimeout(fallbackTimer);
       speakWithWebSpeechFallback(text, lang, interrupt, currentNonce, options);
-    });
+    }
+  })();
 }
 
 export function speakText(

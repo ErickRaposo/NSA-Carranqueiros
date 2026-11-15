@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Check,
   Copy,
@@ -16,6 +16,11 @@ import {
   SpeakerSlotConfig,
   SpeakerSlotId,
 } from '../../audio/speakerCalibration';
+import {
+  isDelayClickSpeakerActive,
+  isPinkNoiseSpeakerActive,
+  SpeakerSinkRouteInfo,
+} from '../../audio/spatialAudioEngine';
 import { AudioAdminContextValue } from '../../experience/ExperienceContext';
 import {
   AudioOutputMode,
@@ -24,6 +29,7 @@ import {
   LiveNoteEvent,
   SurfaceId,
 } from '../../experience/types';
+import { buildViewUrl } from '../../lan/roomCode';
 import { AcousticStage2D } from './AcousticStage2D';
 import { AdminSelect } from './AdminSelect';
 import { FaderControl } from './FaderControl';
@@ -45,6 +51,7 @@ interface AudioConsoleModuleProps {
   speakerCalibration: AudioCalibrationState;
   speakerLiveLevels: Record<SpeakerSlotId, number>;
   calibTestMode: AudioAdminContextValue['calibTestMode'];
+  calibBeatSeq?: number;
   audioMode: AudioOutputMode;
   audioOwner: AudioOwnerRole;
   realAudioRms01: number;
@@ -54,8 +61,10 @@ interface AudioConsoleModuleProps {
   outputSupportStatus: AudioAdminContextValue['outputSupportStatus'];
   outputDevices: AudioAdminContextValue['outputDevices'];
   isSetSinkIdSupported: boolean;
+  speakerSinkStatuses?: Partial<Record<SpeakerSlotId, SpeakerSinkRouteInfo>>;
   lanPort: number;
   baseOrigin: string;
+  roomCode?: string | null;
   lanClients: LanPeerInfo[];
   copiedKey: string | null;
   onUnlockOutputDevices: () => Promise<unknown> | void;
@@ -65,9 +74,10 @@ interface AudioConsoleModuleProps {
   onStopCalibrationSignal: () => void;
   onSetReferenceSpeaker: (id: SpeakerSlotId) => void;
   onUpdateSpeakerConfig: (id: SpeakerSlotId, patch: Partial<SpeakerSlotConfig>) => void;
-  onStartPinkNoiseSingle: (id: SpeakerSlotId) => void;
-  onStartPinkNoiseAB: (id: SpeakerSlotId) => void;
-  onStartDelayClickTest: (id: SpeakerSlotId) => void;
+  onRetrySpeakerSink?: (id: SpeakerSlotId, toggleEngine?: boolean) => void;
+  onUpdateAvOffsetMs: (avOffsetMs: number) => void;
+  onTogglePinkNoiseSpeaker: (id: SpeakerSlotId) => void;
+  onToggleDelayClickSpeaker: (id: SpeakerSlotId) => void;
   onStartPinkNoiseAll: () => void;
   onStartDelayClickAll: () => void;
   onCopyText: (key: string, text: string) => void;
@@ -81,6 +91,7 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
   speakerCalibration,
   speakerLiveLevels,
   calibTestMode,
+  calibBeatSeq = 0,
   audioMode,
   audioOwner,
   realAudioRms01,
@@ -90,8 +101,10 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
   outputSupportStatus,
   outputDevices,
   isSetSinkIdSupported,
+  speakerSinkStatuses,
   lanPort,
   baseOrigin,
+  roomCode,
   lanClients,
   copiedKey,
   onUnlockOutputDevices,
@@ -101,14 +114,31 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
   onStopCalibrationSignal,
   onSetReferenceSpeaker,
   onUpdateSpeakerConfig,
-  onStartPinkNoiseSingle,
-  onStartPinkNoiseAB,
-  onStartDelayClickTest,
+  onRetrySpeakerSink,
+  onUpdateAvOffsetMs,
+  onTogglePinkNoiseSpeaker,
+  onToggleDelayClickSpeaker,
   onStartPinkNoiseAll,
   onStartDelayClickAll,
   onCopyText,
   onToggleLocalMute,
 }) => {
+  const [beatFlashOn, setBeatFlashOn] = useState<boolean>(false);
+  useEffect(() => {
+    if (calibBeatSeq <= 0) {
+      setBeatFlashOn(false);
+      return;
+    }
+    setBeatFlashOn(true);
+    const t = window.setTimeout(() => setBeatFlashOn(false), 115);
+    return () => window.clearTimeout(t);
+  }, [calibBeatSeq]);
+
+  const avOffsetMs = speakerCalibration.avOffsetMs ?? 0;
+  const isAnyClickActive =
+    calibTestMode.kind === 'delay-click-multi' ||
+    calibTestMode.kind === 'delay-click-all' ||
+    calibTestMode.kind === 'delay-click';
   const deviceOptions = useMemo(
     () => [
       { value: '', label: isPt ? 'Saída Padrão' : 'Default Output' },
@@ -224,8 +254,8 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
             </h2>
             <p className="mt-0.5 text-xs text-slate-400">
               {isPt
-                ? 'Faders verticais de ganho 0–200%, Delay Bluetooth 0–400 ms e roteamento USB/BT/LAN.'
-                : 'Vertical gain faders 0–200%, Bluetooth delay 0–400 ms, and USB/BT/LAN routing.'}
+                ? 'Faders verticais 0–200%, Delay -400 a +400 ms, Atraso Vídeo × Som e toggles independentes.'
+                : 'Vertical gain faders 0–200%, Delay -400 to +400 ms, Video × Audio offset, and independent toggles.'}
             </p>
           </div>
 
@@ -314,7 +344,7 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
                 : 'Open localhost on this Mac to list and separate Bluetooth speakers'}
             </div>
             <a
-              href={`http://localhost:${lanPort || 5173}/?view=admin`}
+              href={buildViewUrl(`http://localhost:${lanPort || 5173}`, 'admin', { roomCode })}
               className={`inline-flex min-h-[38px] shrink-0 items-center gap-1.5 px-4 text-xs ${ADMIN_PRIMARY_PILL_CLASS} ${ADMIN_FOCUS}`}
             >
               <span>Abrir em localhost</span>
@@ -337,16 +367,21 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
             const spkNum = (idx + 1) as 1 | 2 | 3;
             const spk = speakerCalibration.speakers[spkId];
             const isRef = speakerCalibration.referenceSpeakerId === spkId;
-            const isAllSignal =
-              calibTestMode.kind === 'pink-all' || calibTestMode.kind === 'delay-click-all';
-            const isSinglePink =
-              calibTestMode.kind === 'pink-single' && calibTestMode.speakerId === spkId;
-            const isAbPink =
-              calibTestMode.kind === 'pink-ab' && calibTestMode.targetSpeakerId === spkId;
-            const isDelayClick =
-              calibTestMode.kind === 'delay-click' && calibTestMode.targetSpeakerId === spkId;
-            const signalActive = isAllSignal || isSinglePink || isAbPink || isDelayClick;
-            const lanNodeUrl = `${baseOrigin}/?view=audio-node&spk=${spkNum}`;
+            const isPinkActive = isPinkNoiseSpeakerActive(calibTestMode, spkId);
+            const isClickActive = isDelayClickSpeakerActive(
+              calibTestMode,
+              spkId,
+              speakerCalibration.referenceSpeakerId
+            );
+            const signalActive = isPinkActive || isClickActive;
+            const lanNodeUrl = buildViewUrl(baseOrigin, 'audio-node', {
+              spk: spkNum,
+              roomCode,
+            });
+            const lanNodeHref = buildViewUrl(null, 'audio-node', {
+              spk: spkNum,
+              roomCode,
+            });
             const lanNodeOnline = lanClients.some(
               (peer) => peer.role === `audio-node-C${spkNum}`
             );
@@ -420,13 +455,53 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
                           {isPt ? 'Libere BT/USB no topo da mesa' : 'Unlock BT/USB above'}
                         </div>
                       ) : (
-                        <AdminSelect
-                          ariaLabel={`Saída C${spkNum}`}
-                          value={spk.sinkDeviceId}
-                          options={deviceOptions}
-                          disabled={!isSetSinkIdSupported}
-                          onChange={(sinkDeviceId) => onUpdateSpeakerConfig(spkId, { sinkDeviceId })}
-                        />
+                        <div>
+                          <AdminSelect
+                            ariaLabel={`Saída C${spkNum}`}
+                            value={spk.sinkDeviceId}
+                            options={deviceOptions}
+                            disabled={!isSetSinkIdSupported}
+                            onChange={(sinkDeviceId) => onUpdateSpeakerConfig(spkId, { sinkDeviceId })}
+                          />
+                          {Boolean(spk.sinkDeviceId) &&
+                          spk.sinkDeviceId !== 'default' &&
+                          outputDevices.length > 0 &&
+                          !outputDevices.some((d) => d.deviceId === spk.sinkDeviceId) ? (
+                            <div className="mt-1.5 rounded-lg border border-amber-400/35 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200">
+                              {isPt ? 'Saída desconectada' : 'Output disconnected'}
+                            </div>
+                          ) : speakerSinkStatuses?.[spkId]?.status === 'error' ? (
+                            <div className="mt-1.5 flex items-center justify-between gap-1.5 rounded-lg border border-rose-400/35 bg-rose-500/10 px-2 py-1 text-[10px] text-rose-200">
+                              <span>{isPt ? 'Falha na saída' : 'Route error'}</span>
+                              {onRetrySpeakerSink && (
+                                <button
+                                  type="button"
+                                  onClick={() => onRetrySpeakerSink(spkId, true)}
+                                  className="rounded border border-rose-300/40 bg-[#040b1a] px-1.5 py-0.5 font-semibold text-white"
+                                >
+                                  {isPt ? 'Outro motor' : 'Retry'}
+                                </button>
+                              )}
+                            </div>
+                          ) : speakerSinkStatuses?.[spkId]?.status === 'routed' ? (
+                            <div className="mt-1.5 flex items-center justify-between gap-1.5 text-[10px] text-slate-400">
+                              <span>
+                                {speakerSinkStatuses[spkId]?.engine === 'audiocontext'
+                                  ? 'WebAudio'
+                                  : 'Media'}
+                              </span>
+                              {onRetrySpeakerSink && (
+                                <button
+                                  type="button"
+                                  onClick={() => onRetrySpeakerSink(spkId, true)}
+                                  className="rounded border border-[#1e3a66] bg-[#040b1a] px-1.5 py-0.5 text-[10px] text-slate-300 hover:border-[#2563eb] hover:text-white"
+                                >
+                                  {isPt ? 'Trocar motor' : 'Switch'}
+                                </button>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
                       )
                     ) : (
                       <div className="rounded-xl border border-[#1e3a66]/55 bg-[#040b1a] p-2">
@@ -466,7 +541,7 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
                             <span>{isCopied ? 'OK' : isPt ? 'Copiar' : 'Copy'}</span>
                           </button>
                           <a
-                            href={`?view=audio-node&spk=${spkNum}`}
+                            href={lanNodeHref}
                             target="_blank"
                             rel="noreferrer"
                             className={`inline-flex min-h-[36px] flex-1 items-center justify-center gap-1 rounded-lg border border-[#1e3a66]/65 bg-[#060c1a] px-2 text-xs font-medium text-slate-200 transition hover:border-[#2563eb] hover:text-white ${ADMIN_FOCUS}`}
@@ -479,58 +554,32 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
                     )}
                   </div>
 
-                  {/* Geradores de Teste Acústico */}
-                  <div className="mt-2.5 flex flex-col gap-1.5">
+                  {/* Geradores Independentes de Teste Acústico */}
+                  <div className="mt-2.5 grid grid-cols-2 gap-1.5">
                     <button
                       type="button"
-                      onClick={() =>
-                        isSinglePink ? onStopCalibrationSignal() : onStartPinkNoiseSingle(spkId)
-                      }
-                      className={`min-h-[40px] w-full rounded-xl border text-xs font-medium transition ${ADMIN_FOCUS} ${
-                        isSinglePink
-                          ? 'border-[#2563eb]/65 bg-[#0c1a36] font-semibold text-[#7dd3fc]'
+                      aria-pressed={isPinkActive}
+                      onClick={() => onTogglePinkNoiseSpeaker(spkId)}
+                      className={`min-h-[40px] rounded-xl border px-1.5 text-xs font-medium transition ${ADMIN_FOCUS} ${
+                        isPinkActive
+                          ? 'border-white bg-white font-semibold text-[#060913]'
                           : 'border-[#1e3a66]/55 bg-[#060c1a] text-slate-200 hover:border-[#2563eb]'
                       }`}
                     >
-                      {isSinglePink
-                        ? isPt
-                          ? 'Parar Ruído Rosa'
-                          : 'Stop Pink Noise'
-                        : isPt
-                          ? 'Ruído Rosa Solo'
-                          : 'Solo Pink Noise'}
+                      {isPinkActive ? 'Rosa ON' : isPt ? 'Ruído Rosa' : 'Pink Noise'}
                     </button>
-
-                    {!isRef && (
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            isAbPink ? onStopCalibrationSignal() : onStartPinkNoiseAB(spkId)
-                          }
-                          className={`min-h-[40px] rounded-xl border px-1.5 text-xs font-medium transition ${ADMIN_FOCUS} ${
-                            isAbPink
-                              ? 'border-[#2563eb]/65 bg-[#0c1a36] font-semibold text-[#7dd3fc]'
-                              : 'border-[#1e3a66]/55 bg-[#060c1a] text-slate-300 hover:border-[#2563eb] hover:text-white'
-                          }`}
-                        >
-                          {isAbPink ? 'A⇄B On' : 'Rosa A⇄B'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            isDelayClick ? onStopCalibrationSignal() : onStartDelayClickTest(spkId)
-                          }
-                          className={`min-h-[40px] rounded-xl border px-1.5 text-xs font-medium transition ${ADMIN_FOCUS} ${
-                            isDelayClick
-                              ? 'border-[#2563eb]/65 bg-[#0c1a36] font-semibold text-[#7dd3fc]'
-                              : 'border-[#1e3a66]/55 bg-[#060c1a] text-slate-300 hover:border-[#2563eb] hover:text-white'
-                          }`}
-                        >
-                          {isDelayClick ? 'Click On' : 'Click BT'}
-                        </button>
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      aria-pressed={isClickActive}
+                      onClick={() => onToggleDelayClickSpeaker(spkId)}
+                      className={`min-h-[40px] rounded-xl border px-1.5 text-xs font-medium transition ${ADMIN_FOCUS} ${
+                        isClickActive
+                          ? 'border-white bg-white font-semibold text-[#060913]'
+                          : 'border-[#1e3a66]/55 bg-[#060c1a] text-slate-300 hover:border-[#2563eb] hover:text-white'
+                      }`}
+                    >
+                      {isClickActive ? 'Click ON' : isPt ? 'Pulso Click' : 'Sync Click'}
+                    </button>
                   </div>
                 </div>
 
@@ -554,18 +603,29 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
                   <div className="border-t border-[#1e3a66]/40 pt-2.5">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400">Delay BT</span>
-                      <span className="font-semibold text-slate-100 [font-variant-numeric:tabular-nums]">
-                        {spk.delayMs} ms
-                      </span>
+                      <div className="flex items-center gap-1">
+                        {spk.delayMs !== 0 && (
+                          <button
+                            type="button"
+                            onClick={() => onUpdateSpeakerConfig(spkId, { delayMs: 0 })}
+                            className="rounded border border-[#1e3a66] bg-[#060c1a] px-1 text-[10px] text-slate-300 hover:text-white"
+                          >
+                            0
+                          </button>
+                        )}
+                        <span className="font-semibold text-slate-100 [font-variant-numeric:tabular-nums]">
+                          {spk.delayMs > 0 ? `+${spk.delayMs}` : spk.delayMs} ms
+                        </span>
+                      </div>
                     </div>
                     <div className="mt-1.5 grid grid-cols-4 gap-1">
-                      {([-5, -1, +1, +5] as const).map((delta) => (
+                      {([-10, -5, +5, +10] as const).map((delta) => (
                         <button
                           key={delta}
                           type="button"
                           onClick={() =>
                             onUpdateSpeakerConfig(spkId, {
-                              delayMs: Math.max(0, Math.min(400, spk.delayMs + delta)),
+                              delayMs: Math.max(-400, Math.min(400, spk.delayMs + delta)),
                             })
                           }
                           className={`min-h-[36px] rounded-lg border border-[#1e3a66]/55 bg-[#060c1a] text-xs font-medium text-slate-200 transition hover:border-[#2563eb] hover:text-white [font-variant-numeric:tabular-nums] ${ADMIN_FOCUS}`}
@@ -627,7 +687,54 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
               </div>
             </div>
 
-            <div className="mt-3 border-t border-[#1e3a66]/45 pt-3">
+            <div className="mt-3 flex flex-col gap-3 border-t border-[#1e3a66]/45 pt-3">
+              <div>
+                <div className="flex items-center justify-between text-xs [font-variant-numeric:tabular-nums]">
+                  <span className="text-slate-300">
+                    {isPt ? 'Vídeo × Som' : 'Video × Audio'}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {avOffsetMs !== 0 && (
+                      <button
+                        type="button"
+                        onClick={() => onUpdateAvOffsetMs(0)}
+                        className="rounded border border-[#1e3a66] bg-[#060c1a] px-1 text-[10px] text-slate-300 hover:text-white"
+                      >
+                        0
+                      </button>
+                    )}
+                    <span className="font-semibold text-[#7dd3fc]">
+                      {avOffsetMs > 0 ? `+${avOffsetMs}` : avOffsetMs} ms
+                    </span>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min={-400}
+                  max={400}
+                  step={5}
+                  value={avOffsetMs}
+                  onChange={(e) => onUpdateAvOffsetMs(Number(e.target.value))}
+                  className="mt-1.5 h-2 w-full cursor-pointer accent-[#38bdf8]"
+                />
+                <div
+                  style={{ transition: beatFlashOn ? 'none' : 'all 140ms ease-out' }}
+                  className={`mt-2 flex min-h-[34px] items-center justify-center rounded-lg border text-[11px] font-semibold [font-variant-numeric:tabular-nums] ${
+                    beatFlashOn && isAnyClickActive
+                      ? 'border-white bg-white text-[#060913]'
+                      : 'border-[#1e3a66]/55 bg-[#040b1a] text-slate-400'
+                  }`}
+                >
+                  {isAnyClickActive
+                    ? isPt
+                      ? 'FLASH DE BATIDA'
+                      : 'SYNC BEAT FLASH'
+                    : isPt
+                      ? 'Luz de Sincronia'
+                      : 'Sync Flash'}
+                </div>
+              </div>
+
               <button
                 type="button"
                 onClick={onToggleLocalMute}

@@ -20,7 +20,6 @@ import {
   CountryFlagIcon,
 } from '../components/CountryFlag';
 import { preloadPiperVoice } from '../accessibility/a11yEngine';
-import { playLaunchThrust8D } from '../audio/spaceAmbient';
 import { NasaDatasetCard } from '../components/NasaDatasetCard';
 import { DatasetId } from '../datasets/nasaDatasets';
 import { useExperience } from '../experience/ExperienceContext';
@@ -178,7 +177,6 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
   }, [setMissionPhase]);
 
   const handleAuthorizeLiftoff = useCallback(() => {
-    playLaunchThrust8D(10.0);
     setMissionPhase('countdown');
   }, [setMissionPhase]);
 

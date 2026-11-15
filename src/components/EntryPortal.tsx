@@ -269,10 +269,10 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
             className="portal-login-btn"
             onClick={onOpenAuth ?? onExploreEarth}
             data-testid="open-login-btn"
-            title="Abrir Simulador 3D"
+            title="Criar Sala Sensorial (Setup)"
           >
             <LogIn size={15} aria-hidden="true" />
-            <span>Simulador 3D</span>
+            <span>Criar Sala Sensorial</span>
           </button>
 
           <button

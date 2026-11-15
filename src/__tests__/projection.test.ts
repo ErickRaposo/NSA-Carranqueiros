@@ -12,7 +12,15 @@ import {
   lonLatToUV,
   spherePointToLonLat,
 } from '../geo/projection';
-import { fitQuadAspectContain } from '../projection/homography';
+import {
+  applyProjectionPreset,
+  fitQuadAspectContain,
+  getUniquePinHandlesForOutput,
+  makeSurfaceQuadKey,
+  QuadCorners,
+  translateOutputSurfacesTogether,
+  updateQuadWithSharedSeams,
+} from '../projection/homography';
 
 describe('geo/projection', () => {
   it('maps prime meridian equator (0, 0) to +Z on sphere and center of flat map', () => {
@@ -105,5 +113,85 @@ describe('geo/projection', () => {
       { x: 0, y: 1060 },
     ];
     expect(fitQuadAspectContain(1200, 960, dragged)).toEqual(dragged);
+  });
+
+  it('abre 1-projector em Canto 3D Isométrico com Teto em losango e todas as quinas compartilhadas soldadas', () => {
+    const oneProj = applyProjectionPreset('1-projector');
+    const qCeil = oneProj.quads[makeSurfaceQuadKey(1, 'ceiling')];
+    const qLeft = oneProj.quads[makeSurfaceQuadKey(1, 'leftWall')];
+    const qRight = oneProj.quads[makeSurfaceQuadKey(1, 'rightWall')];
+
+    // Junta Tripla Central: leftWall.TR [1] === rightWall.TL [0] === ceiling.BL [3]
+    expect(qLeft[1]).toEqual(qRight[0]);
+    expect(qLeft[1]).toEqual(qCeil[3]);
+    // Base Central: leftWall.BR [2] === rightWall.BL [3]
+    expect(qLeft[2]).toEqual(qRight[3]);
+    // Quina Superior Esquerda: ceiling.TL [0] === leftWall.TL [0]
+    expect(qCeil[0]).toEqual(qLeft[0]);
+    // Quina Superior Direita: ceiling.BR [2] === rightWall.TR [1]
+    expect(qCeil[2]).toEqual(qRight[1]);
+    // Topo do losango do teto acima do centro
+    expect(qCeil[1].y).toBeLessThan(qCeil[0].y);
+
+    // 12 vértices brutos deduplicados em 7 alças únicas (1 junta 3x + 3 juntas 2x + 3 cantos externos)
+    const handles3 = getUniquePinHandlesForOutput(
+      1,
+      oneProj.outputs[1].surfaces,
+      oneProj.quads
+    );
+    expect(handles3).toHaveLength(7);
+    expect(handles3.filter((h) => h.memberCount === 3)).toHaveLength(1);
+    expect(handles3.filter((h) => h.memberCount === 2)).toHaveLength(3);
+
+    // Arrastar a junta central propaga para as 3 paredes juntas
+    const movedLeft: QuadCorners = [
+      qLeft[0],
+      { x: 0.46, y: 0.42 },
+      qLeft[2],
+      qLeft[3],
+    ];
+    const welded3 = updateQuadWithSharedSeams(
+      oneProj,
+      makeSurfaceQuadKey(1, 'leftWall'),
+      movedLeft
+    );
+    expect(welded3[makeSurfaceQuadKey(1, 'rightWall')][0]).toEqual({ x: 0.46, y: 0.42 });
+    expect(welded3[makeSurfaceQuadKey(1, 'ceiling')][3]).toEqual({ x: 0.46, y: 0.42 });
+  });
+
+  it('solda os pins centrais em 2-projectors e translada a malha em bloco sem abrir fresta', () => {
+    const twoProj = applyProjectionPreset('2-projectors');
+    const handles2 = getUniquePinHandlesForOutput(
+      1,
+      twoProj.outputs[1].surfaces,
+      twoProj.quads
+    );
+    expect(handles2).toHaveLength(6);
+
+    const qLeft = twoProj.quads[makeSurfaceQuadKey(1, 'leftWall')];
+    const nextLeft: QuadCorners = [
+      qLeft[0],
+      { x: 0.54, y: 0.08 },
+      { x: 0.52, y: 0.96 },
+      qLeft[3],
+    ];
+    const welded2 = updateQuadWithSharedSeams(
+      twoProj,
+      makeSurfaceQuadKey(1, 'leftWall'),
+      nextLeft
+    );
+    expect(welded2[makeSurfaceQuadKey(1, 'rightWall')][0]).toEqual({ x: 0.54, y: 0.08 });
+    expect(welded2[makeSurfaceQuadKey(1, 'rightWall')][3]).toEqual({ x: 0.52, y: 0.96 });
+
+    const translated = translateOutputSurfacesTogether(
+      1,
+      twoProj.outputs[1].surfaces,
+      welded2,
+      0.2,
+      -0.05
+    );
+    expect(translated[makeSurfaceQuadKey(1, 'leftWall')][1]).toEqual(
+      translated[makeSurfaceQuadKey(1, 'rightWall')][0]
+    );
   });
 });

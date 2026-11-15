@@ -4,6 +4,10 @@ import {
   speakerIndexToSlotId,
   speakerSlotIdToIndex,
 } from '../audio/speakerCalibration';
+import {
+  isDelayClickSpeakerActive,
+  isPinkNoiseSpeakerActive,
+} from '../audio/spatialAudioEngine';
 import { useAudioAdmin, useExperience } from '../experience/ExperienceContext';
 import { SpeakerNodeIndex } from '../experience/types';
 
@@ -25,6 +29,9 @@ export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
     country,
     playback,
     lanConnected,
+    roomCode,
+    syncNetworkMode,
+    audioContextState,
     localAudioMuted,
     setLocalAudioMuted,
     audioLevels,
@@ -65,13 +72,8 @@ export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
   };
 
   const isReceivingTest =
-    calibTestMode.kind === 'pink-all' ||
-    calibTestMode.kind === 'delay-click-all' ||
-    (calibTestMode.kind === 'pink-single' && calibTestMode.speakerId === slotId) ||
-    (calibTestMode.kind === 'pink-ab' && calibTestMode.activeNow === slotId) ||
-    (calibTestMode.kind === 'delay-click' &&
-      (calibTestMode.targetSpeakerId === slotId ||
-        speakerCalibration.referenceSpeakerId === slotId));
+    isPinkNoiseSpeakerActive(calibTestMode, slotId) ||
+    isDelayClickSpeakerActive(calibTestMode, slotId, speakerCalibration.referenceSpeakerId);
 
   const levelPct = Math.round(Math.min(100, audioLevels.master * 100));
 
@@ -104,7 +106,11 @@ export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
             }`}
           >
             <Wifi size={12} />
-            {lanConnected ? 'LAN Sync' : 'Local'}
+            {roomCode
+              ? `${syncNetworkMode === 'cloud-room' ? 'Cloud' : 'LAN'} · ${roomCode}`
+              : lanConnected
+                ? 'LAN Sync'
+                : 'Local'}
           </span>
         </div>
 
@@ -130,21 +136,28 @@ export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
           })}
         </div>
 
-        {/* Botão de desbloqueio obrigatório do Web Audio */}
+        {/* Botão de desbloqueio obrigatório do Web Audio (regra de autoplay dos navegadores) */}
         <div className="mt-5">
-          {!unlocked ? (
-            <button
-              type="button"
-              onClick={handleActivate}
-              className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-bold text-slate-950 transition hover:bg-emerald-300"
-            >
-              <Volume2 size={18} />
-              <span>
+          {!unlocked || audioContextState !== 'running' ? (
+            <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/10 p-3.5">
+              <p className="mb-2.5 text-xs leading-relaxed text-slate-200">
                 {isPt
-                  ? `Ativar Saída de Áudio da Caixa C${spkIndex}`
-                  : `Enable Audio Output for Speaker C${spkIndex}`}
-              </span>
-            </button>
+                  ? 'Por segurança do navegador, clique abaixo uma vez para liberar o som neste aparelho.'
+                  : 'Browser security requires one click below to unlock audio playback on this device.'}
+              </p>
+              <button
+                type="button"
+                onClick={handleActivate}
+                className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-bold text-slate-950 transition hover:bg-emerald-300"
+              >
+                <Volume2 size={18} />
+                <span>
+                  {isPt
+                    ? `Ativar Áudio neste PC · Caixa C${spkIndex}`
+                    : `Enable Audio on this PC · Speaker C${spkIndex}`}
+                </span>
+              </button>
+            </div>
           ) : (
             <div className="flex items-center justify-between rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-xs text-emerald-200">
               <div className="flex items-center gap-2 font-semibold">

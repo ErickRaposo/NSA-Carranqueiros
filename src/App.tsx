@@ -1,11 +1,17 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { startSpaceAmbient } from './audio/spaceAmbient';
 import { EntryPortal } from './components/EntryPortal';
+import { RoomAccessGate } from './components/RoomAccessGate';
 import { ExperienceProvider } from './experience/ExperienceContext';
 import { ProjectorOutId, SpeakerNodeIndex, ViewRole } from './experience/types';
+import {
+  generateRoomCode,
+  normalizeRoomCode,
+  readRoomCodeFromSearch,
+} from './lan/roomCode';
 import { AudioNodeView } from './views/AudioNodeView';
 import { ProjectorView } from './views/ProjectorView';
 import { SetupView } from './views/SetupView';
+import { SetupWizardView } from './views/SetupWizardView';
 import { SimulatorView } from './views/SimulatorView';
 import { TabletControllerView } from './views/TabletControllerView';
 import { WebDemoView } from './views/WebDemoView';
@@ -22,9 +28,9 @@ export function parseRouteFromSearch(
   const normalizedPath = pathname.replace(/\/+$/, '').toLowerCase();
   const params = new URLSearchParams(search);
   const rawView = (params.get('view') ?? '').toLowerCase();
-  const normalizedView = rawView === 'admin' ? 'setup' : rawView;
   const validViews: ViewRole[] = [
     'setup',
+    'admin',
     'simulator',
     'projector',
     'controller',
@@ -33,18 +39,20 @@ export function parseRouteFromSearch(
     'audio-node',
   ];
 
-  let view: ViewRole = validViews.includes(normalizedView as ViewRole)
-    ? (normalizedView as ViewRole)
+  let view: ViewRole = validViews.includes(rawView as ViewRole)
+    ? (rawView as ViewRole)
     : 'portal';
 
   if (!rawView && (normalizedPath === '/controle' || normalizedPath === '/controller')) {
     view = 'controller';
-  } else if (
-    !rawView &&
-    (normalizedPath === '/sala' || normalizedPath === '/demo')
-  ) {
+  } else if (!rawView && (normalizedPath === '/sala' || normalizedPath === '/demo')) {
     view = 'demo';
   } else if (!rawView && normalizedPath === '/admin') {
+    view = 'admin';
+  } else if (
+    !rawView &&
+    (normalizedPath === '/setup' || normalizedPath === '/configurar')
+  ) {
     view = 'setup';
   } else if (
     !rawView &&
@@ -77,21 +85,57 @@ export function App(): React.ReactElement {
       ? parseSpeakerIndexFromSearch(window.location.search)
       : 1
   );
+  const [roomCode, setRoomCode] = useState<string | null>(() =>
+    typeof window !== 'undefined' ? readRoomCodeFromSearch(window.location.search) : null
+  );
 
   useEffect(() => {
     const onPopState = () => {
       setRoute(parseRouteFromSearch(window.location.search));
       setSpkIndex(parseSpeakerIndexFromSearch(window.location.search));
+      setRoomCode(readRoomCodeFromSearch(window.location.search));
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
+  // Auto-gera código exclusivo de sala (?room=XXXXXX) ao entrar no Setup ou no Admin sem código
   useEffect(() => {
-    if (route.view !== 'setup' && route.view !== 'audio-node' && route.view !== 'projector') {
-      startSpaceAmbient();
+    if ((route.view === 'setup' || route.view === 'admin') && !roomCode) {
+      const nextCode = generateRoomCode();
+      setRoomCode(nextCode);
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        if (!params.get('view')) {
+          params.set('view', route.view);
+        }
+        params.set('room', nextCode);
+        window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+      }
     }
-  }, [route.view]);
+  }, [roomCode, route.view]);
+
+  const handleRegenerateRoomCode = useCallback((): string => {
+    const nextCode = generateRoomCode();
+    setRoomCode(nextCode);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      params.set('room', nextCode);
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+    }
+    return nextCode;
+  }, []);
+
+  const handleJoinRoomCode = useCallback((rawCode: string) => {
+    const cleaned = normalizeRoomCode(rawCode);
+    if (!cleaned) return;
+    setRoomCode(cleaned);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      params.set('room', cleaned);
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+    }
+  }, []);
 
   const navigateTo = useCallback(
     (nextView: ViewRole, outId?: ProjectorOutId, nextSpk?: SpeakerNodeIndex) => {
@@ -102,12 +146,22 @@ export function App(): React.ReactElement {
       } else if (nextView === 'audio-node') {
         params.set('spk', String(nextSpk ?? 1));
       }
+
+      let activeRoom = roomCode;
+      if ((nextView === 'setup' || nextView === 'admin') && !activeRoom) {
+        activeRoom = generateRoomCode();
+        setRoomCode(activeRoom);
+      }
+      if (activeRoom && nextView !== 'portal') {
+        params.set('room', activeRoom);
+      }
+
       const nextUrl = `${window.location.pathname}?${params.toString()}`;
       window.history.pushState({}, '', nextUrl);
       setRoute(parseRouteFromSearch(`?${params.toString()}`));
       if (nextSpk) setSpkIndex(nextSpk);
     },
-    []
+    [roomCode]
   );
 
   const isDev = Boolean(
@@ -118,11 +172,37 @@ export function App(): React.ReactElement {
   const [fontScale, setFontScale] = useState(1);
 
   return (
-    <ExperienceProvider>
-      {route.view === 'setup' && <SetupView />}
+    <ExperienceProvider
+      activeView={route.view}
+      roomCode={roomCode}
+      onRegenerateRoomCode={handleRegenerateRoomCode}
+    >
+      {route.view === 'setup' && (
+        <SetupWizardView
+          onOpenAdmin={() => navigateTo('admin')}
+          onNavigate={navigateTo}
+        />
+      )}
+      {route.view === 'admin' && (
+        <SetupView onOpenSetupWizard={() => navigateTo('setup')} />
+      )}
       {route.view === 'simulator' && <SimulatorView />}
-      {route.view === 'projector' && <ProjectorView outId={route.outId} />}
-      {route.view === 'controller' && <TabletControllerView />}
+      {route.view === 'projector' && (
+        <RoomAccessGate
+          onJoinRoomCode={handleJoinRoomCode}
+          onGoToSetup={() => navigateTo('setup')}
+        >
+          <ProjectorView outId={route.outId} />
+        </RoomAccessGate>
+      )}
+      {route.view === 'controller' && (
+        <RoomAccessGate
+          onJoinRoomCode={handleJoinRoomCode}
+          onGoToSetup={() => navigateTo('setup')}
+        >
+          <TabletControllerView />
+        </RoomAccessGate>
+      )}
       {route.view === 'demo' && <WebDemoView />}
       {route.view === 'portal' && (
         <EntryPortal
@@ -133,23 +213,32 @@ export function App(): React.ReactElement {
             setFontScale((prev) => (prev === 1 ? 1.15 : prev === 1.15 ? 1.3 : 1))
           }
           onExploreEarth={() => navigateTo('demo')}
-          onOpenAuth={() => navigateTo('simulator')}
+          onOpenAuth={() => navigateTo('setup')}
           onOpenRegister={() => navigateTo('controller')}
         />
       )}
       {route.view === 'audio-node' && (
-        <AudioNodeView
-          spkIndex={spkIndex}
-          onChangeSpeakerIndex={(next) => navigateTo('audio-node', undefined, next)}
-        />
+        <RoomAccessGate
+          onJoinRoomCode={handleJoinRoomCode}
+          onGoToSetup={() => navigateTo('setup')}
+        >
+          <AudioNodeView
+            spkIndex={spkIndex}
+            onChangeSpeakerIndex={(next) => navigateTo('audio-node', undefined, next)}
+          />
+        </RoomAccessGate>
       )}
 
-      {/* Barra flutuante discreta APENAS em dev local (oculta nos projetores; posicionada à direita no Admin p/ não sobrepor a Sidebar) */}
+      {/* Barra flutuante discreta APENAS em dev local */}
       {isDev && route.view !== 'projector' && (
         <nav
           aria-label="Dev View Switcher"
-          className={`fixed bottom-2.5 z-50 flex items-center gap-1 rounded-full border border-slate-400/20 bg-[#060c1a]/92 p-1 text-[11px] font-medium text-slate-300 shadow-lg backdrop-blur-md ${
-            route.view === 'setup' ? 'right-3' : 'left-2.5'
+          className={`fixed z-50 flex items-center gap-1 rounded-full border border-slate-400/20 bg-[#060c1a]/92 p-1 text-[11px] font-medium text-slate-300 shadow-lg backdrop-blur-md ${
+            route.view === 'setup'
+              ? 'right-3 bottom-18'
+              : route.view === 'admin'
+                ? 'right-3 bottom-2.5'
+                : 'bottom-2.5 left-2.5'
           }`}
         >
           {(
@@ -180,7 +269,19 @@ export function App(): React.ReactElement {
                 ? 'bg-sky-400/20 font-semibold text-sky-200 ring-1 ring-sky-400/40'
                 : 'text-sky-300/90 hover:text-sky-200'
             }`}
-            title="Show Control Admin: Projetores, Som 8D, Caixas & Rede LAN (?view=admin)"
+            title="Setup Guiado (?view=setup)"
+          >
+            Setup
+          </button>
+          <button
+            type="button"
+            onClick={() => navigateTo('admin')}
+            className={`rounded-full px-2.5 py-1 transition ${
+              route.view === 'admin'
+                ? 'bg-sky-400/20 font-semibold text-sky-200 ring-1 ring-sky-400/40'
+                : 'text-slate-300 hover:text-white'
+            }`}
+            title="Show Control Admin para Desenvolvedores (?view=admin)"
           >
             Show Control
           </button>

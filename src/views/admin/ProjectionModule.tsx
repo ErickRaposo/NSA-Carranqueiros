@@ -7,10 +7,12 @@ import {
   SURFACE_IDS,
   SurfaceId,
 } from '../../experience/types';
+import { buildViewUrl } from '../../lan/roomCode';
 import {
   CalibrationSurfaceKey,
   createDefaultEdgeMask,
   EdgeFeatherMask,
+  getUniquePinHandlesForOutput,
   makeSurfaceQuadKey,
   ProjectionCalibrationState,
   ProjectionTopologyPreset,
@@ -40,9 +42,11 @@ export type RemoteWarpDragTarget =
     }
   | {
       kind: 'mesh';
+      outId: ProjectorOutId;
       quadKey: CalibrationSurfaceKey;
       startMouse: { x: number; y: number };
       startQuad: QuadCorners;
+      startQuads: Record<CalibrationSurfaceKey, QuadCorners>;
     };
 
 const EDGE_CORNER_PAIRS: ReadonlyArray<readonly [0 | 1 | 2 | 3, 0 | 1 | 2 | 3]> = [
@@ -107,6 +111,7 @@ interface ProjectionModuleProps {
   roomDimensions: RoomDimensions;
   remoteWarpRef: React.RefObject<HTMLDivElement>;
   baseOrigin: string;
+  roomCode?: string | null;
   copiedKey: string | null;
   onSelectPreset: (preset: Exclude<ProjectionTopologyPreset, 'custom'>) => void;
   onIdentifyOutputs: () => void;
@@ -140,6 +145,7 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
   roomDimensions,
   remoteWarpRef,
   baseOrigin,
+  roomCode,
   copiedKey,
   onSelectPreset,
   onIdentifyOutputs,
@@ -279,7 +285,8 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
               const cfg = projectionState.outputs[outId];
               const isSelectedForWarp = selectedWarpOut === outId;
               const copyKey = `proj-out-${outId}`;
-              const outUrl = `${baseOrigin}/?view=projector&out=${outId}`;
+              const outUrl = buildViewUrl(baseOrigin, 'projector', { outId, roomCode });
+              const outRelativeHref = buildViewUrl(null, 'projector', { outId, roomCode });
               const isCopied = copiedKey === copyKey;
               return (
                 <div
@@ -407,7 +414,7 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
                       </button>
 
                       <a
-                        href={`?view=projector&out=${outId}`}
+                        href={outRelativeHref}
                         target="_blank"
                         rel="noreferrer"
                         onClick={(e) => e.stopPropagation()}
@@ -570,9 +577,11 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
                         e.preventDefault();
                         onDragWarpStart({
                           kind: 'mesh',
+                          outId: selectedWarpOut,
                           quadKey: qKey,
                           startMouse: getPointerNorm(e),
                           startQuad: q,
+                          startQuads: projectionState.quads,
                         });
                       }}
                     />
@@ -705,36 +714,49 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
               </div>
             )}
 
-            {/* 4 Alças de Canto individuais TL / TR / BR / BL */}
-            {activeWarpSurfaces.map((sId) => {
-              const qKey = makeSurfaceQuadKey(selectedWarpOut, sId);
-              const q = projectionState.quads[qKey];
-              const accent = SURFACE_UI_META[sId].accentHex;
-              const labels = ['TL', 'TR', 'BR', 'BL'] as const;
-              return q.map((pt, idx) => (
+            {/* Alças de Canto deduplicadas (pins compartilhados soldados entre paredes formam 1 única alça limpa) */}
+            {getUniquePinHandlesForOutput(
+              selectedWarpOut,
+              activeWarpSurfaces,
+              projectionState.quads
+            ).map((handle) => {
+              const accent = SURFACE_UI_META[handle.surfaceId].accentHex;
+              const sharedSummary = handle.members
+                .map(
+                  (m) =>
+                    `${isPt ? SURFACE_UI_META[m.surfaceId].shortPt : SURFACE_UI_META[m.surfaceId].shortEn} ${['TL', 'TR', 'BR', 'BL'][m.cornerIdx]}`
+                )
+                .join(' + ');
+              return (
                 <button
-                  key={`${qKey}-${labels[idx]}`}
+                  key={handle.id}
                   type="button"
                   onPointerDown={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
                     onDragWarpStart({
                       kind: 'corner',
-                      quadKey: qKey,
-                      cornerIdx: idx as 0 | 1 | 2 | 3,
+                      quadKey: handle.quadKey,
+                      cornerIdx: handle.cornerIdx,
                     });
                   }}
-                  className={`absolute z-20 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center rounded-full border-2 bg-[#060913] text-[11px] font-semibold text-white active:cursor-grabbing [font-variant-numeric:tabular-nums] ${ADMIN_FOCUS}`}
+                  className={`absolute z-20 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center rounded-full border-2 bg-[#060913] text-[11px] font-semibold text-white active:cursor-grabbing [font-variant-numeric:tabular-nums] ${
+                    handle.isShared ? 'ring-2 ring-[#38bdf8]/60' : ''
+                  } ${ADMIN_FOCUS}`}
                   style={{
-                    left: `${pt.x * 100}%`,
-                    top: `${pt.y * 100}%`,
-                    borderColor: accent,
+                    left: `${handle.point.x * 100}%`,
+                    top: `${handle.point.y * 100}%`,
+                    borderColor: handle.isShared ? '#f8fafc' : accent,
                   }}
-                  title={`${SURFACE_UI_META[sId].shortPt} · ${labels[idx]} · ${Math.round(pt.x * 100)}%, ${Math.round(pt.y * 100)}%`}
+                  title={
+                    handle.isShared
+                      ? `${isPt ? 'Pin Soldado' : 'Welded Pin'} (${sharedSummary}) · ${Math.round(handle.point.x * 100)}%, ${Math.round(handle.point.y * 100)}%`
+                      : `${SURFACE_UI_META[handle.surfaceId].shortPt} · ${handle.label} · ${Math.round(handle.point.x * 100)}%, ${Math.round(handle.point.y * 100)}%`
+                  }
                 >
-                  {labels[idx]}
+                  {handle.isShared ? `${handle.memberCount}×` : handle.label}
                 </button>
-              ));
+              );
             })}
           </div>
 

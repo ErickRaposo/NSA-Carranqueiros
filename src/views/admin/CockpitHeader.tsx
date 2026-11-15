@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, EyeOff, Pause, Play, RotateCcw, Square } from 'lucide-react';
+import { Eye, EyeOff, Pause, Play, RotateCcw, Sparkles, Square } from 'lucide-react';
 import symbollLogo from '../../assets/symboll.png';
 import { Lang } from '../../experience/types';
 import { ADMIN_FOCUS, ADMIN_PRIMARY_PILL_CLASS } from './adminMeta';
@@ -15,6 +15,7 @@ interface CockpitHeaderProps {
   onStagePanic: () => void;
   onResetClick: () => void;
   onToggleLang: () => void;
+  onOpenSetupWizard?: () => void;
 }
 
 export const CockpitHeader: React.FC<CockpitHeaderProps> = ({
@@ -28,6 +29,7 @@ export const CockpitHeader: React.FC<CockpitHeaderProps> = ({
   onStagePanic,
   onResetClick,
   onToggleLang,
+  onOpenSetupWizard,
 }) => {
   const isPt = lang === 'pt';
 
@@ -112,6 +114,22 @@ export const CockpitHeader: React.FC<CockpitHeaderProps> = ({
           <RotateCcw size={13} />
           <span>{confirmResetArmed ? (isPt ? 'Confirmar?' : 'Confirm?') : 'Reset'}</span>
         </button>
+
+        {onOpenSetupWizard && (
+          <button
+            type="button"
+            onClick={onOpenSetupWizard}
+            className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-full border border-[#1e3a66] bg-[#060c1a] px-3.5 text-xs font-medium text-[#7dd3fc] transition hover:border-[#2563eb] hover:text-white ${ADMIN_FOCUS}`}
+            title={
+              isPt
+                ? 'Voltar ao assistente guiado de configuração (?view=setup)'
+                : 'Return to guided setup wizard (?view=setup)'
+            }
+          >
+            <Sparkles size={13} />
+            <span>{isPt ? 'Refazer Setup' : 'Re-run Setup'}</span>
+          </button>
+        )}
 
         <button
           type="button"

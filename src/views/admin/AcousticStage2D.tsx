@@ -5,6 +5,10 @@ import {
   speakerSlotIdToIndex,
   SpeakerSlotId,
 } from '../../audio/speakerCalibration';
+import {
+  isDelayClickSpeakerActive,
+  isPinkNoiseSpeakerActive,
+} from '../../audio/spatialAudioEngine';
 import { AudioAdminContextValue } from '../../experience/ExperienceContext';
 import { LiveNoteEvent, SurfaceId } from '../../experience/types';
 
@@ -65,13 +69,10 @@ function isSpeakerReceivingTest(
   spkId: SpeakerSlotId,
   refId: SpeakerSlotId
 ): boolean {
-  if (calibTestMode.kind === 'pink-all' || calibTestMode.kind === 'delay-click-all') return true;
-  if (calibTestMode.kind === 'pink-single') return calibTestMode.speakerId === spkId;
-  if (calibTestMode.kind === 'pink-ab') return calibTestMode.activeNow === spkId;
-  if (calibTestMode.kind === 'delay-click') {
-    return calibTestMode.targetSpeakerId === spkId || refId === spkId;
-  }
-  return false;
+  return (
+    isPinkNoiseSpeakerActive(calibTestMode, spkId) ||
+    isDelayClickSpeakerActive(calibTestMode, spkId, refId)
+  );
 }
 
 /**
