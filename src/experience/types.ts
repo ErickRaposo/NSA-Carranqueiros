@@ -314,7 +314,11 @@ export interface ExperienceContextValue {
   selectCountryPreserveBeat: (countryId: string) => void;
   setCompareSlot: (slot: 'A' | 'B', countryId: string) => void;
   swapCompareCountries: () => void;
-  activateMissionFrame: (phase: MissionPhase, nextStoryStep?: number) => void;
+  activateMissionFrame: (
+    phase: MissionPhase,
+    nextStoryStep?: number,
+    focusLayer?: VisualLayerId
+  ) => void;
   replayActiveFrame: () => void;
   setLoopSingleBar: (barIndex: number | null) => void;
   stepBeat: (delta: number) => void;

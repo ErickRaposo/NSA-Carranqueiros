@@ -151,9 +151,13 @@ describe('Show Control Admin (?view=admin), Matriz de Projetores Out 1..4, Nós 
     expect(resolveCompareSwapTarget('818', { slotA: '076', slotB: '818' })).toBe('076');
     expect(resolveCompareSwapTarget('156', { slotA: '076', slotB: '818' })).toBe('076');
 
-    expect(SHAY_MISSION_FRAMES).toHaveLength(10);
+    expect(SHAY_MISSION_FRAMES).toHaveLength(12);
     expect(resolveActiveMissionFrameId('countdown', 0)).toBe('countdown');
-    expect(resolveActiveMissionFrameId('exploring', 2)).toBe('exploring-2');
+    expect(resolveActiveMissionFrameId('exploring', 1)).toBe('exploring-melody');
+    expect(resolveActiveMissionFrameId('exploring', 2)).toBe('exploring-chords');
+    expect(resolveActiveMissionFrameId('exploring', 3)).toBe('exploring-temperature');
+    expect(resolveActiveMissionFrameId('exploring', 4)).toBe('exploring-bass');
+    expect(resolveActiveMissionFrameId('exploring', 5)).toBe('exploring-wind');
 
     const countdownPt = resolveFramePrompts('countdown', {
       lang: 'pt',
@@ -167,17 +171,17 @@ describe('Show Control Admin (?view=admin), Matriz de Projetores Out 1..4, Nós 
     });
     expect(countdownPt.spoken).toContain('Cinco, quatro, três');
 
-    const exploring2En = resolveFramePrompts('exploring-2', {
+    const exploringChordsEn = resolveFramePrompts('exploring-chords', {
       lang: 'en',
       countryName: 'Brazil',
-      activeLayerLabel: 'Melody',
+      activeLayerLabel: 'Chords',
       bpm: 102,
       keyRoot: 'D',
       keyRootPt: 'Ré',
       activeChord: 'Dadd9',
       windMeanSpeed: 6.4,
     });
-    expect(exploring2En.phrases[0]).toContain('102 BPM in D (Dadd9)');
+    expect(exploringChordsEn.phrases[0]).toContain('Brazil (Dadd9)');
   });
 
   it('calcula níveis ao vivo por caixa física (C1, C2, C3) coerentes com a posição geográfica do raio', () => {

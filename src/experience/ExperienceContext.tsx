@@ -139,7 +139,7 @@ interface CountryMetaJson {
 const SYNC_CHANNEL_NAME = 'earth-jukebox-sync-v1';
 const countryMetaCache = new Map<string, CountryMetaJson>();
 const ROOM_STORAGE_KEY = 'earth-jukebox-room-dims-v1';
-const STORY_STEP_COUNT = 4;
+const STORY_STEP_COUNT = 6;
 
 interface PilotMusicalProfile {
   regionBpm: number;
@@ -1101,7 +1101,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [availableCountryIds, compareCountries, selectedCountryId]);
 
   const activateMissionFrame = useCallback(
-    (phase: MissionPhase, nextStoryStep?: number) => {
+    (phase: MissionPhase, nextStoryStep?: number, focusLayer?: VisualLayerId) => {
       setMissionPhaseState(phase);
       if (typeof nextStoryStep === 'number') {
         const normalized =
@@ -1111,6 +1111,15 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (phase === 'exploring' && normalized > 0 && !selectedCountryId) {
           setSelectedCountryId('076');
         }
+      }
+      if (focusLayer) {
+        setLayers((prev) => ({
+          ...prev,
+          [focusLayer]: {
+            ...prev[focusLayer],
+            enabled: true,
+          },
+        }));
       }
       setSceneReplayKey((k) => k + 1);
     },

@@ -204,7 +204,7 @@ export const SetupView: React.FC = () => {
     const currentSpec = SHAY_MISSION_FRAMES[idx];
     const nextSpec = SHAY_MISSION_FRAMES[idx + 1];
     const timer = window.setTimeout(() => {
-      activateMissionFrame(nextSpec.phase, nextSpec.storyStep);
+      activateMissionFrame(nextSpec.phase, nextSpec.storyStep, nextSpec.focusLayer);
     }, currentSpec.autoDurationMs);
     return () => window.clearTimeout(timer);
   }, [activateMissionFrame, activeFrameId, isAutoSequencePlaying]);
@@ -1698,8 +1698,8 @@ export const SetupView: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Grade dos 10 Quadros Reais */}
-                    <div className="mt-3.5 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    {/* Grade dos 12 Quadros Reais (incluindo 1 cena por camada) */}
+                    <div className="mt-3.5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
                       {SHAY_MISSION_FRAMES.map((frame) => {
                         const isActive = activeFrameId === frame.id;
                         return (
@@ -1708,7 +1708,7 @@ export const SetupView: React.FC = () => {
                             type="button"
                             onClick={() => {
                               setIsAutoSequencePlaying(false);
-                              activateMissionFrame(frame.phase, frame.storyStep);
+                              activateMissionFrame(frame.phase, frame.storyStep, frame.focusLayer);
                             }}
                             className={`flex flex-col items-start justify-between rounded-xl border p-2.5 text-left transition ${
                               isActive

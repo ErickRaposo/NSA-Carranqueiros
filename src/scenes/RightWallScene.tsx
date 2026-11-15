@@ -47,7 +47,15 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
       ? 'a Terra'
       : 'Earth';
 
-  const activeStep = storyStep % 4;
+  const activeStep = storyStep % 6;
+  const stepToLayerId: Partial<Record<number, VisualLayerId>> = {
+    1: 'melody',
+    2: 'chords',
+    3: 'temperature',
+    4: 'bass',
+    5: 'wind',
+  };
+  const stepLayerId = stepToLayerId[activeStep] ?? null;
   const enabledLayerIds = VISUAL_LAYER_ORDER.filter((id) => layers[id].enabled);
   const [focusedLayerId, setFocusedLayerId] = useState<VisualLayerId | null>(null);
   const prevLayerEnabledRef = useRef<Record<VisualLayerId, boolean>>({
@@ -73,9 +81,10 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
   }, [enabledLayerIds, focusedLayerId, layers]);
 
   const activeLayerForSpeech: VisualLayerId | null =
-    focusedLayerId && layers[focusedLayerId].enabled
+    stepLayerId ??
+    (focusedLayerId && layers[focusedLayerId].enabled
       ? focusedLayerId
-      : (enabledLayerIds[0] ?? null);
+      : (enabledLayerIds[0] ?? null));
   const activeLayerMeta = LAYER_METAS[activeLayerForSpeech ?? 'melody'];
 
   const lastSpokenKeyRef = useRef<string>('');

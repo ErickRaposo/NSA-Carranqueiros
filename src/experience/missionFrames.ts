@@ -1,4 +1,4 @@
-import { Lang, MissionPhase } from './types';
+import { Lang, MissionPhase, VisualLayerId } from './types';
 
 export type MissionFrameId =
   | 'idle'
@@ -7,9 +7,11 @@ export type MissionFrameId =
   | 'countdown'
   | 'zero_g'
   | 'exploring-0'
-  | 'exploring-1'
-  | 'exploring-2'
-  | 'exploring-3'
+  | 'exploring-melody'
+  | 'exploring-chords'
+  | 'exploring-temperature'
+  | 'exploring-bass'
+  | 'exploring-wind'
   | 'ended';
 
 export interface MissionFrameSpec {
@@ -17,6 +19,7 @@ export interface MissionFrameSpec {
   order: number;
   phase: MissionPhase;
   storyStep?: number;
+  focusLayer?: VisualLayerId;
   requiresCountry?: boolean;
   autoDurationMs: number;
   titlePt: string;
@@ -116,60 +119,97 @@ export const SHAY_MISSION_FRAMES: ReadonlyArray<MissionFrameSpec> = [
     ceilingEn: '12 interactive floating flags',
   },
   {
-    id: 'exploring-1',
+    id: 'exploring-melody',
     order: 7,
     phase: 'exploring',
     storyStep: 1,
+    focusLayer: 'melody',
     requiresCountry: true,
     autoDurationMs: 5500,
-    titlePt: '7. Exploração · Destaque 2D',
-    titleEn: '7. Exploring · 2D Highlight',
-    leftWallPt: 'Globo morphing para 2D com destaque máximo no país',
-    leftWallEn: 'Globe morphs to 2D with maximum country highlight',
-    rightWallPt: 'MINEIRØ explica o país e a 1ª camada ativa',
-    rightWallEn: 'MINEIRØ explains country and active layer',
-    ceilingPt: 'Card cultural com foto referenciada + céu vivo',
-    ceilingEn: 'Referenced cultural photo card + live sky',
+    titlePt: '7. Camada · Melodia (Raios)',
+    titleEn: '7. Layer · Melody (Lightning)',
+    leftWallPt: 'País em destaque 2D + flashes de raios ISS-LIS',
+    leftWallEn: 'Country in 2D highlight + ISS-LIS lightning flashes',
+    rightWallPt: 'MINEIRØ comenta os raios virando melodia',
+    rightWallEn: 'MINEIRØ explains lightning turning into melody',
+    ceilingPt: 'Card cultural + flashes dourados no céu',
+    ceilingEn: 'Cultural card + golden lightning flashes overhead',
   },
   {
-    id: 'exploring-2',
+    id: 'exploring-chords',
     order: 8,
     phase: 'exploring',
     storyStep: 2,
+    focusLayer: 'chords',
     requiresCountry: true,
     autoDurationMs: 5500,
-    titlePt: '8. Exploração · Harmonia',
-    titleEn: '8. Exploring · Harmony',
-    leftWallPt: 'País em destaque máximo 2D + camadas climáticas',
-    leftWallEn: 'Country in 2D max highlight + climate layers',
-    rightWallPt: 'MINEIRØ lê BPM, tom musical e acorde ao vivo',
-    rightWallEn: 'MINEIRØ reads live BPM, key and chord',
-    ceilingPt: 'Card cultural + ações climáticas no céu',
-    ceilingEn: 'Cultural card + climate sky effects',
+    titlePt: '8. Camada · Acordes (CO)',
+    titleEn: '8. Layer · Chords (CO)',
+    leftWallPt: 'País em destaque 2D + pluma de Monóxido de Carbono',
+    leftWallEn: 'Country in 2D highlight + Carbon Monoxide plume',
+    rightWallPt: 'MINEIRØ comenta a harmonia guiada pelo CO',
+    rightWallEn: 'MINEIRØ explains harmony shaped by CO',
+    ceilingPt: 'Card cultural + anéis harmônicos pulsando no BPM',
+    ceilingEn: 'Cultural card + harmonic rings pulsing to BPM',
   },
   {
-    id: 'exploring-3',
+    id: 'exploring-temperature',
     order: 9,
     phase: 'exploring',
     storyStep: 3,
+    focusLayer: 'temperature',
     requiresCountry: true,
     autoDurationMs: 5500,
-    titlePt: '9. Exploração · Vento',
-    titleEn: '9. Exploring · Wind',
-    leftWallPt: 'País em destaque 2D até trocar para outro país',
-    leftWallEn: 'Country stays in 2D highlight until swapped',
-    rightWallPt: 'MINEIRØ lê vento (m/s) e convida a trocar de país',
-    rightWallEn: 'MINEIRØ reads wind (m/s) and invites next country',
-    ceilingPt: 'Card cultural + fluxo de vento no céu',
-    ceilingEn: 'Cultural card + sky wind streaks',
+    titlePt: '9. Camada · Temperatura',
+    titleEn: '9. Layer · Temperature',
+    leftWallPt: 'País em destaque 2D + camada térmica GEOS-FP',
+    leftWallEn: 'Country in 2D highlight + GEOS-FP thermal layer',
+    rightWallPt: 'MINEIRØ comenta o calor aquecendo o timbre',
+    rightWallEn: 'MINEIRØ explains surface heat warming the timbre',
+    ceilingPt: 'Card cultural + aura térmica pulsante no céu',
+    ceilingEn: 'Cultural card + pulsing thermal sky glow',
+  },
+  {
+    id: 'exploring-bass',
+    order: 10,
+    phase: 'exploring',
+    storyStep: 4,
+    focusLayer: 'bass',
+    requiresCountry: true,
+    autoDurationMs: 5500,
+    titlePt: '10. Camada · Base & Chuva (NO₂)',
+    titleEn: '10. Layer · Bass & Rain (NO₂)',
+    leftWallPt: 'País em destaque 2D + concentração urbana de NO₂',
+    leftWallEn: 'Country in 2D highlight + urban NO₂ density',
+    rightWallPt: 'MINEIRØ comenta o pulso grave e chuva espacial',
+    rightWallEn: 'MINEIRØ explains deep bass pulse and sky rain',
+    ceilingPt: 'Card cultural + feixes verticais de chuva/NO₂',
+    ceilingEn: 'Cultural card + vertical NO₂/rain streaks overhead',
+  },
+  {
+    id: 'exploring-wind',
+    order: 11,
+    phase: 'exploring',
+    storyStep: 5,
+    focusLayer: 'wind',
+    requiresCountry: true,
+    autoDurationMs: 5500,
+    titlePt: '11. Camada · Vento (8D)',
+    titleEn: '11. Layer · Wind (8D)',
+    leftWallPt: 'País em destaque 2D + vetores de vento 10m',
+    leftWallEn: 'Country in 2D highlight + 10m wind vectors',
+    rightWallPt: 'MINEIRØ lê vento (m/s) girando nas 3 caixas',
+    rightWallEn: 'MINEIRØ reads wind (m/s) panning across 3 speakers',
+    ceilingPt: 'Card cultural + rajadas de vento cruzando o céu',
+    ceilingEn: 'Cultural card + wind streams sweeping overhead',
   },
   {
     id: 'ended',
-    order: 10,
+    order: 12,
     phase: 'ended',
     autoDurationMs: 10000,
-    titlePt: '10. Missão Cumprida',
-    titleEn: '10. Mission Ended',
+    titlePt: '12. Missão Cumprida',
+    titleEn: '12. Mission Ended',
     leftWallPt: 'Nave descendo pela vigia -> pouso -> Globo final',
     leftWallEn: 'Ship descending in porthole -> landing -> final Globe',
     rightWallPt: 'Descida -> Tranco + Medalha -> Logo MINEIRØ + Developed by',
@@ -184,10 +224,12 @@ export function resolveActiveMissionFrameId(
   storyStep: number
 ): MissionFrameId {
   if (phase === 'exploring') {
-    const step = ((storyStep % 4) + 4) % 4;
-    if (step === 1) return 'exploring-1';
-    if (step === 2) return 'exploring-2';
-    if (step === 3) return 'exploring-3';
+    const step = ((storyStep % 6) + 6) % 6;
+    if (step === 1) return 'exploring-melody';
+    if (step === 2) return 'exploring-chords';
+    if (step === 3) return 'exploring-temperature';
+    if (step === 4) return 'exploring-bass';
+    if (step === 5) return 'exploring-wind';
     return 'exploring-0';
   }
   return phase;
@@ -317,59 +359,99 @@ export function resolveFramePrompts(
             spoken: 'Choose any country on the tablet, or look up at the ceiling!',
           };
 
-    case 'exploring-1':
+    case 'exploring-melody':
       return isPt
         ? {
             phrases: [
-              `Perfeito! Você escolheu ${ctx.countryName}.`,
-              `Ative uma camada no tablet, como ${ctx.activeLayerLabel}...`,
-              'Cada dado da NASA vira música e acende no teto!',
+              `Raios ISS-LIS sobre ${ctx.countryName}!`,
+              'Cada relâmpago vira uma nota melódica e um flash no teto.',
+              'Experimente combinar outra camada da NASA por cima!',
             ],
-            spoken: `Perfeito! Você escolheu ${ctx.countryName}. Ative uma camada no tablet para ouvir os dados da NASA virarem música.`,
+            spoken: `Camada de Melodia ativa sobre ${ctx.countryName}. Os raios captados pela Estação Espacial estão virando notas musicais e flashes no teto!`,
           }
         : {
             phrases: [
-              `Great choice: ${ctx.countryName}!`,
-              `Enable a layer on the tablet, like ${ctx.activeLayerLabel}...`,
-              'Each NASA dataset becomes music and lights up above!',
+              `ISS-LIS Lightning over ${ctx.countryName}!`,
+              'Every flash becomes a melodic note and lights up the ceiling.',
+              'Try stacking another NASA layer on top!',
             ],
-            spoken: `Great choice: ${ctx.countryName}. Enable a layer on the tablet to hear NASA data become music.`,
+            spoken: `Melody layer active over ${ctx.countryName}. Lightning flashes captured from the Space Station are turning into musical notes above you!`,
           };
 
-    case 'exploring-2':
+    case 'exploring-chords':
       return isPt
         ? {
             phrases: [
-              `${ctx.bpm} BPM em ${ctx.keyRootPt} (${ctx.activeChord}).`,
-              'Experimente ligar outra camada por cima...',
-              'Os sons vão se harmonizando juntos em tempo real!',
+              `Monóxido de Carbono (CO) em ${ctx.countryName} (${ctx.activeChord}).`,
+              'A pluma atmosférica molda os acordes em tempo real!',
+              'Veja os anéis harmônicos pulsando no teto.',
             ],
-            spoken: `Agora experimente ativar outra camada por cima para ouvir os sons se harmonizando juntos sobre ${ctx.countryName}.`,
+            spoken: `Camada de Acordes ativa sobre ${ctx.countryName}. A concentração de monóxido de carbono está moldando a harmonia em ${ctx.activeChord}!`,
           }
         : {
             phrases: [
-              `${ctx.bpm} BPM in ${ctx.keyRoot} (${ctx.activeChord}).`,
-              'Try stacking another layer on top...',
-              'The sounds harmonize together in real time!',
+              `Carbon Monoxide (CO) over ${ctx.countryName} (${ctx.activeChord}).`,
+              'Atmospheric plumes shape the chords in real time!',
+              'Watch the harmonic rings pulsing overhead.',
             ],
-            spoken: `Try stacking another layer on top so the sounds harmonize together over ${ctx.countryName}.`,
+            spoken: `Chords layer active over ${ctx.countryName}. Carbon monoxide levels are shaping the harmony in ${ctx.activeChord}!`,
           };
 
-    case 'exploring-3':
+    case 'exploring-temperature':
       return isPt
         ? {
             phrases: [
-              `Em ${ctx.countryName}, o vento sopra a ${ctx.windMeanSpeed.toFixed(1)} m/s.`,
-              'Quer explorar outro lugar? Toque em outro país no tablet!',
+              `Temperatura na superfície de ${ctx.countryName}!`,
+              'O calor observado pela NASA aquece o timbre e o brilho do globo.',
+              `Agora soando em ${ctx.keyRootPt} a ${ctx.bpm} BPM.`,
             ],
-            spoken: `Em ${ctx.countryName}, a atmosfera está soando em ${ctx.bpm} batidas por minuto. Quer explorar outro país?`,
+            spoken: `Camada de Temperatura ativa sobre ${ctx.countryName}. Os dados térmicos da NASA estão aquecendo o timbre e o brilho do planeta!`,
           }
         : {
             phrases: [
-              `In ${ctx.countryName}, winds blow at ${ctx.windMeanSpeed.toFixed(1)} m/s.`,
-              'Want another region? Tap any country on the tablet!',
+              `Surface temperature over ${ctx.countryName}!`,
+              'NASA thermal data warms the synth timbre and planet glow.',
+              `Now sounding in ${ctx.keyRoot} at ${ctx.bpm} BPM.`,
             ],
-            spoken: `In ${ctx.countryName}, the atmosphere is sounding at ${ctx.bpm} beats per minute. Want to explore another country?`,
+            spoken: `Temperature layer active over ${ctx.countryName}. NASA thermal observations are warming the timbre and planet glow!`,
+          };
+
+    case 'exploring-bass':
+      return isPt
+        ? {
+            phrases: [
+              `Dióxido de Nitrogênio (NO₂) em ${ctx.countryName}!`,
+              'As emissões urbanas viram pulso grave e gotículas no teto.',
+              'Sinta o peso espacial vibrando nas caixas!',
+            ],
+            spoken: `Camada de Base e Chuva ativa sobre ${ctx.countryName}. Os níveis de dióxido de nitrogênio estão guiando o pulso grave no quarto!`,
+          }
+        : {
+            phrases: [
+              `Nitrogen Dioxide (NO₂) over ${ctx.countryName}!`,
+              'Urban emissions become deep bass pulses and rain streaks above.',
+              'Feel the spatial weight across the speakers!',
+            ],
+            spoken: `Bass and Rain layer active over ${ctx.countryName}. Nitrogen dioxide levels are driving the deep spatial pulse across the room!`,
+          };
+
+    case 'exploring-wind':
+      return isPt
+        ? {
+            phrases: [
+              `Ventos a ${ctx.windMeanSpeed.toFixed(1)} m/s em ${ctx.countryName}!`,
+              'As rajadas da NASA giram o som em 8D pelas 3 caixas.',
+              'Olhe as correntes de vento cruzando o céu acima!',
+            ],
+            spoken: `Camada de Vento ativa sobre ${ctx.countryName}, soprando a ${ctx.windMeanSpeed.toFixed(1)} metros por segundo nas três caixas do quarto!`,
+          }
+        : {
+            phrases: [
+              `Winds at ${ctx.windMeanSpeed.toFixed(1)} m/s over ${ctx.countryName}!`,
+              'NASA wind gusts pan 8D audio across all 3 room speakers.',
+              'Watch the wind streams sweeping across the ceiling!',
+            ],
+            spoken: `Wind layer active over ${ctx.countryName}, blowing at ${ctx.windMeanSpeed.toFixed(1)} meters per second across the room speakers!`,
           };
 
     case 'ended':
