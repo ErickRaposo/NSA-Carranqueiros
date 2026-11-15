@@ -2695,7 +2695,10 @@ a:focus-visible {
   width: min(100%, 820px);
   height: auto;
   display: block;
-  mix-blend-mode: lighten;
+  border-radius: 9999px;
+  mix-blend-mode: screen;
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 54%, transparent 72%);
+  mask-image: radial-gradient(circle at 50% 50%, #000 54%, transparent 72%);
   pointer-events: none;
   user-select: none;
   opacity: 0.96;
