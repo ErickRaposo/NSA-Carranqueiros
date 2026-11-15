@@ -15,11 +15,11 @@ import {
   resolveActiveMissionFrameId,
   SHAY_MISSION_FRAMES,
 } from '../experience/missionFrames';
+import { updateWallDimension } from '../experience/roomDimensions';
 import {
   PILOT_COUNTRY_IDS,
   PROJECTOR_OUT_IDS,
   ProjectorOutId,
-  RoomDimensions,
   SurfaceId,
 } from '../experience/types';
 import { encodeQrMatrix } from '../lan/qrCodeSvg';
@@ -351,15 +351,8 @@ export const SetupView: React.FC<SetupViewProps> = ({ onOpenSetupWizard }) => {
     field: 'widthCm' | 'heightCm',
     rawValue: string
   ) => {
-    const val = Math.max(50, Math.min(2000, Number(rawValue) || 100));
-    const next: RoomDimensions = {
-      ...roomDimensions,
-      [surface]: {
-        ...roomDimensions[surface],
-        [field]: val,
-      },
-    };
-    setRoomDimensions(next);
+    if (surface === 'ceiling') return;
+    setRoomDimensions(updateWallDimension(roomDimensions, surface, field, rawValue));
   };
 
   const anyGridActive = useMemo(

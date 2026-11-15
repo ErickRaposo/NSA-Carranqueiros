@@ -5,6 +5,7 @@ import {
   useProjectionAdmin,
 } from '../experience/ExperienceContext';
 import { ProjectorOutId, SurfaceId } from '../experience/types';
+import { buildCalibrationGridCircles } from '../projection/calibrationCircles';
 import {
   CalibrationSurfaceKey,
   computeHomographyMatrix3d,
@@ -91,6 +92,8 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
   }));
 
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [localIdentifyUntil, setLocalIdentifyUntil] = useState<number>(() => projectionState.identifyUntil);
+  const lastIdentifyNonceRef = useRef<number>(projectionState.identifyNonce ?? 0);
 
   const [draggingPin, setDraggingPin] = useState<{
     surfaceKey: CalibrationSurfaceKey;
@@ -106,20 +109,31 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
 
   const isGridVisible = projectionState.showGrid || outputCfg.showGrid;
   const isBlackout = projectionState.globalBlackout || outputCfg.blackout;
-  const isIdentifying = projectionState.identifyUntil > nowMs;
+  const isIdentifying = localIdentifyUntil > nowMs;
 
   useEffect(() => {
-    if (projectionState.identifyUntil <= Date.now()) return;
+    const incomingNonce = projectionState.identifyNonce ?? 0;
+    let targetUntil = projectionState.identifyUntil;
+    if (incomingNonce > 0 && incomingNonce !== lastIdentifyNonceRef.current) {
+      lastIdentifyNonceRef.current = incomingNonce;
+      targetUntil = Date.now() + (projectionState.identifyDurationMs ?? 7000);
+    }
+    setLocalIdentifyUntil(targetUntil);
+    if (targetUntil <= Date.now()) return;
     setNowMs(Date.now());
     const timer = window.setInterval(() => {
       const curr = Date.now();
       setNowMs(curr);
-      if (curr >= projectionState.identifyUntil) {
+      if (curr >= targetUntil) {
         window.clearInterval(timer);
       }
     }, 250);
     return () => window.clearInterval(timer);
-  }, [projectionState.identifyUntil]);
+  }, [
+    projectionState.identifyDurationMs,
+    projectionState.identifyNonce,
+    projectionState.identifyUntil,
+  ]);
 
   useEffect(() => {
     const onResize = () => {
@@ -298,38 +312,100 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
                 );
               })()}
 
-              {isGridVisible && (
-                <div
-                  className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
-                  style={{
-                    border: `3px solid ${meta.accentHex}`,
-                    backgroundImage: `
-                      linear-gradient(to right, rgba(255,255,255,0.16) 1px, transparent 1px),
-                      linear-gradient(to bottom, rgba(255,255,255,0.16) 1px, transparent 1px)
-                    `,
-                    backgroundSize: `${srcW / 8}px ${srcH / 8}px`,
-                  }}
-                >
+              {isGridVisible && (() => {
+                const circles = buildCalibrationGridCircles(srcW, srcH);
+                const surfaceDim = roomDimensions[surfaceId];
+                return (
                   <div
-                    className="relative flex h-28 w-28 items-center justify-center rounded-full border-2"
-                    style={{ borderColor: meta.accentHex }}
+                    data-testid={`projector-grid-${surfaceId}`}
+                    className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
+                    style={{
+                      border: `3px solid ${meta.accentHex}`,
+                      backgroundImage: `
+                        linear-gradient(to right, rgba(255,255,255,0.16) 1px, transparent 1px),
+                        linear-gradient(to bottom, rgba(255,255,255,0.16) 1px, transparent 1px)
+                      `,
+                      backgroundSize: `${srcW / 8}px ${srcH / 8}px`,
+                    }}
                   >
-                    <div className="absolute h-full w-0.5 bg-white/60" />
-                    <div className="absolute h-0.5 w-full bg-white/60" />
+                    <svg
+                      viewBox={`0 0 ${srcW} ${srcH}`}
+                      data-testid={`projector-grid-circles-${surfaceId}`}
+                      className="absolute inset-0 h-full w-full"
+                    >
+                      <line
+                        x1={0}
+                        y1={0}
+                        x2={srcW}
+                        y2={srcH}
+                        stroke="rgba(255,255,255,0.16)"
+                        strokeWidth={1.5}
+                        strokeDasharray="10 10"
+                      />
+                      <line
+                        x1={srcW}
+                        y1={0}
+                        x2={0}
+                        y2={srcH}
+                        stroke="rgba(255,255,255,0.16)"
+                        strokeWidth={1.5}
+                        strokeDasharray="10 10"
+                      />
+                      {circles.map((c) => {
+                        const crossArm = Math.min(18, c.r * 0.45);
+                        const isCenter = c.kind === 'center';
+                        return (
+                          <g key={c.id}>
+                            <circle
+                              cx={c.cx}
+                              cy={c.cy}
+                              r={c.r}
+                              fill="none"
+                              stroke={isCenter ? meta.accentHex : 'rgba(255,255,255,0.78)'}
+                              strokeOpacity={isCenter ? 0.9 : c.kind === 'corner' ? 0.85 : 0.65}
+                              strokeWidth={isCenter ? 2.5 : c.kind === 'corner' ? 2 : 1.5}
+                            />
+                            <circle
+                              cx={c.cx}
+                              cy={c.cy}
+                              r={2.5}
+                              fill={isCenter ? meta.accentHex : '#ffffff'}
+                            />
+                            <line
+                              x1={c.cx - crossArm}
+                              y1={c.cy}
+                              x2={c.cx + crossArm}
+                              y2={c.cy}
+                              stroke={isCenter ? meta.accentHex : 'rgba(255,255,255,0.55)'}
+                              strokeWidth={1.25}
+                            />
+                            <line
+                              x1={c.cx}
+                              y1={c.cy - crossArm}
+                              x2={c.cx}
+                              y2={c.cy + crossArm}
+                              stroke={isCenter ? meta.accentHex : 'rgba(255,255,255,0.55)'}
+                              strokeWidth={1.25}
+                            />
+                          </g>
+                        );
+                      })}
+                    </svg>
+
+                    <div
+                      className="relative z-10 rounded-xl bg-black/90 px-5 py-2 text-lg font-bold tracking-wider uppercase"
+                      style={{ color: meta.accentHex, border: `1px solid ${meta.accentHex}` }}
+                    >
+                      OUT {outId} · {isPt ? meta.titlePt : meta.titleEn} · {surfaceDim.widthCm}×{surfaceDim.heightCm} cm
+                    </div>
+                    <span className="relative z-10 mt-1.5 rounded bg-black/85 px-3 py-1 text-xs text-slate-300 [font-variant-numeric:tabular-nums]">
+                      {isPt
+                        ? 'Observe os círculos na parede: se ficarem redondos, a proporção está correta · C fecha grade · R reseta · B blackout'
+                        : 'Check scattered circles on the wall: round circles confirm true proportions · C hides grid · R resets · B blackout'}
+                    </span>
                   </div>
-                  <div
-                    className="mt-4 rounded-xl bg-black/90 px-5 py-2 text-lg font-bold tracking-wider uppercase"
-                    style={{ color: meta.accentHex, border: `1px solid ${meta.accentHex}` }}
-                  >
-                    OUT {outId} · {isPt ? meta.titlePt : meta.titleEn}
-                  </div>
-                  <span className="mt-1.5 rounded bg-black/85 px-3 py-1 text-xs text-slate-300 [font-variant-numeric:tabular-nums]">
-                    {isPt
-                      ? 'Arraste os 4 vértices · Tecla C fecha grade · Tecla R reseta · Tecla B blackout'
-                      : 'Drag 4 pins · Key C hides grid · Key R resets · Key B blackout'}
-                  </span>
-                </div>
-              )}
+                );
+              })()}
             </div>
           );
         })}

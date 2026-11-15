@@ -11,6 +11,10 @@ import {
 } from '../audio/spatialAudioEngine';
 import { RoomAccessGate } from '../components/RoomAccessGate';
 import { ExperienceProvider } from '../experience/ExperienceContext';
+import {
+  DEFAULT_ROOM_DIMENSIONS,
+  updateWallDimension,
+} from '../experience/roomDimensions';
 import { computeFormatBits, encodeQrMatrix } from '../lan/qrCodeSvg';
 import {
   buildViewUrl,
@@ -26,10 +30,13 @@ import {
   createTrailingThrottle,
   isHostCapableRole,
 } from '../lan/roomSyncTransport';
+import { buildCalibrationGridCircles } from '../projection/calibrationCircles';
+import { applyProjectionPreset } from '../projection/homography';
 import { SetupWizardView } from '../views/SetupWizardView';
 import { presetToScenario } from '../views/setup/setupTypes';
 import { StepAudioSetup } from '../views/setup/StepAudioSetup';
 import { StepControllerPairing } from '../views/setup/StepControllerPairing';
+import { StepProjectionSetup } from '../views/setup/StepProjectionSetup';
 import { StepReadySummary } from '../views/setup/StepReadySummary';
 
 describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atraso A/V e Toggles Independentes', () => {
@@ -589,5 +596,189 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     expect(readySingleHtml).toContain('btn-launch-demo');
     expect(readySingleHtml).toContain('btn-open-admin');
     expect(readySingleHtml).not.toContain('Simulador 3D');
+  });
+
+  it('atualiza o tamanho das paredes na etapa de Projetores derivando o teto pela largura de uma parede pela outra', () => {
+    const afterLeft = updateWallDimension(DEFAULT_ROOM_DIMENSIONS, 'leftWall', 'widthCm', '420');
+    const afterRight = updateWallDimension(afterLeft, 'rightWall', 'widthCm', '310');
+
+    expect(afterRight.leftWall).toEqual({ widthCm: 420, heightCm: 270 });
+    expect(afterRight.rightWall).toEqual({ widthCm: 310, heightCm: 270 });
+    expect(afterRight.ceiling).toEqual({ widthCm: 310, heightCm: 420 });
+
+    // Respeita limites mínimo (50 cm) e máximo (2000 cm)
+    const clampedMin = updateWallDimension(afterRight, 'leftWall', 'widthCm', '10');
+    expect(clampedMin.leftWall.widthCm).toBe(50);
+    expect(clampedMin.ceiling.heightCm).toBe(50);
+
+    const projStepHtml = renderToStaticMarkup(
+      <StepProjectionSetup
+        isPt={true}
+        scenario={3}
+        projectionState={applyProjectionPreset('3-projectors')}
+        roomDimensions={afterRight}
+        baseOrigin="https://earth.vercel.app"
+        roomCode="AB34CD"
+        lanClients={[]}
+        copiedKey={null}
+        onCopyText={() => {}}
+        onIdentifyOutputs={() => {}}
+        onToggleGlobalShowGrid={() => {}}
+        onResetAllProjectionQuads={() => {}}
+        onUpdateSurfaceQuad={() => {}}
+        onTranslateOutputMesh={() => {}}
+        onUpdateWallDimension={() => {}}
+        onResetRoomDimensions={() => {}}
+      />
+    );
+    expect(projStepHtml).toContain('setup-wall-dimensions-panel');
+    expect(projStepHtml).toContain('dim-leftWall-width');
+    expect(projStepHtml).toContain('dim-rightWall-width');
+    expect(projStepHtml).toContain('dim-ceiling-auto');
+    expect(projStepHtml).toContain('310 × 420 cm');
+
+    // Círculos de proporção espalhados na grade permanecem sempre contidos na parede em qualquer aspect ratio
+    for (const [w, h] of [
+      [1280, 960],
+      [1600, 900],
+      [640, 1280],
+    ]) {
+      const circles = buildCalibrationGridCircles(w, h);
+      expect(circles.length).toBeGreaterThanOrEqual(10);
+      for (const c of circles) {
+        expect(c.r).toBeGreaterThan(0);
+        expect(c.cx - c.r).toBeGreaterThanOrEqual(0);
+        expect(c.cx + c.r).toBeLessThanOrEqual(w);
+        expect(c.cy - c.r).toBeGreaterThanOrEqual(0);
+        expect(c.cy + c.r).toBeLessThanOrEqual(h);
+      }
+    }
+  });
+
+  it('empurra snapshot completo (sync + projection + calib) quando outro PC conecta e reenvia request-state com retentativas', () => {
+    vi.useFakeTimers();
+    const origWs = globalThis.WebSocket;
+    const sockets: Array<{
+      sent: string[];
+      onopen: (() => void) | null;
+      onmessage: ((ev: { data: string }) => void) | null;
+      onclose: (() => void) | null;
+      onerror: (() => void) | null;
+      readyState: number;
+      close: () => void;
+      send: (data: string) => void;
+    }> = [];
+
+    class MockWebSocket {
+      static OPEN = 1;
+      readyState = 1;
+      sent: string[] = [];
+      onopen: (() => void) | null = null;
+      onmessage: ((ev: { data: string }) => void) | null = null;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor() {
+        sockets.push(this);
+      }
+      send(data: string) {
+        this.sent.push(data);
+      }
+      close() {}
+    }
+
+    (globalThis as unknown as { WebSocket: typeof WebSocket }).WebSocket =
+      MockWebSocket as unknown as typeof WebSocket;
+
+    try {
+      const hostTransport = createRoomSyncTransport({
+        mode: 'lan-ws',
+        roomCode: 'SYNC01',
+        peerId: 'host-peer',
+        role: 'setup',
+        getHostSnapshot: () => ({
+          sync: { countryId: '076', isPlaying: true, progress01: 0.42 },
+          projection: { preset: '3-projectors' },
+          speakerCalib: { avOffsetMs: -50 },
+          calibSignal: { action: 'delay-click-all' },
+        }),
+        onSync: () => {},
+        onProjection: () => {},
+        onSpeakerCalib: () => {},
+        onCalibSignal: () => {},
+        onPresence: () => {},
+        onConnectionChange: () => {},
+      });
+
+      const hostSock = sockets[0];
+      hostSock.onopen?.();
+      const hostInitialTypes = hostSock.sent.map((s) => (JSON.parse(s) as { type: string }).type);
+      expect(hostInitialTypes).toContain('sync');
+      expect(hostInitialTypes).toContain('projection');
+      expect(hostInitialTypes).toContain('speaker-calib');
+      expect(hostInitialTypes).toContain('calib-signal');
+
+      // Simula entrada de novo computador na presença -> host empurra snapshot atualizado após 80ms
+      hostSock.sent.length = 0;
+      hostSock.onmessage?.({
+        data: JSON.stringify({
+          type: 'presence',
+          clients: [
+            { id: 'host-peer', role: 'setup', ip: '10.0.0.1', connectedAt: 1 },
+            { id: 'pc2-proj', role: 'projector-1', ip: '10.0.0.2', connectedAt: 2 },
+          ],
+        }),
+      });
+      vi.advanceTimersByTime(100);
+      const pushTypes = hostSock.sent.map((s) => (JSON.parse(s) as { type: string }).type);
+      expect(pushTypes).toEqual(
+        expect.arrayContaining(['sync', 'projection', 'speaker-calib', 'calib-signal'])
+      );
+
+      // Guest (outro PC) pede snapshot e faz retry automático até receber o primeiro sync
+      let receivedSyncCount = 0;
+      const guestTransport = createRoomSyncTransport({
+        mode: 'lan-ws',
+        roomCode: 'SYNC01',
+        peerId: 'pc2-proj',
+        role: 'projector-1',
+        onSync: () => {
+          receivedSyncCount += 1;
+        },
+        onProjection: () => {},
+        onSpeakerCalib: () => {},
+        onCalibSignal: () => {},
+        onPresence: () => {},
+        onConnectionChange: () => {},
+      });
+
+      const guestSock = sockets[1];
+      guestSock.onopen?.();
+      vi.advanceTimersByTime(600);
+      const reqCountBeforeSync = guestSock.sent.filter(
+        (s) => (JSON.parse(s) as { type: string }).type === 'request-state'
+      ).length;
+      expect(reqCountBeforeSync).toBe(2);
+
+      // Recebe sync do host -> cancela terceira retentativa
+      guestSock.onmessage?.({
+        data: JSON.stringify({
+          type: 'sync',
+          senderId: 'host-peer',
+          payload: { countryId: '076', isPlaying: true },
+        }),
+      });
+      expect(receivedSyncCount).toBe(1);
+      vi.advanceTimersByTime(1500);
+      const reqCountAfterSync = guestSock.sent.filter(
+        (s) => (JSON.parse(s) as { type: string }).type === 'request-state'
+      ).length;
+      expect(reqCountAfterSync).toBe(2);
+
+      hostTransport.dispose();
+      guestTransport.dispose();
+    } finally {
+      (globalThis as unknown as { WebSocket: typeof WebSocket }).WebSocket = origWs;
+      vi.useRealTimers();
+    }
   });
 });

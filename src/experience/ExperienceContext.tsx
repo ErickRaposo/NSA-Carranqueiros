@@ -88,6 +88,10 @@ import {
   resolveFramePrompts,
 } from './missionFrames';
 import {
+  DEFAULT_ROOM_DIMENSIONS,
+  normalizeRoomDimensions,
+} from './roomDimensions';
+import {
   AudioLevelsMap,
   AudioOutputMode,
   AudioOwnerRole,
@@ -208,11 +212,7 @@ const countryMetaCache = new Map<string, CountryMetaJson>();
 const ROOM_STORAGE_KEY = 'earth-jukebox-room-dims-v1';
 const STORY_STEP_COUNT = 6;
 
-export const DEFAULT_ROOM_DIMENSIONS: RoomDimensions = {
-  leftWall: { widthCm: 360, heightCm: 270 },
-  rightWall: { widthCm: 360, heightCm: 270 },
-  ceiling: { widthCm: 360, heightCm: 360 },
-};
+export { DEFAULT_ROOM_DIMENSIONS };
 
 function loadInitialRoomDimensions(): RoomDimensions {
   if (typeof window === 'undefined') return DEFAULT_ROOM_DIMENSIONS;
@@ -220,12 +220,8 @@ function loadInitialRoomDimensions(): RoomDimensions {
     const raw = window.localStorage.getItem(ROOM_STORAGE_KEY);
     if (!raw) return DEFAULT_ROOM_DIMENSIONS;
     const parsed = JSON.parse(raw) as Partial<RoomDimensions>;
-    if (
-      parsed.leftWall?.widthCm &&
-      parsed.rightWall?.widthCm &&
-      parsed.ceiling?.widthCm
-    ) {
-      return parsed as RoomDimensions;
+    if (parsed.leftWall?.widthCm && parsed.rightWall?.widthCm) {
+      return normalizeRoomDimensions(parsed);
     }
   } catch {
     // ignore storage errors
@@ -299,6 +295,9 @@ function buildCountryPngUrls(countryId: string): Record<VisualLayerId, string> {
 
 interface SyncPayload {
   senderId: string;
+  syncKind?: 'state' | 'heartbeat';
+  sentAt?: number;
+  seekSyncNonce?: number;
   countryId: string | null;
   lang: Lang;
   storyStep: number;
@@ -315,6 +314,43 @@ interface SyncPayload {
   isPlaying: boolean;
   progress01: number;
   roomDimensions: RoomDimensions;
+}
+
+function buildSyncStateSignature(p: SyncPayload): string {
+  return JSON.stringify({
+    c: p.countryId,
+    l: p.lang,
+    st: p.storyStep,
+    mp: p.missionPhase ?? 'idle',
+    sr: p.sceneReplayKey ?? 0,
+    lb: p.loopSingleBar ?? null,
+    bl: p.barLoop ?? null,
+    cc: p.compareCountries ?? null,
+    am: p.audioMode,
+    ao: p.audioOwner ?? 'pc',
+    mg: p.masterGain,
+    vv: p.voiceVolume ?? 1,
+    ly: p.layers,
+    pl: p.isPlaying,
+    rd: p.roomDimensions,
+  });
+}
+
+function calibModeToSignalCommand(mode: CalibrationTestMode): RemoteCalibSignalCommand | undefined {
+  if (mode.kind === 'pink-multi') return { action: 'pink-multi', speakers: mode.speakers };
+  if (mode.kind === 'delay-click-multi') {
+    return {
+      action: 'delay-click-multi',
+      speakers: mode.speakers,
+      headphones: mode.headphones,
+    };
+  }
+  if (mode.kind === 'pink-single') return { action: 'pink-single', speakerId: mode.speakerId };
+  if (mode.kind === 'pink-ab') return { action: 'pink-ab', targetSpeakerId: mode.targetSpeakerId };
+  if (mode.kind === 'delay-click') return { action: 'delay-click', targetSpeakerId: mode.targetSpeakerId };
+  if (mode.kind === 'pink-all') return { action: 'pink-all' };
+  if (mode.kind === 'delay-click-all') return { action: 'delay-click-all' };
+  return undefined;
 }
 
 const ExperienceContext = createContext<ExperienceContextValue | null>(null);
@@ -776,6 +812,22 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   liveProgressRef.current = progress01;
   const barLoopRef = useRef<BarLoopRange>(barLoop);
   barLoopRef.current = barLoop;
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+  const durationSecondsRef = useRef(durationSeconds);
+  durationSecondsRef.current = durationSeconds;
+  const seekSyncNonceRef = useRef(seekSyncNonce);
+  seekSyncNonceRef.current = seekSyncNonce;
+  const selectedCountryIdRef = useRef(selectedCountryId);
+  selectedCountryIdRef.current = selectedCountryId;
+  const calibTestModeRef = useRef(calibTestMode);
+  calibTestModeRef.current = calibTestMode;
+  const lanClientsRef = useRef(lanClients);
+  lanClientsRef.current = lanClients;
+  const hasHydratedFromRemoteRef = useRef(false);
+  const didMountSyncEffectRef = useRef(false);
+  const lastRemoteSignatureRef = useRef<string | null>(null);
+  const lastRemoteSeekKeyRef = useRef<string | null>(null);
 
   const layersRef = useRef(layers);
   layersRef.current = layers;
@@ -1136,7 +1188,26 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
 
   const applyIncomingSync = useCallback((data: SyncPayload) => {
     if (!data || data.senderId === senderIdRef.current) return;
+
+    // Heartbeat de reprodução contínua: apenas corrige drift de playhead entre PCs (> 2.5% da faixa)
+    if (data.syncKind === 'heartbeat') {
+      if (!data.isPlaying || data.countryId !== selectedCountryIdRef.current) return;
+      const rawAgeMs =
+        typeof data.sentAt === 'number' ? Math.max(0, Math.min(2500, Date.now() - data.sentAt)) : 0;
+      const dur = Math.max(1, durationSecondsRef.current);
+      const compensated = Math.min(0.999, Math.max(0, data.progress01 + rawAgeMs / 1000 / dur));
+      if (Math.abs(liveProgressRef.current - compensated) > 0.028) {
+        liveProgressRef.current = compensated;
+        setProgress01(compensated);
+      }
+      return;
+    }
+
+    const wasHydrated = hasHydratedFromRemoteRef.current;
+    hasHydratedFromRemoteRef.current = true;
     suppressBroadcastRef.current = true;
+    lastRemoteSignatureRef.current = buildSyncStateSignature(data);
+
     setSelectedCountryId(data.countryId);
     setLangState(data.lang);
     setStoryStepState(data.storyStep ?? 0);
@@ -1177,12 +1248,31 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     }
     setLayers(normalizeIncomingLayers(data.layers));
     setIsPlaying(data.isPlaying);
-    setProgress01(data.progress01);
-    liveProgressRef.current = data.progress01;
-    setRoomDimensionsState(data.roomDimensions);
-    queueMicrotask(() => {
-      suppressBroadcastRef.current = false;
-    });
+    setRoomDimensionsState(normalizeRoomDimensions(data.roomDimensions));
+
+    const remoteSeekKey =
+      typeof data.seekSyncNonce === 'number' ? `${data.senderId}:${data.seekSyncNonce}` : null;
+    const isExplicitSeek =
+      remoteSeekKey !== null && remoteSeekKey !== lastRemoteSeekKeyRef.current;
+    if (remoteSeekKey !== null) {
+      lastRemoteSeekKeyRef.current = remoteSeekKey;
+    }
+
+    const playStateChanged = data.isPlaying !== isPlayingRef.current;
+    const countryChanged = data.countryId !== selectedCountryIdRef.current;
+    if (!wasHydrated || !data.isPlaying || !isPlayingRef.current || playStateChanged || countryChanged || isExplicitSeek) {
+      const rawAgeMs =
+        data.isPlaying && typeof data.sentAt === 'number'
+          ? Math.max(0, Math.min(2500, Date.now() - data.sentAt))
+          : 0;
+      const dur = Math.max(1, durationSecondsRef.current);
+      const nextProg = Math.min(0.999, Math.max(0, (data.progress01 ?? 0) + rawAgeMs / 1000 / dur));
+      liveProgressRef.current = nextProg;
+      setProgress01(nextProg);
+      if (isExplicitSeek && wasHydrated) {
+        setSeekSyncNonce((n) => n + 1);
+      }
+    }
   }, []);
 
   const applyRemoteCalibSignal = useCallback((cmd: RemoteCalibSignalCommand) => {
@@ -1290,9 +1380,17 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       peerId: senderIdRef.current,
       role,
       getHostSnapshot: () => ({
-        sync: latestSyncSnapshotRef.current,
+        sync: latestSyncSnapshotRef.current
+          ? {
+              ...latestSyncSnapshotRef.current,
+              progress01: liveProgressRef.current,
+              seekSyncNonce: seekSyncNonceRef.current,
+              sentAt: Date.now(),
+            }
+          : undefined,
         projection: latestProjectionRef.current,
         speakerCalib: latestSpeakerCalibRef.current,
+        calibSignal: calibModeToSignalCommand(calibTestModeRef.current),
       }),
       onSync: (payload) => {
         applyIncomingSync(payload as SyncPayload);
@@ -1342,9 +1440,11 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   ]);
 
   useEffect(() => {
-    if (suppressBroadcastRef.current) return;
     const payload: SyncPayload = {
       senderId: senderIdRef.current,
+      syncKind: 'state',
+      sentAt: Date.now(),
+      seekSyncNonce,
       countryId: selectedCountryId,
       lang,
       storyStep,
@@ -1363,6 +1463,27 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       roomDimensions,
     };
     latestSyncSnapshotRef.current = payload;
+
+    // Evita eco após aplicar estado remoto
+    if (suppressBroadcastRef.current) {
+      suppressBroadcastRef.current = false;
+      return;
+    }
+
+    const sig = buildSyncStateSignature(payload);
+    if (sig === lastRemoteSignatureRef.current && seekSyncNonce === 0) {
+      return;
+    }
+
+    // Telas passivas / recém-abertas em outro computador (ex: ?view=projector) nunca sobrescrevem o host ao montar
+    const isInitialMount = !didMountSyncEffectRef.current;
+    didMountSyncEffectRef.current = true;
+    const isPrimaryHost = effectiveView === 'setup' || effectiveView === 'admin';
+    if (isInitialMount && !isPrimaryHost) {
+      return;
+    }
+
+    lastRemoteSignatureRef.current = null;
     try {
       channelRef.current?.postMessage(payload);
     } catch {
@@ -1374,6 +1495,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     audioOwner,
     barLoop,
     compareCountries,
+    effectiveView,
     isPlaying,
     lang,
     layers,
@@ -1387,6 +1509,34 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     storyStep,
     voiceVolume,
   ]);
+
+  // Heartbeat leve de sincronia temporal durante reprodução para manter outros PCs travados no compasso
+  useEffect(() => {
+    if (!isPlaying || syncNetworkMode === 'isolated') return;
+    const isPrimaryHost = effectiveView === 'setup' || effectiveView === 'admin';
+    const timer = window.setInterval(() => {
+      const hasPrimaryHostOnline = lanClientsRef.current.some(
+        (p) => p.role === 'setup' || p.role === 'admin'
+      );
+      const shouldSendHeartbeat =
+        isPrimaryHost || (!hasPrimaryHostOnline && !localAudioMutedRef.current);
+      if (!shouldSendHeartbeat || !latestSyncSnapshotRef.current) return;
+      const hb: SyncPayload = {
+        ...latestSyncSnapshotRef.current,
+        senderId: senderIdRef.current,
+        syncKind: 'heartbeat',
+        sentAt: Date.now(),
+        progress01: liveProgressRef.current,
+      };
+      try {
+        channelRef.current?.postMessage(hb);
+      } catch {
+        // ignore
+      }
+      transportRef.current?.sendSync(hb);
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, [effectiveView, isPlaying, syncNetworkMode]);
 
   // --- Sincronização do Motor Web Audio 8D (100% Stems Pré-Gerados — Zero Fallback) ---
   useEffect(() => {
@@ -1946,6 +2096,8 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
         const next: ProjectionCalibrationState = {
           ...prev,
           identifyUntil: Date.now() + durationMs,
+          identifyNonce: (prev.identifyNonce ?? 0) + 1,
+          identifyDurationMs: durationMs,
         };
         publishProjectionUpdate(next, true);
         return next;
@@ -2481,10 +2633,11 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   }, []);
 
   const setRoomDimensions = useCallback((next: RoomDimensions) => {
-    setRoomDimensionsState(next);
+    const normalized = normalizeRoomDimensions(next);
+    setRoomDimensionsState(normalized);
     if (typeof window !== 'undefined') {
       try {
-        window.localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify(next));
+        window.localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify(normalized));
       } catch {
         // ignore storage errors
       }

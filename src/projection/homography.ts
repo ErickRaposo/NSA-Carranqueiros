@@ -45,6 +45,8 @@ export interface ProjectionCalibrationState {
   showGrid: boolean;
   globalBlackout: boolean;
   identifyUntil: number;
+  identifyNonce?: number;
+  identifyDurationMs?: number;
   outputs: Record<ProjectorOutId, ProjectorOutputConfig>;
   quads: Record<CalibrationSurfaceKey, QuadCorners>;
   edgeMasks: Record<CalibrationSurfaceKey, EdgeFeatherMask>;
@@ -461,6 +463,8 @@ export function applyProjectionPreset(
     showGrid: prev?.showGrid ?? false,
     globalBlackout: false,
     identifyUntil: 0,
+    identifyNonce: prev?.identifyNonce ?? 0,
+    identifyDurationMs: 7000,
     outputs,
     quads,
     edgeMasks: prev?.edgeMasks ?? createAllZeroEdgeMasks(),
@@ -579,6 +583,8 @@ export function loadCalibrationState(): ProjectionCalibrationState {
       showGrid: Boolean(parsed.showGrid),
       globalBlackout: Boolean(parsed.globalBlackout),
       identifyUntil: Number(parsed.identifyUntil ?? 0),
+      identifyNonce: Number(parsed.identifyNonce ?? 0),
+      identifyDurationMs: Number(parsed.identifyDurationMs ?? 7000),
       outputs: mergedOutputs,
       quads: {
         ...fallback.quads,

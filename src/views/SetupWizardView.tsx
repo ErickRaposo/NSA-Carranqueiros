@@ -7,6 +7,10 @@ import {
   useProjectionAdmin,
 } from '../experience/ExperienceContext';
 import {
+  DEFAULT_ROOM_DIMENSIONS,
+  updateWallDimension,
+} from '../experience/roomDimensions';
+import {
   PROJECTOR_OUT_IDS,
   SurfaceId,
   ViewRole,
@@ -56,6 +60,8 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
     setLocalAudioMuted,
     playback,
     liveEvents,
+    roomDimensions,
+    setRoomDimensions,
     selectCountry,
     setAllLayersEnabled,
     playWithAudibleLayers,
@@ -347,6 +353,7 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
               isPt={isPt}
               scenario={scenario}
               projectionState={projectionState}
+              roomDimensions={roomDimensions}
               baseOrigin={baseOrigin}
               roomCode={roomCode}
               lanClients={lanClients}
@@ -357,6 +364,10 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
               onResetAllProjectionQuads={resetAllProjectionQuads}
               onUpdateSurfaceQuad={updateSurfaceQuad}
               onTranslateOutputMesh={translateOutputMesh}
+              onUpdateWallDimension={(wall, field, rawValue) =>
+                setRoomDimensions(updateWallDimension(roomDimensions, wall, field, rawValue))
+              }
+              onResetRoomDimensions={() => setRoomDimensions(DEFAULT_ROOM_DIMENSIONS)}
             />
           )}
 

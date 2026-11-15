@@ -78,6 +78,7 @@ export interface HostStateSnapshot {
   sync?: unknown;
   projection?: unknown;
   speakerCalib?: unknown;
+  calibSignal?: unknown;
 }
 
 export interface RoomSyncTransportCallbacks {
@@ -115,7 +116,19 @@ export function createRoomSyncTransport(
   let ws: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let lateJoinReplyTimer: ReturnType<typeof setTimeout> | null = null;
+  const retryTimers: Array<ReturnType<typeof setTimeout>> = [];
+  let hasReceivedRemoteState = false;
+  const knownPeerIds = new Set<string>();
   let cloudHandle: CloudRoomHandle | null = null;
+
+  const isPrimaryHostRole = opts.role === 'setup' || opts.role === 'admin';
+
+  const clearRetryTimers = () => {
+    while (retryTimers.length > 0) {
+      const t = retryTimers.pop();
+      if (t !== undefined) clearTimeout(t);
+    }
+  };
 
   const rawSend = (envelope: CloudRoomMessageEnvelope) => {
     if (disposed || opts.mode === 'isolated') return;
@@ -128,6 +141,66 @@ export function createRoomSyncTransport(
         ws.send(JSON.stringify({ ...envelope, senderId: opts.peerId }));
       } catch {
         // ignore broken socket
+      }
+    }
+  };
+
+  const pushHostSnapshotNow = () => {
+    if (disposed || !opts.getHostSnapshot) return;
+    const snap = opts.getHostSnapshot();
+    if (snap.sync) rawSend({ type: 'sync', payload: snap.sync });
+    if (snap.projection) rawSend({ type: 'projection', payload: snap.projection });
+    if (snap.speakerCalib) rawSend({ type: 'speaker-calib', payload: snap.speakerCalib });
+    if (snap.calibSignal) rawSend({ type: 'calib-signal', cmd: snap.calibSignal });
+  };
+
+  const scheduleHostSnapshotPush = (delayMs: number) => {
+    if (disposed || !opts.getHostSnapshot) return;
+    if (lateJoinReplyTimer !== null) clearTimeout(lateJoinReplyTimer);
+    lateJoinReplyTimer = setTimeout(() => {
+      lateJoinReplyTimer = null;
+      pushHostSnapshotNow();
+    }, delayMs);
+  };
+
+  const sendStateRequestWithRetries = () => {
+    const requestOnce = () => {
+      if (disposed) return;
+      rawSend({
+        type: 'request-state',
+        requesterId: opts.peerId,
+        role: opts.role,
+      });
+    };
+    requestOnce();
+    if (isPrimaryHostRole) return;
+    clearRetryTimers();
+    for (const waitMs of [550, 1450]) {
+      const t = setTimeout(() => {
+        if (!disposed && !hasReceivedRemoteState) {
+          requestOnce();
+        }
+      }, waitMs);
+      retryTimers.push(t);
+    }
+  };
+
+  const handlePresenceUpdate = (peers: LanPeerInfo[]) => {
+    let hasNewRemotePeer = false;
+    for (const peer of peers) {
+      if (peer.id !== opts.peerId && !knownPeerIds.has(peer.id)) {
+        hasNewRemotePeer = true;
+      }
+      knownPeerIds.add(peer.id);
+    }
+    opts.onPresence(peers);
+
+    if (hasNewRemotePeer && opts.getHostSnapshot) {
+      const anotherPrimaryHostOnline = peers.some(
+        (p) => p.id !== opts.peerId && (p.role === 'setup' || p.role === 'admin')
+      );
+      if (isPrimaryHostRole || (opts.role === 'controller' && !anotherPrimaryHostOnline)) {
+        scheduleHostSnapshotPush(isPrimaryHostRole ? 80 : 200);
       }
     }
   };
@@ -145,8 +218,11 @@ export function createRoomSyncTransport(
     if (msg.senderId && msg.senderId === opts.peerId) return;
 
     if (msg.type === 'sync' && msg.payload) {
+      hasReceivedRemoteState = true;
+      clearRetryTimers();
       opts.onSync(msg.payload);
     } else if (msg.type === 'projection' && msg.payload) {
+      hasReceivedRemoteState = true;
       opts.onProjection(msg.payload);
     } else if (msg.type === 'speaker-calib' && msg.payload) {
       opts.onSpeakerCalib(msg.payload);
@@ -156,15 +232,8 @@ export function createRoomSyncTransport(
       // Late Join: o host ativo (setup/admin imediatamente, controller com pequeno atraso) envia o snapshot completo
       if (!isHostCapableRole(opts.role) || !opts.getHostSnapshot) return;
       if (msg.requesterId === opts.peerId) return;
-      const delayMs = opts.role === 'controller' ? 90 : 15;
-      if (lateJoinReplyTimer !== null) clearTimeout(lateJoinReplyTimer);
-      lateJoinReplyTimer = setTimeout(() => {
-        if (disposed || !opts.getHostSnapshot) return;
-        const snap = opts.getHostSnapshot();
-        if (snap.sync) rawSend({ type: 'sync', payload: snap.sync });
-        if (snap.projection) rawSend({ type: 'projection', payload: snap.projection });
-        if (snap.speakerCalib) rawSend({ type: 'speaker-calib', payload: snap.speakerCalib });
-      }, delayMs);
+      const delayMs = opts.role === 'controller' ? 110 : 15;
+      scheduleHostSnapshotPush(delayMs);
     }
   };
 
@@ -178,15 +247,13 @@ export function createRoomSyncTransport(
         peerId: opts.peerId,
         role: opts.role,
         onMessage: handleIncomingEnvelope,
-        onPresence: opts.onPresence,
+        onPresence: handlePresenceUpdate,
         onConnectionChange: opts.onConnectionChange,
         onSubscribed: () => {
-          // Qualquer nó que entra depois pede o estado atual da sala (Late Join)
-          rawSend({
-            type: 'request-state',
-            requesterId: opts.peerId,
-            role: opts.role,
-          });
+          if (isPrimaryHostRole) {
+            pushHostSnapshotNow();
+          }
+          sendStateRequestWithRetries();
         },
       });
     } else {
@@ -223,6 +290,10 @@ export function createRoomSyncTransport(
           } catch {
             // ignore
           }
+          if (isPrimaryHostRole) {
+            pushHostSnapshotNow();
+          }
+          sendStateRequestWithRetries();
         };
 
         socket.onmessage = (ev) => {
@@ -233,7 +304,7 @@ export function createRoomSyncTransport(
               clients?: LanPeerInfo[];
             };
             if ((parsed as { type?: string }).type === 'presence' && Array.isArray(parsed.clients)) {
-              opts.onPresence(parsed.clients);
+              handlePresenceUpdate(parsed.clients);
               return;
             }
             handleIncomingEnvelope(parsed);
@@ -296,6 +367,7 @@ export function createRoomSyncTransport(
       disposed = true;
       projectionThrottled.cancel();
       speakerCalibThrottled.cancel();
+      clearRetryTimers();
       if (reconnectTimer !== null) clearTimeout(reconnectTimer);
       if (lateJoinReplyTimer !== null) clearTimeout(lateJoinReplyTimer);
       cloudHandle?.dispose();

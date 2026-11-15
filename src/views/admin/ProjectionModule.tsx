@@ -20,6 +20,7 @@ import {
   QuadCorners,
 } from '../../projection/homography';
 import { AdminSelect } from './AdminSelect';
+import { DimensionCmField } from './DimensionCmField';
 import {
   ADMIN_FOCUS,
   ADMIN_PANEL_CLASS,
@@ -55,54 +56,6 @@ const EDGE_CORNER_PAIRS: ReadonlyArray<readonly [0 | 1 | 2 | 3, 0 | 1 | 2 | 3]> 
   [2, 3], // Barra Inferior: BR + BL
   [3, 0], // Barra Esquerda: BL + TL
 ];
-
-interface DimensionCmFieldProps {
-  label: string;
-  value: number;
-  onCommit: (raw: string) => void;
-}
-
-/** Campo numérico cm com edição livre durante digitação e clamp apenas ao confirmar/sair. */
-const DimensionCmField: React.FC<DimensionCmFieldProps> = ({ label, value, onCommit }) => {
-  const [draft, setDraft] = useState<string | null>(null);
-
-  const displayedValue = draft !== null ? draft : String(value);
-
-  const commitDraft = (raw: string) => {
-    const trimmed = raw.replace(/\D/g, '');
-    if (trimmed.length > 0) {
-      onCommit(trimmed);
-    }
-    setDraft(null);
-  };
-
-  return (
-    <label className="flex flex-col gap-1 text-xs text-slate-400">
-      <span>{label}</span>
-      <input
-        type="text"
-        inputMode="numeric"
-        value={displayedValue}
-        onFocus={() => setDraft(String(value))}
-        onChange={(e) => {
-          const digits = e.target.value.replace(/\D/g, '');
-          setDraft(digits);
-          const parsed = Number(digits);
-          if (digits.length > 0 && parsed >= 50 && parsed <= 2000) {
-            onCommit(digits);
-          }
-        }}
-        onBlur={(e) => commitDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.currentTarget.blur();
-          }
-        }}
-        className={`h-10 rounded-xl border border-[#1e3a66] bg-[#0c1a36] px-3 text-xs text-slate-100 [font-variant-numeric:tabular-nums] ${ADMIN_FOCUS}`}
-      />
-    </label>
-  );
-};
 
 interface ProjectionModuleProps {
   isPt: boolean;
@@ -883,7 +836,7 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
           </p>
 
           <div className="mt-3.5 flex flex-col gap-2.5">
-            {SURFACE_IDS.map((sId) => {
+            {(['leftWall', 'rightWall'] as const).map((sId) => {
               const dim = roomDimensions[sId];
               const ratio = (dim.widthCm / Math.max(1, dim.heightCm)).toFixed(2);
               return (
@@ -911,6 +864,29 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
                 </div>
               );
             })}
+
+            <div className={`p-3 ${ADMIN_WELL_CLASS}`}>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-100">
+                  {isPt ? `${SURFACE_UI_META.ceiling.shortPt} (Automático)` : `${SURFACE_UI_META.ceiling.shortEn} (Auto)`}
+                </span>
+                <span className="text-[11px] text-slate-400 [font-variant-numeric:tabular-nums]">
+                  {(
+                    roomDimensions.ceiling.widthCm /
+                    Math.max(1, roomDimensions.ceiling.heightCm)
+                  ).toFixed(2)}
+                  :1
+                </span>
+              </div>
+              <div className="mt-1.5 text-sm font-semibold text-[#7dd3fc] [font-variant-numeric:tabular-nums]">
+                {roomDimensions.ceiling.widthCm} × {roomDimensions.ceiling.heightCm} cm
+              </div>
+              <p className="mt-1 text-[11px] text-slate-400">
+                {isPt
+                  ? 'Calculado pela largura da Parede Direita × Parede Esquerda.'
+                  : 'Derived from Right Wall width × Left Wall width.'}
+              </p>
+            </div>
           </div>
         </section>
       </div>

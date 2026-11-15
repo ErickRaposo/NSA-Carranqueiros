@@ -105,6 +105,17 @@ export function subscribeCloudRoom(opts: CloudRoomSubscriptionOptions): CloudRoo
   let disposed = false;
   let isSubscribed = false;
   const channelName = `earth-jukebox-room:${opts.roomCode}`;
+  const pendingByType = new Map<CloudRoomMessageEnvelope['type'], CloudRoomMessageEnvelope>();
+
+  const transmit = (msg: CloudRoomMessageEnvelope) => {
+    void channel
+      .send({
+        type: 'broadcast',
+        event: 'room-msg',
+        payload: msg,
+      })
+      .catch(() => {});
+  };
 
   const channel: RealtimeChannel = supabase.channel(channelName, {
     config: {
@@ -140,6 +151,8 @@ export function subscribeCloudRoom(opts: CloudRoomSubscriptionOptions): CloudRoo
       opts.onMessage(raw);
     })
     .on('presence', { event: 'sync' }, emitPresenceList)
+    .on('presence', { event: 'join' }, emitPresenceList)
+    .on('presence', { event: 'leave' }, emitPresenceList)
     .subscribe((status) => {
       if (disposed) return;
       if (status === 'SUBSCRIBED') {
@@ -153,6 +166,11 @@ export function subscribeCloudRoom(opts: CloudRoomSubscriptionOptions): CloudRoo
             connectedAt: Date.now(),
           })
           .catch(() => {});
+        // Envia mensagens enfileiradas enquanto o canal ainda estava conectando
+        for (const queued of pendingByType.values()) {
+          transmit(queued);
+        }
+        pendingByType.clear();
         opts.onSubscribed?.();
       } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         isSubscribed = false;
@@ -162,19 +180,18 @@ export function subscribeCloudRoom(opts: CloudRoomSubscriptionOptions): CloudRoo
 
   return {
     send: (msg) => {
-      if (disposed || !isSubscribed) return;
-      void channel
-        .send({
-          type: 'broadcast',
-          event: 'room-msg',
-          payload: msg,
-        })
-        .catch(() => {});
+      if (disposed) return;
+      if (!isSubscribed) {
+        pendingByType.set(msg.type, msg);
+        return;
+      }
+      transmit(msg);
     },
     dispose: () => {
       if (disposed) return;
       disposed = true;
       isSubscribed = false;
+      pendingByType.clear();
       opts.onConnectionChange(false);
       void supabase.removeChannel(channel).catch(() => {});
     },
