@@ -1,0 +1,349 @@
+{
+  "bbox" : [
+    24.6872,
+    21.9943,
+    36.8986,
+    31.6563
+  ],
+  "beatEvents" : [
+    {
+      "beat" : 0,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 69,
+      "source_x" : 0.563,
+      "source_y" : 0.75,
+      "velocity" : 0.45
+    },
+    {
+      "beat" : 0,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 57,
+      "source_x" : 0.625,
+      "source_y" : 0.203,
+      "velocity" : 0.6334977176716848
+    },
+    {
+      "beat" : 0,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 36,
+      "source_x" : 0.735,
+      "source_y" : 0.843,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 2,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 36,
+      "source_x" : 0.454,
+      "source_y" : 0.828,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 4,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 78,
+      "source_x" : 0.547,
+      "source_y" : 0.75,
+      "velocity" : 0.45
+    },
+    {
+      "beat" : 4,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 58,
+      "source_x" : 0.641,
+      "source_y" : 0.25,
+      "velocity" : 0.6334977176716848
+    },
+    {
+      "beat" : 4,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 37,
+      "source_x" : 0.594,
+      "source_y" : 0.828,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 6,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 37,
+      "source_x" : 0.735,
+      "source_y" : 0.828,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 8,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 71,
+      "source_x" : 0.61,
+      "source_y" : 0.734,
+      "velocity" : 0.45
+    },
+    {
+      "beat" : 8,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 59,
+      "source_x" : 0.641,
+      "source_y" : 0.218,
+      "velocity" : 0.6334977176716848
+    },
+    {
+      "beat" : 8,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 38,
+      "source_x" : 0.454,
+      "source_y" : 0.812,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 10,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 38,
+      "source_x" : 0.469,
+      "source_y" : 0.812,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 12,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 81,
+      "source_x" : 0.625,
+      "source_y" : 0.75,
+      "velocity" : 0.45
+    },
+    {
+      "beat" : 12,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 60,
+      "source_x" : 0.579,
+      "source_y" : 0.171,
+      "velocity" : 0.6334977176716848
+    },
+    {
+      "beat" : 12,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 39,
+      "source_x" : 0.485,
+      "source_y" : 0.812,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 14,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 39,
+      "source_x" : 0.532,
+      "source_y" : 0.812,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 16,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 73,
+      "source_x" : 0.579,
+      "source_y" : 0.75,
+      "velocity" : 0.45
+    },
+    {
+      "beat" : 16,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 61,
+      "source_x" : 0.532,
+      "source_y" : 0.75,
+      "velocity" : 0.6334977176716848
+    },
+    {
+      "beat" : 16,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 40,
+      "source_x" : 0.547,
+      "source_y" : 0.812,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 18,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 40,
+      "source_x" : 0.563,
+      "source_y" : 0.812,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 20,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 83,
+      "source_x" : 0.563,
+      "source_y" : 0.734,
+      "velocity" : 0.45
+    },
+    {
+      "beat" : 20,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 57,
+      "source_x" : 0.532,
+      "source_y" : 0.734,
+      "velocity" : 0.6334977176716848
+    },
+    {
+      "beat" : 20,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 36,
+      "source_x" : 0.469,
+      "source_y" : 0.796,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 22,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 36,
+      "source_x" : 0.485,
+      "source_y" : 0.796,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 24,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 76,
+      "source_x" : 0.563,
+      "source_y" : 0.656,
+      "velocity" : 0.45
+    },
+    {
+      "beat" : 24,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 58,
+      "source_x" : 0.516,
+      "source_y" : 0.734,
+      "velocity" : 0.6334977176716848
+    },
+    {
+      "beat" : 24,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 37,
+      "source_x" : 0.5,
+      "source_y" : 0.796,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 26,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 37,
+      "source_x" : 0.516,
+      "source_y" : 0.796,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 28,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 69,
+      "source_x" : 0.563,
+      "source_y" : 0.75,
+      "velocity" : 0.45
+    },
+    {
+      "beat" : 28,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 59,
+      "source_x" : 0.516,
+      "source_y" : 0.859,
+      "velocity" : 0.6334977176716848
+    },
+    {
+      "beat" : 28,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 38,
+      "source_x" : 0.532,
+      "source_y" : 0.796,
+      "velocity" : 0.8705789523173538
+    },
+    {
+      "beat" : 30,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 38,
+      "source_x" : 0.547,
+      "source_y" : 0.796,
+      "velocity" : 0.8705789523173538
+    }
+  ],
+  "id" : "818",
+  "nameEn" : "Egypt",
+  "namePt" : "Egito",
+  "pngSpec" : {
+    "layers" : [
+      "melody",
+      "chords",
+      "temperature",
+      "bass",
+      "wind"
+    ],
+    "marginRatio" : 0.08,
+    "resolution" : 1024
+  },
+  "session" : {
+    "base" : {
+      "bpm" : 90,
+      "chords" : [
+        "Am9",
+        "Fmaj7",
+        "Cmaj7",
+        "Gsus4"
+      ],
+      "keyRoot" : "A",
+      "keyRootPt" : "Lá",
+      "modeNameEn" : "Neutral Reference (90 BPM)",
+      "modeNamePt" : "Referência Neutra (90 BPM)",
+      "windMeanSpeed" : 11.7
+    },
+    "region" : {
+      "bpm" : 97,
+      "chords" : [
+        "F#add9",
+        "Am7",
+        "Gmaj7",
+        "Asus4"
+      ],
+      "keyRoot" : "F#",
+      "keyRootPt" : "Fá#",
+      "modeNameEn" : "Tropical Mixolydian",
+      "modeNamePt" : "Mixolídio Tropical",
+      "windMeanSpeed" : 11.7
+    }
+  },
+  "telemetrySummary" : {
+    "lightningHotspotCount" : 7,
+    "meanCo01" : 0.284,
+    "meanNox01" : 0.763,
+    "meanTemperature01" : 0.924,
+    "windMeanSpeedMs" : 11.7
+  }
+}

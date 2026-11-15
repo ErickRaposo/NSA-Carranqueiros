@@ -1,28 +1,29 @@
 import React, { useEffect } from 'react';
-import { ExternalLink, EyeOff, Layers, X } from 'lucide-react';
-import { DatasetId, NASA_DATASETS } from '../datasets/nasaDatasets';
-import { DATASET_TO_STEM, STEM_METAS, STEM_ORDER } from '../community/unlockStore';
+import { ExternalLink, Layers, X } from 'lucide-react';
+import { DatasetId, NASA_DATASETS, resolveAssetUrl } from '../datasets/nasaDatasets';
+import {
+  DATASET_TO_LAYER,
+  LAYER_METAS,
+  Lang,
+  VISUAL_LAYER_ORDER,
+} from '../experience/types';
 
 interface NasaDatasetCardProps {
   open: boolean;
   datasetId: DatasetId;
   enabledDatasetIds: DatasetId[];
-  autoOpenEnabled: boolean;
+  lang?: Lang;
   onSelectDataset: (id: DatasetId) => void;
   onCloseOnce: () => void;
-  onCloseAndDisableAuto: () => void;
-  onRestoreAutoOpen: () => void;
 }
 
 export const NasaDatasetCard: React.FC<NasaDatasetCardProps> = ({
   open,
   datasetId,
   enabledDatasetIds,
-  autoOpenEnabled,
+  lang = 'pt',
   onSelectDataset,
   onCloseOnce,
-  onCloseAndDisableAuto,
-  onRestoreAutoOpen,
 }) => {
   useEffect(() => {
     if (!open) return;
@@ -37,37 +38,57 @@ export const NasaDatasetCard: React.FC<NasaDatasetCardProps> = ({
 
   if (!open) return null;
 
+  const isPt = lang === 'pt';
   const ds = NASA_DATASETS[datasetId];
-  const stem = STEM_METAS[DATASET_TO_STEM[datasetId]];
+  const layerMeta = LAYER_METAS[DATASET_TO_LAYER[datasetId]];
   const isSolo = enabledDatasetIds.length === 1 && enabledDatasetIds[0] === datasetId;
   const isCurrentlyActive = enabledDatasetIds.includes(datasetId);
+
+  const shortName = isPt ? ds.shortName : ds.shortNameEn;
+  const sensorLabel = isPt ? ds.sensorLabel : ds.sensorLabelEn;
+  const colorbarCaption = isPt ? ds.colorbarCaption : ds.colorbarCaptionEn;
+  const scaleMin = isPt ? ds.scaleMinLabel : ds.scaleMinLabelEn;
+  const scaleMax = isPt ? ds.scaleMaxLabel : ds.scaleMaxLabelEn;
+  const unitLabel = isPt ? ds.unitLabel : ds.unitLabelEn;
+  const howToRead = isPt ? ds.howToReadPt : ds.howToReadEn;
+  const description = isPt ? ds.descriptionPt : ds.descriptionEn;
 
   return (
     <aside
       className="nasa-dataset-card console-frame"
-      role="region"
-      aria-label={`Dados científicos e escala oficial da NASA: ${ds.shortName}`}
+      role="dialog"
+      aria-modal="false"
+      aria-label={
+        isPt
+          ? `Dados científicos e escala oficial da NASA: ${shortName}`
+          : `Official NASA scientific dataset and scale: ${shortName}`
+      }
       data-testid="nasa-dataset-card"
     >
-      {/* BARRA DE BASES NASA (TROCA RÁPIDA PARA VISUALIZAR CADA MAPA A 100% OU INSPECIONAR ESCALAS) */}
-      <div className="nasa-card-tabs" role="tablist" aria-label="Selecionar base científica da NASA">
-        {STEM_ORDER.map((stemId) => {
-          const meta = STEM_METAS[stemId];
+      <div
+        className="nasa-card-tabs"
+        role="tablist"
+        aria-label={isPt ? 'Selecionar base científica da NASA' : 'Select NASA scientific dataset'}
+      >
+        {VISUAL_LAYER_ORDER.map((layerId) => {
+          const meta = LAYER_METAS[layerId];
           const itemDs = NASA_DATASETS[meta.datasetId];
           const isSelected = meta.datasetId === datasetId;
           const isEnabledOnGlobe = enabledDatasetIds.includes(meta.datasetId);
+          const tabLabel = isPt ? meta.labelPt : meta.labelEn;
+          const itemTitle = isPt ? itemDs.shortName : itemDs.shortNameEn;
           return (
             <button
-              key={stemId}
+              key={layerId}
               type="button"
               role="tab"
               aria-selected={isSelected}
               className={`nasa-card-tab ${isSelected ? 'is-selected' : ''} ${
                 isEnabledOnGlobe ? 'is-globe-active' : ''
               }`}
-              style={{ '--tab-accent': meta.accentHex } as React.CSSProperties}
+              style={{ '--tab-accent': meta.accentHex, minHeight: '44px' } as React.CSSProperties}
               onClick={() => onSelectDataset(meta.datasetId)}
-              title={`${meta.labelPt} — ${itemDs.shortName} (${itemDs.svsId})`}
+              title={`${tabLabel} — ${itemTitle} (${itemDs.svsId})`}
               data-testid={`nasa-card-tab-${meta.datasetId}`}
             >
               <span
@@ -77,28 +98,29 @@ export const NasaDatasetCard: React.FC<NasaDatasetCardProps> = ({
                 }}
                 aria-hidden="true"
               />
-              <span>{meta.labelPt}</span>
+              <span>{tabLabel}</span>
             </button>
           );
         })}
       </div>
 
-      {/* TÍTULO PRINCIPAL DIRETO (SEM KICKER/EYEBROW ACIMA DO HEADING) */}
       <div className="nasa-card-head">
         <div className="nasa-card-title-group">
-          <h3 className="nasa-card-title font-display">{ds.shortName}</h3>
+          <h3 className="nasa-card-title">{shortName}</h3>
           <div className="nasa-card-meta-pills">
             <span className="nasa-svs-badge">{ds.svsId}</span>
-            <span className="nasa-sensor-badge">{ds.sensorLabel}</span>
+            <span className="nasa-sensor-badge">{sensorLabel}</span>
             <span
               className="nasa-stem-link-badge"
               style={{
-                color: stem.accentHex,
-                borderColor: `color-mix(in srgb, ${stem.accentHex} 45%, transparent)`,
-                background: `color-mix(in srgb, ${stem.accentHex} 12%, rgba(8, 15, 30, 0.8))`,
+                color: layerMeta.accentHex,
+                borderColor: `color-mix(in srgb, ${layerMeta.accentHex} 45%, transparent)`,
+                background: `color-mix(in srgb, ${layerMeta.accentHex} 12%, rgba(8, 15, 30, 0.8))`,
               }}
             >
-              {stem.labelPt} · {stem.instrumentPt}
+              {isPt
+                ? `${layerMeta.labelPt} · ${layerMeta.musicalRolePt}`
+                : `${layerMeta.labelEn} · ${layerMeta.musicalRoleEn}`}
             </span>
           </div>
         </div>
@@ -106,79 +128,98 @@ export const NasaDatasetCard: React.FC<NasaDatasetCardProps> = ({
         <button
           type="button"
           className="icon-btn-sm"
+          style={{ minWidth: '44px', minHeight: '44px' }}
           onClick={onCloseOnce}
-          title="Fechar card da base NASA (Esc)"
-          aria-label="Fechar card da base NASA"
+          title={isPt ? 'Fechar card da base NASA (Esc)' : 'Close NASA dataset card (Esc)'}
+          aria-label={isPt ? 'Fechar card da base NASA' : 'Close NASA dataset card'}
         >
-          <X size={14} aria-hidden="true" />
+          <X size={16} aria-hidden="true" />
         </button>
       </div>
 
-      {/* BLOCO PROTAGONISTA DE ESCALA OFICIAL NASA OU LEGENDA DE EVENTOS DISCRETOS */}
       <div className="nasa-scale-box" data-testid="nasa-scale-box">
         <div className="nasa-scale-header">
           <strong className="nasa-scale-title">
             {ds.representationType === 'colorbar'
-              ? 'Escala oficial de cores (NASA SVS)'
-              : 'Representação por eventos ópticos (sem escala contínua)'}
+              ? isPt
+                ? 'Escala oficial de cores (NASA SVS)'
+                : 'Official colorbar scale (NASA SVS)'
+              : isPt
+                ? 'Representação por eventos ópticos (sem escala contínua)'
+                : 'Discrete optical flash representation (no continuous scale)'}
           </strong>
-          <span className="nasa-scale-unit">{ds.unitLabel}</span>
+          <span className="nasa-scale-unit">{unitLabel}</span>
         </div>
 
         {ds.representationType === 'colorbar' && ds.colorbarUrl ? (
           <>
             <div className="nasa-colorbar-frame">
               <img
-                src={ds.colorbarUrl}
-                alt={ds.colorbarCaption}
+                src={resolveAssetUrl(ds.colorbarUrl)}
+                alt={colorbarCaption}
                 className="nasa-colorbar-img"
                 loading="eager"
               />
             </div>
             <div className="nasa-scale-endpoints">
-              <span>{ds.scaleMinLabel}</span>
-              <span>{ds.scaleMaxLabel}</span>
+              <span>{scaleMin}</span>
+              <span>{scaleMax}</span>
             </div>
           </>
         ) : (
           <div
             className="nasa-discrete-events-box"
             role="group"
-            aria-label={ds.colorbarCaption}
+            aria-label={colorbarCaption}
             data-testid="nasa-svs5011-discrete-legend"
           >
             <div className="nasa-discrete-item">
               <span className="nasa-discrete-swatch is-base-earth" aria-hidden="true" />
               <div className="nasa-discrete-copy">
-                <strong>Base Terrestre / Oceânica</strong>
-                <span>Ausência de relâmpagos registrados na janela de 10 dias</span>
+                <strong>{isPt ? 'Base Terrestre / Oceânica' : 'Land / Ocean Base'}</strong>
+                <span>
+                  {isPt
+                    ? 'Ausência de relâmpagos registrados na janela de 10 dias'
+                    : 'No lightning flashes recorded within the 10-day window'}
+                </span>
               </div>
             </div>
             <div className="nasa-discrete-item">
               <span className="nasa-discrete-swatch is-lightning-flash" aria-hidden="true" />
               <div className="nasa-discrete-copy">
-                <strong>Pontos Amarelos (Flashes ISS-LIS)</strong>
-                <span>Ocorrência pontual de descarga elétrica detectada da órbita</span>
+                <strong>
+                  {isPt ? 'Pontos Amarelos (Flashes ISS-LIS)' : 'Yellow Dots (ISS-LIS Flashes)'}
+                </strong>
+                <span>
+                  {isPt
+                    ? 'Ocorrência pontual de descarga elétrica detectada da órbita'
+                    : 'Discrete optical lightning discharge detected from orbit'}
+                </span>
               </div>
             </div>
           </div>
         )}
 
-        <p className="nasa-how-to-read">{ds.howToReadPt}</p>
+        <p className="nasa-how-to-read">{howToRead}</p>
       </div>
 
-      <p className="nasa-card-desc">{ds.descriptionPt}</p>
+      <p className="nasa-card-desc">{description}</p>
 
-      {/* STATUS DE OPACIDADE 100% VS MESCLAGEM + FONTE OFICIAL */}
       <div className="nasa-card-fidelity-row">
         <span className="nasa-fidelity-pill" data-testid="nasa-fidelity-status">
           <Layers size={12} aria-hidden="true" />
           <span>
             {isSolo
-              ? '100% opacidade original NASA no globo'
+              ? isPt
+                ? '100% opacidade original NASA ativa'
+                : '100% original NASA layer opacity active'
               : isCurrentlyActive
-                ? `Mesclando ${enabledDatasetIds.length} bases NASA ativas`
-                : 'Clique na aba acima para exibir esta base a 100%'}
+                ? isPt
+                  ? `Mesclando ${enabledDatasetIds.length} camadas NASA ativas`
+                  : `Blending ${enabledDatasetIds.length} active NASA layers`
+                : isPt
+                  ? 'Camada atualmente oculta no mixer'
+                  : 'Layer currently hidden in mixer'}
           </span>
         </span>
 
@@ -187,45 +228,27 @@ export const NasaDatasetCard: React.FC<NasaDatasetCardProps> = ({
           target="_blank"
           rel="noreferrer"
           className="nasa-source-link"
-          title={`Abrir página oficial ${ds.svsId} no NASA Scientific Visualization Studio`}
+          title={
+            isPt
+              ? `Abrir página oficial ${ds.svsId} no NASA Scientific Visualization Studio`
+              : `Open official ${ds.svsId} page on NASA Scientific Visualization Studio`
+          }
         >
-          <span>Fonte NASA SVS</span>
+          <span>{isPt ? 'Fonte NASA SVS' : 'NASA SVS Source'}</span>
           <ExternalLink size={11} aria-hidden="true" />
         </a>
       </div>
 
-      {/* DOIS BOTÕES DE FECHAMENTO: FECHAR AGORA vs NÃO MOSTRAR AO ENTRAR */}
       <div className="nasa-card-actions">
         <button
           type="button"
           className="nasa-btn-primary"
+          style={{ minHeight: '44px' }}
           onClick={onCloseOnce}
           data-testid="nasa-card-close-btn"
         >
-          Fechar
+          {isPt ? 'Fechar' : 'Close'}
         </button>
-
-        {autoOpenEnabled ? (
-          <button
-            type="button"
-            className="nasa-btn-secondary"
-            onClick={onCloseAndDisableAuto}
-            title="Fecha agora e não abre mais sozinho ao entrar no mapa (você ainda pode abrir pelo botão Dados NASA)"
-            data-testid="nasa-card-disable-auto-btn"
-          >
-            <EyeOff size={13} aria-hidden="true" />
-            <span>Não mostrar ao entrar</span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="nasa-btn-secondary is-muted-restore"
-            onClick={onRestoreAutoOpen}
-            data-testid="nasa-card-restore-auto-btn"
-          >
-            <span>Mostrar ao entrar novamente</span>
-          </button>
-        )}
       </div>
     </aside>
   );

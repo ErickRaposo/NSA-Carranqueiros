@@ -97,10 +97,15 @@ Toda a sonificação segue a arquitetura determinística de `ErickRaposo/nasa-ge
    * `musical_parameters` (`wind.mean_speed`, `wind.reverb_decay_seconds`, `bass`, `melody`)
    * `tracks` (`melody`, `melody_sparkle`, `chords_pad`, `bass` — com `source_x`, `source_y`, `start_beat`, `duration_beats`, `pitch`, `is_anchor`)
    * `yellow_counts` por frame e `persistent_peaks`.
-3. **5 PNGs Recortados na Silhueta do País:**
-   * `melody.png`, `chords.png`, `temperature.png`, `bass.png`, `wind.png`
-   * Fundo **100% transparente** fora da fronteira do país.
-   * Estilo visual, paleta e regra de transparência interna (para empilhamento estilo Photoshop) definidos pelo **Designer (Pessoa 1)** antes do batch dos 177 países.
+3. **5 PNGs Recortados na Silhueta do País (Spec Aprovada pela Shay — Pessoa 1):**
+   * Arquivos: `melody.png`, `chords.png`, `temperature.png`, `bass.png`, `wind.png`
+   * Resolução: `1024 × 1024 px`, PNG RGBA com fundo **100% transparente (`alpha = 0`)** fora da fronteira do país.
+   * Alinhamento & Margem: centralizado mantendo proporção geográfica real, com **8% de margem (padding)** e exatamente o mesmo bounding box nos 5 PNGs do mesmo país (empilhamento 1:1 pixel a pixel).
+   * Curva de Alpha estilo Photoshop: áreas fracas ficam translúcidas (`alpha 0..25`) e áreas fortes sobem suavemente até `alpha ~235`.
+   * Contorno de `2 px` na silhueta e paleta `DESIGN.md`: `melody` `#fbbf24` `RGB(251,191,36)`, `chords` `#fb923c` `RGB(251,146,60)`, `temperature` `#fb7185` `RGB(251,113,133)`, `bass` `#34d399` `RGB(52,211,153)`, `wind` `#38bdf8` `RGB(56,189,248)`.
+   * **Topologia das 3 Superfícies (2 Projetores + Tablet):**
+     * **Projetor 1 (Canto em L — `?view=projector&out=1`):** `LeftWallScene` (Globo inteiro 3D/2D) + `RightWallScene` (`Mineiro3D` robozinho contando a história via `storyStep`).
+     * **Projetor 2 (Teto — `?view=projector&out=2` / `CeilingScene`):** os 5 PNGs empilhados gigantes reagindo aos Olhinhos, relâmpagos e vento.
 
 ---
 

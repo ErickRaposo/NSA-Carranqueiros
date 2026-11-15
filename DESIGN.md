@@ -1,7 +1,8 @@
 ---
-name: MINEIRØ — Observatório Orbital Cinematográfico
-description: Design System canônico do MINEIRØ / EARTHSONG (NASA Space Apps — The Earth Information Jukebox), unificando o Portal Institucional e Autenticação com o Explorador Planetário 3D/2D, Cartografia Científica e Instrumentos Orbitais HUD.
+name: Earth Jukebox — Observatório Espacial & Quarto Projetado
+description: Design System canônico do Earth Jukebox (NASA Space Apps — The Earth Information Jukebox), governando os 3 Mundos da instalação: (1) Controle Tablet & Demo Web em Ardósia-Obsidiana, (2) Cenas Projetadas #000000 em 2 Paredes + Teto e (3) Bancada Técnica de Setup.
 colors:
+  bgProjectionVoid: "#000000"
   bgPortalHero: "#02050d"
   bgVoid: "#060913"
   bgContentBand: "#040b1a"

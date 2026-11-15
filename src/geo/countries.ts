@@ -14,9 +14,12 @@ export interface CountryEntry {
   lat: number;
   lonSpan: number;
   latSpan: number;
+  bbox: [number, number, number, number];
   areaApproxKm2: number;
   regionPt: string;
+  regionEn: string;
   hemispherePt: string;
+  hemisphereEn: string;
   timezoneApprox: string;
   neighborsPt: string[];
   idealDistance: number;
@@ -174,6 +177,10 @@ interface PolygonMetrics {
   latCenter: number;
   lonSpan: number;
   latSpan: number;
+  minLon: number;
+  minLat: number;
+  maxLon: number;
+  maxLat: number;
 }
 
 /**
@@ -183,7 +190,18 @@ interface PolygonMetrics {
 function analyzePolygon(poly: number[][][]): PolygonMetrics {
   const outer = poly[0] ?? [];
   if (outer.length === 0) {
-    return { areaDeg2: 0, areaKm2: 0, lonCenter: 0, latCenter: 0, lonSpan: 1, latSpan: 1 };
+    return {
+      areaDeg2: 0,
+      areaKm2: 0,
+      lonCenter: 0,
+      latCenter: 0,
+      lonSpan: 1,
+      latSpan: 1,
+      minLon: -0.5,
+      minLat: -0.5,
+      maxLon: 0.5,
+      maxLat: 0.5,
+    };
   }
 
   const crosses = ringCrossesAntimeridian(outer);
@@ -262,6 +280,10 @@ function analyzePolygon(poly: number[][][]): PolygonMetrics {
     latCenter: bestY,
     lonSpan,
     latSpan,
+    minLon: wrapLon180(minX),
+    minLat: minY,
+    maxLon: wrapLon180(maxX),
+    maxLat: maxY,
   };
 }
 
@@ -302,10 +324,27 @@ function inferRegionPt(lon: number, lat: number, nameEn: string): string {
   return 'Ásia';
 }
 
-function formatHemisphere(lon: number, lat: number): string {
-  const ns = lat >= 0 ? 'Norte' : 'Sul';
-  const ew = lon >= 0 ? 'Oriental' : 'Ocidental';
-  return `${ns} / ${ew}`;
+const REGION_PT_TO_EN: Record<string, string> = {
+  Antártida: 'Antarctica',
+  'Caribe / América do Sul': 'Caribbean / South America',
+  'América do Sul': 'South America',
+  'América do Norte e Central': 'North & Central America',
+  'Europa / Ásia': 'Europe / Asia',
+  Europa: 'Europe',
+  África: 'Africa',
+  Oceania: 'Oceania',
+  Ásia: 'Asia',
+};
+
+function formatHemisphere(lon: number, lat: number): { pt: string; en: string } {
+  const nsPt = lat >= 0 ? 'Norte' : 'Sul';
+  const ewPt = lon >= 0 ? 'Oriental' : 'Ocidental';
+  const nsEn = lat >= 0 ? 'Northern' : 'Southern';
+  const ewEn = lon >= 0 ? 'Eastern' : 'Western';
+  return {
+    pt: `${nsPt} / ${ewPt}`,
+    en: `${nsEn} / ${ewEn}`,
+  };
 }
 
 function formatTimezone(lon: number): string {
@@ -359,6 +398,18 @@ function buildEntryFromPolygons(params: {
   const lon = Number(best.lonCenter.toFixed(3));
   const lat = Number(best.latCenter.toFixed(3));
   const rings = flattenPolygonRings(polygons);
+  const regionPt = inferRegionPt(lon, lat, nameEn);
+  const hemisphere = formatHemisphere(lon, lat);
+
+  let minLon = best.minLon;
+  let minLat = best.minLat;
+  let maxLon = best.maxLon;
+  let maxLat = best.maxLat;
+  for (let i = 0; i < polygons.length; i++) {
+    const pm = analyzePolygon(polygons[i]);
+    if (pm.minLat < minLat) minLat = pm.minLat;
+    if (pm.maxLat > maxLat) maxLat = pm.maxLat;
+  }
 
   return {
     id,
@@ -369,9 +420,17 @@ function buildEntryFromPolygons(params: {
     lat,
     lonSpan: Number(best.lonSpan.toFixed(2)),
     latSpan: Number(best.latSpan.toFixed(2)),
+    bbox: [
+      Number(minLon.toFixed(3)),
+      Number(minLat.toFixed(3)),
+      Number(maxLon.toFixed(3)),
+      Number(maxLat.toFixed(3)),
+    ],
     areaApproxKm2: totalAreaKm2,
-    regionPt: inferRegionPt(lon, lat, nameEn),
-    hemispherePt: formatHemisphere(lon, lat),
+    regionPt,
+    regionEn: REGION_PT_TO_EN[regionPt] ?? 'World',
+    hemispherePt: hemisphere.pt,
+    hemisphereEn: hemisphere.en,
     timezoneApprox: formatTimezone(lon),
     neighborsPt: Array.from(new Set(neighborsPt)),
     idealDistance: computeIdealZoomDistance(best.lonSpan, best.latSpan),
@@ -426,6 +485,19 @@ export function loadWorldCountries(): {
   });
 
   const countries: CountryEntry[] = [];
+  const usedIds = new Set<string>();
+
+  const claimUniqueId = (preferredId: string, fallbackName: string): string => {
+    const cleanBase = preferredId.trim();
+    if (cleanBase && !usedIds.has(cleanBase)) {
+      usedIds.add(cleanBase);
+      return cleanBase;
+    }
+    const slug = normalizeText(fallbackName).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const candidate = cleanBase ? `${cleanBase}-${slug}` : `territory-${slug}`;
+    usedIds.add(candidate);
+    return candidate;
+  };
 
   for (let featIdx = 0; featIdx < geojson.features.length; featIdx++) {
     const feat = geojson.features[featIdx];
@@ -459,7 +531,7 @@ export function loadWorldCountries(): {
 
       for (const [rule, detachedPolys] of buckets.entries()) {
         const detachedEntry = buildEntryFromPolygons({
-          id: rule.idSuffix,
+          id: claimUniqueId(rule.idSuffix, rule.nameEn),
           nameEn: rule.nameEn,
           namePt: rule.namePt,
           polygons: detachedPolys,
@@ -486,8 +558,11 @@ export function loadWorldCountries(): {
       neighborNames = neighborNames.filter((n) => n !== 'Brasil' && n !== 'Suriname');
     }
 
+    const canonicalWorldAtlasId =
+      feat.id !== undefined && feat.id !== null ? String(feat.id).padStart(3, '0') : '';
+
     const entry = buildEntryFromPolygons({
-      id: `${feat.id ?? nameEn}-${featIdx}`,
+      id: claimUniqueId(canonicalWorldAtlasId, nameEn),
       nameEn,
       namePt,
       polygons: remainingPolygons,

@@ -1,0 +1,709 @@
+{
+  "bbox" : [
+    -74.0185,
+    -33.7423,
+    -32.3877,
+    5.2672
+  ],
+  "beatEvents" : [
+    {
+      "beat" : 0,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 69,
+      "source_x" : 0.329,
+      "source_y" : 0.703,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 0,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 57,
+      "source_x" : 0.438,
+      "source_y" : 0.765,
+      "velocity" : 0.7753715954006234
+    },
+    {
+      "beat" : 0,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 36,
+      "source_x" : 0.719,
+      "source_y" : 0.578,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 1,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 71,
+      "source_x" : 0.375,
+      "source_y" : 0.546,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 1,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 83,
+      "source_x" : 0.735,
+      "source_y" : 0.484,
+      "velocity" : 0.798516035079956
+    },
+    {
+      "beat" : 2,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 73,
+      "source_x" : 0.329,
+      "source_y" : 0.828,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 2,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 36,
+      "source_x" : 0.657,
+      "source_y" : 0.359,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 3,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 76,
+      "source_x" : 0.672,
+      "source_y" : 0.703,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 3,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 88,
+      "source_x" : 0.719,
+      "source_y" : 0.359,
+      "velocity" : 0.7947971343994141
+    },
+    {
+      "beat" : 4,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 78,
+      "source_x" : 0.735,
+      "source_y" : 0.484,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 4,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 58,
+      "source_x" : 0.719,
+      "source_y" : 0.578,
+      "velocity" : 0.7753715954006234
+    },
+    {
+      "beat" : 4,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 37,
+      "source_x" : 0.438,
+      "source_y" : 0.765,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 5,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 81,
+      "source_x" : 0.61,
+      "source_y" : 0.515,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 5,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 93,
+      "source_x" : 0.766,
+      "source_y" : 0.468,
+      "velocity" : 0.7908858299255371
+    },
+    {
+      "beat" : 6,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 83,
+      "source_x" : 0.719,
+      "source_y" : 0.359,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 6,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 37,
+      "source_x" : 0.657,
+      "source_y" : 0.765,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 7,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 69,
+      "source_x" : 0.5,
+      "source_y" : 0.781,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 7,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 81,
+      "source_x" : 0.329,
+      "source_y" : 0.656,
+      "velocity" : 0.7892611026763916
+    },
+    {
+      "beat" : 8,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 71,
+      "source_x" : 0.766,
+      "source_y" : 0.468,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 8,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 59,
+      "source_x" : 0.219,
+      "source_y" : 0.828,
+      "velocity" : 0.7753715954006234
+    },
+    {
+      "beat" : 8,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 38,
+      "source_x" : 0.594,
+      "source_y" : 0.218,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 9,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 73,
+      "source_x" : 0.454,
+      "source_y" : 0.687,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 9,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 85,
+      "source_x" : 0.61,
+      "source_y" : 0.593,
+      "velocity" : 0.7877853870391847
+    },
+    {
+      "beat" : 10,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 76,
+      "source_x" : 0.329,
+      "source_y" : 0.656,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 10,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 38,
+      "source_x" : 0.579,
+      "source_y" : 0.765,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 11,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 78,
+      "source_x" : 0.5,
+      "source_y" : 0.578,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 11,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 90,
+      "source_x" : 0.594,
+      "source_y" : 0.5,
+      "velocity" : 0.7849606513977051
+    },
+    {
+      "beat" : 12,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 81,
+      "source_x" : 0.61,
+      "source_y" : 0.593,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 12,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 60,
+      "source_x" : 0.25,
+      "source_y" : 0.593,
+      "velocity" : 0.7753715954006234
+    },
+    {
+      "beat" : 12,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 39,
+      "source_x" : 0.672,
+      "source_y" : 0.312,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 13,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 83,
+      "source_x" : 0.407,
+      "source_y" : 0.64,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 13,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 95,
+      "source_x" : 0.532,
+      "source_y" : 0.593,
+      "velocity" : 0.7830250263214111
+    },
+    {
+      "beat" : 14,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 69,
+      "source_x" : 0.594,
+      "source_y" : 0.5,
+      "velocity" : 0.98
+    },
+    {
+      "beat" : 14,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 39,
+      "source_x" : 0.547,
+      "source_y" : 0.359,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 15,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 71,
+      "source_x" : 0.547,
+      "source_y" : 0.406,
+      "velocity" : 0.9792555570602417
+    },
+    {
+      "beat" : 15,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 83,
+      "source_x" : 0.579,
+      "source_y" : 0.578,
+      "velocity" : 0.7825869560241699
+    },
+    {
+      "beat" : 16,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 73,
+      "source_x" : 0.532,
+      "source_y" : 0.593,
+      "velocity" : 0.9787812829017639
+    },
+    {
+      "beat" : 16,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 61,
+      "source_x" : 0.125,
+      "source_y" : 0.703,
+      "velocity" : 0.7753715954006234
+    },
+    {
+      "beat" : 16,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 40,
+      "source_x" : 0.563,
+      "source_y" : 0.406,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 17,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 76,
+      "source_x" : 0.5,
+      "source_y" : 0.5,
+      "velocity" : 0.9785072207450867
+    },
+    {
+      "beat" : 17,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 88,
+      "source_x" : 0.297,
+      "source_y" : 0.656,
+      "velocity" : 0.7807828426361084
+    },
+    {
+      "beat" : 18,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 78,
+      "source_x" : 0.579,
+      "source_y" : 0.578,
+      "velocity" : 0.9782336950302124
+    },
+    {
+      "beat" : 18,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 40,
+      "source_x" : 0.579,
+      "source_y" : 0.343,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 19,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 81,
+      "source_x" : 0.641,
+      "source_y" : 0.468,
+      "velocity" : 0.9768661856651306
+    },
+    {
+      "beat" : 19,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 93,
+      "source_x" : 0.641,
+      "source_y" : 0.718,
+      "velocity" : 0.7764493942260743
+    },
+    {
+      "beat" : 20,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 83,
+      "source_x" : 0.297,
+      "source_y" : 0.656,
+      "velocity" : 0.9759785532951355
+    },
+    {
+      "beat" : 20,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 57,
+      "source_x" : 0.672,
+      "source_y" : 0.312,
+      "velocity" : 0.7753715954006234
+    },
+    {
+      "beat" : 20,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 36,
+      "source_x" : 0.657,
+      "source_y" : 0.406,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 21,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 69,
+      "source_x" : 0.594,
+      "source_y" : 0.546,
+      "velocity" : 0.9717926979064941
+    },
+    {
+      "beat" : 21,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 81,
+      "source_x" : 0.547,
+      "source_y" : 0.562,
+      "velocity" : 0.7752044677734375
+    },
+    {
+      "beat" : 22,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 71,
+      "source_x" : 0.641,
+      "source_y" : 0.718,
+      "velocity" : 0.9705617427825928
+    },
+    {
+      "beat" : 22,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 36,
+      "source_x" : 0.579,
+      "source_y" : 0.687,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 23,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 73,
+      "source_x" : 0.704,
+      "source_y" : 0.406,
+      "velocity" : 0.9705195426940918
+    },
+    {
+      "beat" : 23,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 85,
+      "source_x" : 0.344,
+      "source_y" : 0.656,
+      "velocity" : 0.767855739593506
+    },
+    {
+      "beat" : 24,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 76,
+      "source_x" : 0.547,
+      "source_y" : 0.562,
+      "velocity" : 0.9690055847167969
+    },
+    {
+      "beat" : 24,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 58,
+      "source_x" : 0.657,
+      "source_y" : 0.359,
+      "velocity" : 0.7753715954006234
+    },
+    {
+      "beat" : 24,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 37,
+      "source_x" : 0.735,
+      "source_y" : 0.593,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 25,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 78,
+      "source_x" : 0.5,
+      "source_y" : 0.25,
+      "velocity" : 0.9672330617904663
+    },
+    {
+      "beat" : 25,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 90,
+      "source_x" : 0.735,
+      "source_y" : 0.515,
+      "velocity" : 0.7674161911010743
+    },
+    {
+      "beat" : 26,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 81,
+      "source_x" : 0.344,
+      "source_y" : 0.656,
+      "velocity" : 0.9598196744918823
+    },
+    {
+      "beat" : 26,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 37,
+      "source_x" : 0.547,
+      "source_y" : 0.171,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 27,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 83,
+      "source_x" : 0.563,
+      "source_y" : 0.515,
+      "velocity" : 0.9597729444503784
+    },
+    {
+      "beat" : 27,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 95,
+      "source_x" : 0.36,
+      "source_y" : 0.656,
+      "velocity" : 0.7634191989898682
+    },
+    {
+      "beat" : 28,
+      "isAnchor" : true,
+      "layer" : "melody",
+      "pitch" : 69,
+      "source_x" : 0.735,
+      "source_y" : 0.515,
+      "velocity" : 0.9592702388763428
+    },
+    {
+      "beat" : 28,
+      "isAnchor" : true,
+      "layer" : "chords",
+      "pitch" : 59,
+      "source_x" : 0.266,
+      "source_y" : 0.546,
+      "velocity" : 0.7753715954006234
+    },
+    {
+      "beat" : 28,
+      "isAnchor" : true,
+      "layer" : "bass",
+      "pitch" : 38,
+      "source_x" : 0.719,
+      "source_y" : 0.593,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 29,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 71,
+      "source_x" : 0.454,
+      "source_y" : 0.609,
+      "velocity" : 0.9543517231941223
+    },
+    {
+      "beat" : 29,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 83,
+      "source_x" : 0.329,
+      "source_y" : 0.703,
+      "velocity" : 0.8
+    },
+    {
+      "beat" : 30,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 73,
+      "source_x" : 0.36,
+      "source_y" : 0.656,
+      "velocity" : 0.9542739987373352
+    },
+    {
+      "beat" : 30,
+      "isAnchor" : false,
+      "layer" : "bass",
+      "pitch" : 38,
+      "source_x" : 0.641,
+      "source_y" : 0.359,
+      "velocity" : 0.8275323305377549
+    },
+    {
+      "beat" : 31,
+      "isAnchor" : false,
+      "layer" : "melody",
+      "pitch" : 76,
+      "source_x" : 0.532,
+      "source_y" : 0.765,
+      "velocity" : 0.9539109468460083
+    },
+    {
+      "beat" : 31,
+      "isAnchor" : false,
+      "layer" : "sparkle",
+      "pitch" : 88,
+      "source_x" : 0.329,
+      "source_y" : 0.828,
+      "velocity" : 0.7996556758880615
+    }
+  ],
+  "id" : "076",
+  "nameEn" : "Brazil",
+  "namePt" : "Brasil",
+  "pngSpec" : {
+    "layers" : [
+      "melody",
+      "chords",
+      "temperature",
+      "bass",
+      "wind"
+    ],
+    "marginRatio" : 0.08,
+    "resolution" : 1024
+  },
+  "session" : {
+    "base" : {
+      "bpm" : 90,
+      "chords" : [
+        "Am9",
+        "Fmaj7",
+        "Cmaj7",
+        "Gsus4"
+      ],
+      "keyRoot" : "A",
+      "keyRootPt" : "Lá",
+      "modeNameEn" : "Neutral Reference (90 BPM)",
+      "modeNamePt" : "Referência Neutra (90 BPM)",
+      "windMeanSpeed" : 7.7
+    },
+    "region" : {
+      "bpm" : 103,
+      "chords" : [
+        "Fm9",
+        "Csus2",
+        "Eb6",
+        "Fadd9"
+      ],
+      "keyRoot" : "F",
+      "keyRootPt" : "Fá",
+      "modeNameEn" : "Atmospheric Dorian",
+      "modeNamePt" : "Dórico Atmosférico",
+      "windMeanSpeed" : 7.7
+    }
+  },
+  "telemetrySummary" : {
+    "lightningHotspotCount" : 891,
+    "meanCo01" : 0.638,
+    "meanNox01" : 0.661,
+    "meanTemperature01" : 0.756,
+    "windMeanSpeedMs" : 7.7
+  }
+}
