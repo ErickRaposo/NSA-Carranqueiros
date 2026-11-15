@@ -6,6 +6,7 @@ import {
 } from '../audio/speakerCalibration';
 import {
   AudioLevelsMap,
+  BarLoopRange,
   BeatTimelineSlot,
   CompareCountriesState,
   LiveNoteEvent,
@@ -23,7 +24,7 @@ export interface RawMetaBeatEvent {
 
 /**
  * Constrói a matriz sequencial de 32 batidas (8 compassos × 4 tempos) usando EXCLUSIVAMENTE
- * os eventos reais de `meta.json` do país. Se não houver dados reais, retorna lista vazia (zero mock).
+ * os eventos reais de `meta.json` do país (sem fallback sintético).
  */
 export function buildBeatTimeline(
   beatEvents?: ReadonlyArray<RawMetaBeatEvent> | null
@@ -31,7 +32,6 @@ export function buildBeatTimeline(
   if (!beatEvents || beatEvents.length === 0) {
     return [];
   }
-
   const slots: BeatTimelineSlot[] = [];
 
   for (let beat = 0; beat < 32; beat += 1) {
@@ -88,32 +88,42 @@ export function buildBeatTimeline(
 }
 
 /**
- * Avança `progress01` respeitando opcionalmente o congelamento/loop de 1 único compasso (`loopSingleBar`).
+ * Avança `progress01` respeitando opcionalmente o loop de compasso único (`loopSingleBar`)
+ * ou sub-trecho de compassos (`barLoop = [b0, b1]`).
  */
 export function advanceLoopProgress(
   currentProgress01: number,
   dtSec: number,
   durationSeconds: number,
   loopSingleBar: number | null,
-  totalBars = 8
+  totalBars = 8,
+  barLoop?: BarLoopRange
 ): number {
   const safeDur = Math.max(1, durationSeconds);
   const delta = Math.max(0, dtSec) / safeDur;
 
-  if (loopSingleBar === null) {
+  const activeRange: [number, number] | null = barLoop
+    ? barLoop
+    : loopSingleBar !== null
+      ? [loopSingleBar, loopSingleBar]
+      : null;
+
+  if (activeRange === null) {
     return (currentProgress01 + delta) % 1;
   }
 
-  const barIdx = Math.max(0, Math.min(totalBars - 1, loopSingleBar));
+  const b0 = Math.max(0, Math.min(totalBars - 1, Math.min(activeRange[0], activeRange[1])));
+  const b1 = Math.max(b0, Math.min(totalBars - 1, Math.max(activeRange[0], activeRange[1])));
   const barSpan = 1 / totalBars;
-  const start = barIdx * barSpan;
-  const end = start + barSpan;
+  const start = b0 * barSpan;
+  const span = (b1 - b0 + 1) * barSpan;
+  const end = start + span;
 
   if (currentProgress01 < start || currentProgress01 >= end) {
-    return start + (delta % barSpan);
+    return start + (delta % span);
   }
 
-  const offset = (currentProgress01 - start + delta) % barSpan;
+  const offset = (currentProgress01 - start + delta) % span;
   return start + offset;
 }
 

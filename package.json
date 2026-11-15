@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run src",
     "gen:pilots": "node scripts/generate_country_layers.mjs",
-    "gen:countries": "node scripts/generate_country_layers.mjs --all"
+    "gen:countries": "node scripts/generate_country_layers.mjs --all",
+    "gen:audio": "python scripts/generate_country_audio.py",
+    "gen:audio:all": "python scripts/generate_country_audio.py --all"
   },
   "dependencies": {
     "@mintplex-labs/piper-tts-web": "^1.0.5",

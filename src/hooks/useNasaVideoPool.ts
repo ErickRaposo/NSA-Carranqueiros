@@ -13,11 +13,18 @@ import { ExperienceLayersState } from '../experience/types';
  * consumido pelo shader do `EarthCanvas`.
  */
 export function buildGlobeLayerStack(layers: ExperienceLayersState): LayerConfig[] {
-  const anySolo = layers.melody.solo || layers.chords.solo || layers.bass.solo;
+  const spkSolo = layers.melody.sparkleSolo;
+  const anySolo =
+    spkSolo ||
+    layers.melody.solo ||
+    layers.chords.solo ||
+    layers.bass.solo;
 
-  const showMelody = layers.melody.enabled && (!anySolo || layers.melody.solo);
-  const showChords = layers.chords.enabled && (!anySolo || layers.chords.solo);
-  const showBass = layers.bass.enabled && (!anySolo || layers.bass.solo);
+  const showMelody = spkSolo
+    ? layers.melody.sparkleEnabled
+    : layers.melody.enabled && (!anySolo || layers.melody.solo);
+  const showChords = !spkSolo && layers.chords.enabled && (!anySolo || layers.chords.solo);
+  const showBass = !spkSolo && layers.bass.enabled && (!anySolo || layers.bass.solo);
   const showTemp = layers.temperature.enabled && !anySolo;
   const showWind = layers.wind.enabled && !anySolo;
 

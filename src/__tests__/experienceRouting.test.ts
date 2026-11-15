@@ -27,7 +27,7 @@ describe('Earth Jukebox ?view= routing & 5-layer Photoshop mixer contract', () =
 
   it('locks the pilot countries (076 Brazil, 818 Egypt) and 5 layers 1:1', () => {
     expect(PILOT_COUNTRY_IDS).toEqual(['076', '818']);
-    expect(VISUAL_LAYER_ORDER).toEqual(['melody', 'chords', 'temperature', 'bass', 'wind']);
+    expect(VISUAL_LAYER_ORDER).toEqual(['melody', 'chords', 'bass', 'wind', 'temperature']);
   });
 
   it('starts with all 5 NASA layers disabled by default', () => {
