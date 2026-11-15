@@ -14,7 +14,7 @@ import mineiroLogo from '../assets/mineiro-logo.png';
 import symbollLogo from '../assets/symboll.png';
 import erickPhoto from '../assets/team/erick.jpeg';
 import samuelPhoto from '../assets/team/samuel.png';
-import shayenePhoto from '../assets/team/shayene.jpg';
+import shayenePhoto from '../assets/team/shayene.png';
 import { speakTextPt, stopSpeech } from '../accessibility/a11yEngine';
 import { STEM_METAS, STEM_ORDER } from '../community/unlockStore';
 import { Mineiro3D } from './Mineiro3D';
