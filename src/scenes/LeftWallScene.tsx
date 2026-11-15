@@ -4,15 +4,26 @@ import { useExperience } from '../experience/ExperienceContext';
 import { SceneSurfaceProps } from '../experience/types';
 import { loadWorldCountries } from '../geo/countries';
 import { buildGlobeLayerStack, useNasaVideoPool } from '../hooks/useNasaVideoPool';
+import { SpaceStarfield } from './SpaceStarfield';
+import { SpaceshipLaunchOverlay } from './SpaceshipLaunchOverlay';
 
 /**
  * Superfície Projetada — PAREDE ESQUERDA (`leftWall` · Projetor 1 Canto em L):
- * Globo inteiro (3D/2D) focado no planeta e no país selecionado sobre `#000000` absoluto.
- * Propriedade criativa 100% livre da Shay (Pessoa 1).
+ * - `boarding` / `countdown`: janelinha da nave vendo a torre de lançamento e pessoas lá embaixo.
+ * - `zero_g` (4s): cabine espacial em volta do Globo que desaparece após 4 segundos.
+ * - `idle` / `exploring` / `ended`: Globo inteiro no espaço `#000000` estrelado.
  */
 export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => {
-  const { country, availableCountryIds, lang, layers, playback, selectCountry } = useExperience();
-  const isPt = lang === 'pt';
+  const {
+    country,
+    availableCountryIds,
+    lang,
+    layers,
+    missionPhase,
+    playback,
+    storyStep,
+    selectCountry,
+  } = useExperience();
   const world = useMemo(() => loadWorldCountries(), []);
 
   const globeLayerStack = useMemo(() => buildGlobeLayerStack(layers), [layers]);
@@ -26,18 +37,37 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =>
   const [flyTarget, setFlyTarget] = useState<CameraViewTarget | null>(null);
 
   useEffect(() => {
-    if (!country) return;
+    const isOverview =
+      missionPhase === 'idle' ||
+      missionPhase === 'zero_g' ||
+      missionPhase === 'ended' ||
+      (storyStep === 0 && !playback.isPlaying);
+    if (!country && !isOverview) return;
+
     setFlyTarget({
-      lon: country.lon,
-      lat: country.lat,
-      distance: country.idealDistance,
+      lon: country?.lon ?? -47,
+      lat: country?.lat ?? -14,
+      distance:
+        missionPhase === 'ended'
+          ? 2.65
+          : isOverview
+            ? 3.8
+            : Math.min(3.8, (country?.idealDistance ?? 2.4) + 0.55),
       nonce: Date.now(),
     });
-  }, [country?.id, country?.idealDistance, country?.lat, country?.lon]);
+  }, [
+    country?.id,
+    country?.idealDistance,
+    country?.lat,
+    country?.lon,
+    missionPhase,
+    playback.isPlaying,
+    storyStep,
+  ]);
 
   return (
     <section
-      className="relative h-full w-full overflow-hidden bg-black text-slate-50 select-none"
+      className="relative h-full w-full overflow-hidden bg-black select-none"
       style={{ backgroundColor: '#000000' }}
       data-surface="leftWall"
       data-render-context={renderContext}
@@ -48,10 +78,10 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =>
         viewMode="3d"
         visualStyle="bioluminescent"
         backgroundHex="#000000"
-        orbitAutoRotate={!country}
+        orbitAutoRotate={!country || missionPhase !== 'exploring' || storyStep === 0}
         showBorders={true}
         showGrid={false}
-        showLabels={true}
+        showLabels={false}
         highContrast={false}
         lang={lang}
         availableCountryIds={availableCountryIds}
@@ -69,14 +99,11 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =>
         }}
       />
 
-      <div className="pointer-events-none absolute bottom-5 left-6 z-10">
-        <div className="text-xs font-semibold tracking-widest text-slate-400 uppercase">
-          {country ? (isPt ? country.regionPt : country.regionEn) : 'Earth Jukebox'}
-        </div>
-        <h2 className="text-2xl font-semibold tracking-tight text-slate-50">
-          {country ? (isPt ? country.namePt : country.nameEn) : 'Terra'}
-        </h2>
+      <div className="pointer-events-none absolute inset-0 mix-blend-screen opacity-80">
+        <SpaceStarfield seedOffset={1} count={64} />
       </div>
+
+      <SpaceshipLaunchOverlay surface="leftWall" phase={missionPhase} />
     </section>
   );
 };

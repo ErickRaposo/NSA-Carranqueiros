@@ -5,9 +5,10 @@ import { PILOT_COUNTRY_IDS, VISUAL_LAYER_ORDER } from '../experience/types';
 import { buildGlobeLayerStack } from '../hooks/useNasaVideoPool';
 
 describe('Earth Jukebox ?view= routing & 5-layer Photoshop mixer contract', () => {
-  it('defaults root "/" without query params directly to ?view=demo', () => {
-    expect(parseRouteFromSearch('')).toEqual({ view: 'demo', outId: 1 });
-    expect(parseRouteFromSearch('?view=unknown')).toEqual({ view: 'demo', outId: 1 });
+  it('defaults root "/" without query params directly to portal', () => {
+    expect(parseRouteFromSearch('')).toEqual({ view: 'portal', outId: 1 });
+    expect(parseRouteFromSearch('?view=unknown')).toEqual({ view: 'portal', outId: 1 });
+    expect(parseRouteFromSearch('?view=demo')).toEqual({ view: 'demo', outId: 1 });
   });
 
   it('parses all 5 official views and projector outputs 1..3', () => {

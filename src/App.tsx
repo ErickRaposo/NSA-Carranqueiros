@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { startSpaceAmbient } from './audio/spaceAmbient';
+import { EntryPortal } from './components/EntryPortal';
 import { ExperienceProvider } from './experience/ExperienceContext';
 import { ProjectorOutId, ViewRole } from './experience/types';
 import { ProjectorView } from './views/ProjectorView';
@@ -12,13 +14,32 @@ interface ParsedRoute {
   outId: ProjectorOutId;
 }
 
-export function parseRouteFromSearch(search: string): ParsedRoute {
+export function parseRouteFromSearch(
+  search: string,
+  pathname = typeof window !== 'undefined' ? window.location.pathname : '/'
+): ParsedRoute {
+  const normalizedPath = pathname.replace(/\/+$/, '').toLowerCase();
   const params = new URLSearchParams(search);
   const rawView = (params.get('view') ?? '').toLowerCase();
-  const validViews: ViewRole[] = ['setup', 'simulator', 'projector', 'controller', 'demo'];
-  const view: ViewRole = validViews.includes(rawView as ViewRole)
+  const validViews: ViewRole[] = ['setup', 'simulator', 'projector', 'controller', 'demo', 'portal'];
+
+  let view: ViewRole = validViews.includes(rawView as ViewRole)
     ? (rawView as ViewRole)
-    : 'demo';
+    : 'portal';
+
+  if (!rawView && (normalizedPath === '/controle' || normalizedPath === '/controller')) {
+    view = 'controller';
+  } else if (
+    !rawView &&
+    (normalizedPath === '/sala' || normalizedPath === '/demo')
+  ) {
+    view = 'demo';
+  } else if (
+    !rawView &&
+    (normalizedPath === '/sobre' || normalizedPath === '/portal' || normalizedPath === '/equipe')
+  ) {
+    view = 'portal';
+  }
 
   const rawOut = Number(params.get('out') ?? '1');
   const outId: ProjectorOutId = rawOut === 2 ? 2 : rawOut === 3 ? 3 : 1;
@@ -41,6 +62,12 @@ export function App(): React.ReactElement {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
+  useEffect(() => {
+    if (route.view !== 'setup') {
+      startSpaceAmbient();
+    }
+  }, [route.view]);
+
   const navigateTo = useCallback((nextView: ViewRole, outId?: ProjectorOutId) => {
     const params = new URLSearchParams();
     params.set('view', nextView);
@@ -56,6 +83,9 @@ export function App(): React.ReactElement {
     (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV
   );
 
+  const [highContrast, setHighContrast] = useState(false);
+  const [fontScale, setFontScale] = useState(1);
+
   return (
     <ExperienceProvider>
       {route.view === 'setup' && <SetupView />}
@@ -63,6 +93,19 @@ export function App(): React.ReactElement {
       {route.view === 'projector' && <ProjectorView outId={route.outId} />}
       {route.view === 'controller' && <TabletControllerView />}
       {route.view === 'demo' && <WebDemoView />}
+      {route.view === 'portal' && (
+        <EntryPortal
+          highContrast={highContrast}
+          onToggleHighContrast={() => setHighContrast((prev) => !prev)}
+          fontScale={fontScale}
+          onCycleFontScale={() =>
+            setFontScale((prev) => (prev === 1 ? 1.15 : prev === 1.15 ? 1.3 : 1))
+          }
+          onExploreEarth={() => navigateTo('demo')}
+          onOpenAuth={() => navigateTo('simulator')}
+          onOpenRegister={() => navigateTo('controller')}
+        />
+      )}
 
       {/* Barra flutuante discreta APENAS em dev local (oculta na tela limpa do projetor) */}
       {isDev && route.view !== 'projector' && (
@@ -72,6 +115,7 @@ export function App(): React.ReactElement {
         >
           {(
             [
+              ['portal', 'Portal'],
               ['demo', 'Demo'],
               ['controller', 'Tablet'],
               ['simulator', 'Simulator'],

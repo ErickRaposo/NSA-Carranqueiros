@@ -19,6 +19,7 @@ import {
   Lang,
   LiveFrameSnapshot,
   LiveNoteEvent,
+  MissionPhase,
   PILOT_COUNTRY_IDS,
   RoomDimensions,
   SoloableLayerId,
@@ -223,6 +224,7 @@ interface SyncPayload {
   countryId: string | null;
   lang: Lang;
   storyStep: number;
+  missionPhase: MissionPhase;
   audioMode: AudioOutputMode;
   masterGain: number;
   layers: ExperienceLayersState;
@@ -257,6 +259,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [selectedCountryId, setSelectedCountryId] = useState<string | null>('076');
   const [lang, setLangState] = useState<Lang>('pt');
   const [storyStep, setStoryStepState] = useState<number>(0);
+  const [missionPhase, setMissionPhaseState] = useState<MissionPhase>('idle');
   const [audioMode, setAudioModeState] = useState<AudioOutputMode>('hrtf');
   const [masterGain, setMasterGainState] = useState<number>(0.9);
   const [layers, setLayers] = useState<ExperienceLayersState>(DEFAULT_LAYERS_STATE);
@@ -593,6 +596,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setSelectedCountryId(data.countryId);
       setLangState(data.lang);
       setStoryStepState(data.storyStep ?? 0);
+      setMissionPhaseState(data.missionPhase ?? 'idle');
       setAudioModeState(data.audioMode);
       setMasterGainState(data.masterGain);
       setLayers(data.layers);
@@ -617,6 +621,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       countryId: selectedCountryId,
       lang,
       storyStep,
+      missionPhase,
       audioMode,
       masterGain,
       layers,
@@ -635,6 +640,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     lang,
     layers,
     masterGain,
+    missionPhase,
     roomDimensions,
     selectedCountryId,
     storyStep,
@@ -680,6 +686,16 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         ...prev.melody,
         sparkleEnabled: !prev.melody.sparkleEnabled,
       },
+    }));
+  }, []);
+
+  const setAllLayersEnabled = useCallback((enabled: boolean) => {
+    setLayers((prev) => ({
+      melody: { ...prev.melody, enabled, solo: false },
+      chords: { ...prev.chords, enabled, solo: false },
+      temperature: { ...prev.temperature, enabled },
+      bass: { ...prev.bass, enabled, solo: false },
+      wind: { ...prev.wind, enabled },
     }));
   }, []);
 
@@ -767,6 +783,10 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setStoryStepState(normalized);
   }, []);
 
+  const setMissionPhase = useCallback((phase: MissionPhase) => {
+    setMissionPhaseState(phase);
+  }, []);
+
   const nextStoryStep = useCallback(() => {
     setStoryStepState((prev) => (prev + 1) % STORY_STEP_COUNT);
   }, []);
@@ -794,6 +814,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       loadStatus: country ? 'ready' : 'idle',
       lang,
       storyStep,
+      missionPhase,
       audioMode,
       masterGain,
       layers,
@@ -805,6 +826,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       getLiveFrame,
       selectCountry,
       toggleEye,
+      setAllLayersEnabled,
       toggleSparkle,
       setLayerGain,
       setWindWetMix,
@@ -817,6 +839,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       seekProgress,
       setLang,
       setStoryStep,
+      setMissionPhase,
       nextStoryStep,
       prevStoryStep,
       setRoomDimensions,
@@ -831,6 +854,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       layers,
       liveEvents,
       masterGain,
+      missionPhase,
       nextStoryStep,
       pilotSet,
       playback,
@@ -841,6 +865,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       seekBeat,
       seekProgress,
       selectCountry,
+      setAllLayersEnabled,
       setAudioMode,
       setLang,
       setLayerGain,

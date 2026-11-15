@@ -8073,6 +8073,63 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   }
 }
 
+@keyframes ceiling-zero-g-drift-a {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translate3d(0px, 0px, 0px) rotate(-2deg);
+  }
+  25% {
+    transform: translate(-50%, -50%) translate3d(10px, -14px, 0px) rotate(2.5deg);
+  }
+  50% {
+    transform: translate(-50%, -50%) translate3d(-6px, -22px, 0px) rotate(1deg);
+  }
+  75% {
+    transform: translate(-50%, -50%) translate3d(-14px, -8px, 0px) rotate(-3deg);
+  }
+}
+
+@keyframes ceiling-zero-g-drift-b {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translate3d(0px, 0px, 0px) rotate(2deg);
+  }
+  30% {
+    transform: translate(-50%, -50%) translate3d(-14px, 12px, 0px) rotate(-2.5deg);
+  }
+  65% {
+    transform: translate(-50%, -50%) translate3d(12px, 18px, 0px) rotate(3deg);
+  }
+}
+
+@keyframes ceiling-zero-g-drift-c {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translate3d(0px, 0px, 0px) rotate(0deg);
+  }
+  35% {
+    transform: translate(-50%, -50%) translate3d(12px, 10px, 0px) rotate(3.5deg);
+  }
+  70% {
+    transform: translate(-50%, -50%) translate3d(-10px, -14px, 0px) rotate(-2.5deg);
+  }
+}
+
+.ceiling-flag-float-a {
+  animation: ceiling-zero-g-drift-a 16s ease-in-out infinite;
+  will-change: transform;
+}
+
+.ceiling-flag-float-b {
+  animation: ceiling-zero-g-drift-b 19s ease-in-out infinite;
+  will-change: transform;
+}
+
+.ceiling-flag-float-c {
+  animation: ceiling-zero-g-drift-c 22s ease-in-out infinite;
+  will-change: transform;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .top-hud,
   .hud-left-col,
@@ -8082,7 +8139,10 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   .collective-bottom-sheet,
   .inapp-robot-guide,
   .spatial-dock-btn,
-  .collective-orbit-pill {
+  .collective-orbit-pill,
+  .ceiling-flag-float-a,
+  .ceiling-flag-float-b,
+  .ceiling-flag-float-c {
     animation: none !important;
     transition: none !important;
   }

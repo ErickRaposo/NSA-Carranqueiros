@@ -1,8 +1,16 @@
 import { DatasetId } from '../datasets/nasaDatasets';
 
 export type Lang = 'pt' | 'en';
-export type ViewRole = 'setup' | 'simulator' | 'projector' | 'controller' | 'demo';
+export type ViewRole = 'setup' | 'simulator' | 'projector' | 'controller' | 'demo' | 'portal';
 export type ProjectorOutId = 1 | 2 | 3;
+export type MissionPhase =
+  | 'idle'
+  | 'briefing'
+  | 'boarding'
+  | 'countdown'
+  | 'zero_g'
+  | 'exploring'
+  | 'ended';
 
 /**
  * As 5 camadas estilo Photoshop do Earth Jukebox (1:1 com os 5 PNGs 1024x1024 por país).
@@ -232,6 +240,8 @@ export interface ExperienceContextValue {
   lang: Lang;
   /** Passo atual da narrativa do Robozinho (Parede Direita <-> Tablet) */
   storyStep: number;
+  /** Fase atual da expedição espacial (idle -> boarding -> countdown -> zero_g -> exploring -> ended) */
+  missionPhase: MissionPhase;
   audioMode: AudioOutputMode;
   masterGain: number;
   layers: ExperienceLayersState;
@@ -250,6 +260,7 @@ export interface ExperienceContextValue {
   // Ações compartilhadas (Contrato Pessoa 1 <-> Pessoa 2)
   selectCountry: (countryId: string | null) => void;
   toggleEye: (layerId: VisualLayerId) => void;
+  setAllLayersEnabled: (enabled: boolean) => void;
   toggleSparkle: () => void;
   setLayerGain: (layerId: VisualLayerId, gainOrWet: number) => void;
   setWindWetMix: (wetMix: number) => void;
@@ -262,6 +273,7 @@ export interface ExperienceContextValue {
   seekProgress: (progress01: number) => void;
   setLang: (lang: Lang) => void;
   setStoryStep: (step: number) => void;
+  setMissionPhase: (phase: MissionPhase) => void;
   nextStoryStep: () => void;
   prevStoryStep: () => void;
   setRoomDimensions: (next: RoomDimensions) => void;
