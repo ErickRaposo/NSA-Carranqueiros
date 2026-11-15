@@ -225,6 +225,12 @@ function earthJukeboxLanPlugin(): Plugin {
         recvBuf = Buffer.from(decoded.rest);
         if (decoded.closed) {
           clients.delete(clientId);
+          if (
+            clients.size === 0 ||
+            !Array.from(clients.values()).some((c) => c.role === 'controller')
+          ) {
+            lastSyncSnapshot = null;
+          }
           socket.end();
           broadcastPresence();
           return;
@@ -270,6 +276,12 @@ function earthJukeboxLanPlugin(): Plugin {
 
       const cleanup = () => {
         if (clients.delete(clientId)) {
+          if (
+            clients.size === 0 ||
+            !Array.from(clients.values()).some((c) => c.role === 'controller')
+          ) {
+            lastSyncSnapshot = null;
+          }
           broadcastPresence();
         }
       };

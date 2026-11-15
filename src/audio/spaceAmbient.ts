@@ -8,8 +8,58 @@
 let ambientCtx: AudioContext | null = null;
 let ambientMaster: GainNode | null = null;
 let ambientNodes: AudioNode[] = [];
+let activeSfxNodes = new Set<AudioNode>();
 let ambientStarted = false;
-let unlockBound = false;
+let ambientSessionActive = false;
+let stopAmbientTimerId: number | null = null;
+let unlockHandler: (() => void) | null = null;
+
+function detachUnlockListeners(): void {
+  if (typeof window === 'undefined' || !unlockHandler) return;
+  window.removeEventListener('pointerdown', unlockHandler, true);
+  window.removeEventListener('keydown', unlockHandler, true);
+  unlockHandler = null;
+}
+
+function registerSfxSource(node: AudioScheduledSourceNode, extraNodes: AudioNode[] = []): void {
+  activeSfxNodes.add(node);
+  for (const extra of extraNodes) {
+    activeSfxNodes.add(extra);
+  }
+  node.onended = () => {
+    activeSfxNodes.delete(node);
+    for (const extra of extraNodes) {
+      activeSfxNodes.delete(extra);
+      try {
+        extra.disconnect();
+      } catch {
+        // ignore
+      }
+    }
+    try {
+      node.disconnect();
+    } catch {
+      // ignore
+    }
+  };
+}
+
+function stopAndDisconnectNodes(nodes: Iterable<AudioNode>): void {
+  for (const node of nodes) {
+    if ('stop' in node && typeof (node as OscillatorNode).stop === 'function') {
+      try {
+        (node as OscillatorNode).stop();
+      } catch {
+        // ignore
+      }
+    }
+    try {
+      node.disconnect();
+    } catch {
+      // ignore
+    }
+  }
+}
 
 function buildSpacePad(ctx: AudioContext): void {
   if (ambientMaster) return;
@@ -68,13 +118,20 @@ function buildSpacePad(ctx: AudioContext): void {
 
 export function startSpaceAmbient(): void {
   if (typeof window === 'undefined') return;
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
   const AudioCtor =
     window.AudioContext ||
     (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioCtor) return;
 
+  if (stopAmbientTimerId !== null) {
+    window.clearTimeout(stopAmbientTimerId);
+    stopAmbientTimerId = null;
+  }
+  ambientSessionActive = true;
+
   try {
-    if (!ambientCtx) {
+    if (!ambientCtx || ambientCtx.state === 'closed') {
       ambientCtx = new AudioCtor();
     }
     if (!ambientStarted) {
@@ -84,23 +141,29 @@ export function startSpaceAmbient(): void {
       void ambientCtx.resume().catch(() => {});
     }
 
-    if (!unlockBound && ambientCtx.state === 'suspended') {
-      unlockBound = true;
+    if (!unlockHandler && ambientCtx.state === 'suspended') {
       const unlock = () => {
-        if (!ambientCtx) return;
+        if (!ambientSessionActive || !ambientCtx || ambientCtx.state === 'closed') {
+          detachUnlockListeners();
+          return;
+        }
         void ambientCtx
           .resume()
           .then(() => {
-            if (ambientCtx && !ambientStarted) {
+            if (!ambientSessionActive || !ambientCtx || ambientCtx.state === 'closed') {
+              detachUnlockListeners();
+              return;
+            }
+            if (!ambientStarted) {
               buildSpacePad(ambientCtx);
+            }
+            if (ambientCtx.state === 'running') {
+              detachUnlockListeners();
             }
           })
           .catch(() => {});
-        if (ambientCtx.state === 'running') {
-          window.removeEventListener('pointerdown', unlock, true);
-          window.removeEventListener('keydown', unlock, true);
-        }
       };
+      unlockHandler = unlock;
       window.addEventListener('pointerdown', unlock, { capture: true, passive: true });
       window.addEventListener('keydown', unlock, { capture: true, passive: true });
     }
@@ -109,44 +172,72 @@ export function startSpaceAmbient(): void {
   }
 }
 
+/**
+ * Interrompe imediatamente música espacial ambiente, todos os efeitos sonoros ativos/agendados
+ * e listeners globais de desbloqueio (ex.: ao sair da página, fechar/ocultar a aba ou trocar de rota).
+ */
+export function stopAllSpaceAudio(): void {
+  ambientSessionActive = false;
+  detachUnlockListeners();
+  if (stopAmbientTimerId !== null && typeof window !== 'undefined') {
+    window.clearTimeout(stopAmbientTimerId);
+    stopAmbientTimerId = null;
+  }
+
+  stopAndDisconnectNodes(activeSfxNodes);
+  activeSfxNodes.clear();
+  stopAndDisconnectNodes(ambientNodes);
+  ambientNodes = [];
+  ambientMaster = null;
+  ambientStarted = false;
+
+  if (ambientCtx) {
+    const ctxToClose = ambientCtx;
+    ambientCtx = null;
+    try {
+      if (ctxToClose.state !== 'closed') {
+        void ctxToClose.close().catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export function stopSpaceAmbient(): void {
-  if (!ambientCtx || !ambientMaster) return;
+  ambientSessionActive = false;
+  detachUnlockListeners();
+  if (!ambientCtx || !ambientMaster) {
+    stopAllSpaceAudio();
+    return;
+  }
   try {
     const now = ambientCtx.currentTime;
     ambientMaster.gain.cancelScheduledValues(now);
     ambientMaster.gain.setValueAtTime(Math.max(ambientMaster.gain.value, 0.0001), now);
-    ambientMaster.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
-    window.setTimeout(() => {
-      for (const node of ambientNodes) {
-        if ('stop' in node && typeof (node as OscillatorNode).stop === 'function') {
-          try {
-            (node as OscillatorNode).stop();
-          } catch {
-            // ignore
-          }
-        }
-        try {
-          node.disconnect();
-        } catch {
-          // ignore
-        }
+    ambientMaster.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+    if (stopAmbientTimerId !== null) {
+      window.clearTimeout(stopAmbientTimerId);
+    }
+    stopAmbientTimerId = window.setTimeout(() => {
+      stopAmbientTimerId = null;
+      if (!ambientSessionActive) {
+        stopAllSpaceAudio();
       }
-      ambientNodes = [];
-      ambientMaster = null;
-      ambientStarted = false;
-    }, 650);
+    }, 380);
   } catch {
-    // ignore
+    stopAllSpaceAudio();
   }
 }
 
 function ensureAmbientContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return null;
   const AudioCtor =
     window.AudioContext ||
     (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioCtor) return null;
-  if (!ambientCtx) {
+  if (!ambientCtx || ambientCtx.state === 'closed') {
     ambientCtx = new AudioCtor();
   }
   if (ambientCtx.state === 'suspended') {
@@ -230,6 +321,8 @@ export function playLaunchThrust8D(durationSec = 10.0): void {
     subOsc.connect(subGain);
     subGain.connect(panner);
 
+    registerSfxSource(noise, [filter, thrustGain, panner]);
+    registerSfxSource(subOsc, [subGain]);
     noise.start(now);
     noise.stop(now + durationSec + 0.05);
     subOsc.start(now);
@@ -275,6 +368,7 @@ export function playBlastDoorSlamSfx(): void {
     steamFilter.connect(steamGain);
     steamGain.connect(steamPan);
     steamPan.connect(ctx.destination);
+    registerSfxSource(steam, [steamFilter, steamGain, steamPan]);
     steam.start(now);
     steam.stop(now + 1.5);
 
@@ -294,6 +388,7 @@ export function playBlastDoorSlamSfx(): void {
       clang.connect(clangGain);
       clangGain.connect(clangPan);
       clangPan.connect(ctx.destination);
+      registerSfxSource(clang, [clangGain, clangPan]);
       clang.start(impactAt);
       clang.stop(impactAt + 0.6);
     });
@@ -326,6 +421,7 @@ export function playHatchEjectSfx(): void {
     latch.connect(latchGain);
     latchGain.connect(latchPan);
     latchPan.connect(ctx.destination);
+    registerSfxSource(latch, [latchGain, latchPan]);
     latch.start(now);
     latch.stop(now + 0.95);
 
@@ -351,6 +447,7 @@ export function playHatchEjectSfx(): void {
     lp.connect(hg);
     hg.connect(pan);
     pan.connect(ctx.destination);
+    registerSfxSource(hiss, [lp, hg, pan]);
     hiss.start(now);
     hiss.stop(now + 1.4);
   } catch {
@@ -382,6 +479,7 @@ export function playCabinDissolveSfx(): void {
       sweep.connect(gain);
       gain.connect(pan);
       pan.connect(ctx.destination);
+      registerSfxSource(sweep, [gain, pan]);
       sweep.start(now);
       sweep.stop(now + 1.55);
     });
@@ -410,6 +508,7 @@ export function playLandingThudSfx(): void {
     subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
     sub.connect(subGain);
     subGain.connect(ctx.destination);
+    registerSfxSource(sub, [subGain]);
     sub.start(now);
     sub.stop(now + 0.5);
 
@@ -430,6 +529,7 @@ export function playLandingThudSfx(): void {
     noise.connect(lp);
     lp.connect(ng);
     ng.connect(ctx.destination);
+    registerSfxSource(noise, [lp, ng]);
     noise.start(now);
     noise.stop(now + 0.25);
   } catch {

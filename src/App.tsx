@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { startSpaceAmbient } from './audio/spaceAmbient';
+import { stopSpeech, stopUiAudioTones } from './accessibility/a11yEngine';
+import { stopAllSpaceAudio } from './audio/spaceAmbient';
 import { EntryPortal } from './components/EntryPortal';
 import { ExperienceProvider } from './experience/ExperienceContext';
 import { ProjectorOutId, SpeakerNodeIndex, ViewRole } from './experience/types';
 import { AudioNodeView } from './views/AudioNodeView';
 import { ProjectorView } from './views/ProjectorView';
 import { SetupView } from './views/SetupView';
-import { SimulatorView } from './views/SimulatorView';
 import { TabletControllerView } from './views/TabletControllerView';
 import { WebDemoView } from './views/WebDemoView';
 
@@ -22,10 +22,14 @@ export function parseRouteFromSearch(
   const normalizedPath = pathname.replace(/\/+$/, '').toLowerCase();
   const params = new URLSearchParams(search);
   const rawView = (params.get('view') ?? '').toLowerCase();
-  const normalizedView = rawView === 'admin' ? 'setup' : rawView;
+  const normalizedView =
+    rawView === 'admin'
+      ? 'setup'
+      : rawView === 'simulator'
+        ? 'demo'
+        : rawView;
   const validViews: ViewRole[] = [
     'setup',
-    'simulator',
     'projector',
     'controller',
     'demo',
@@ -88,9 +92,38 @@ export function App(): React.ReactElement {
   }, []);
 
   useEffect(() => {
-    if (route.view !== 'setup' && route.view !== 'audio-node' && route.view !== 'projector') {
-      startSpaceAmbient();
-    }
+    const stopAllTransientAudio = () => {
+      stopSpeech();
+      stopUiAudioTones();
+      stopAllSpaceAudio();
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        stopAllTransientAudio();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', stopAllTransientAudio);
+    window.addEventListener('beforeunload', stopAllTransientAudio);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', stopAllTransientAudio);
+      window.removeEventListener('beforeunload', stopAllTransientAudio);
+    };
+  }, []);
+
+  useEffect(() => {
+    stopSpeech();
+    stopUiAudioTones();
+    stopAllSpaceAudio();
+    return () => {
+      stopSpeech();
+      stopUiAudioTones();
+      stopAllSpaceAudio();
+    };
   }, [route.view]);
 
   const navigateTo = useCallback(
@@ -110,31 +143,40 @@ export function App(): React.ReactElement {
     []
   );
 
-  const isDev = Boolean(
-    (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV
-  );
-
   const [highContrast, setHighContrast] = useState(false);
   const [fontScale, setFontScale] = useState(1);
 
+  if (route.view === 'portal') {
+    return (
+      <EntryPortal
+        highContrast={highContrast}
+        onToggleHighContrast={() => setHighContrast((prev) => !prev)}
+        fontScale={fontScale}
+        onCycleFontScale={() =>
+          setFontScale((prev) => (prev === 1 ? 1.15 : prev === 1.15 ? 1.3 : 1))
+        }
+        onExploreEarth={() => navigateTo('demo')}
+        onOpenAuth={() => navigateTo('demo')}
+        onOpenRegister={() => navigateTo('demo')}
+      />
+    );
+  }
+
   return (
-    <ExperienceProvider>
+    <ExperienceProvider routeView={route.view}>
       {route.view === 'setup' && <SetupView />}
-      {route.view === 'simulator' && <SimulatorView />}
       {route.view === 'projector' && <ProjectorView outId={route.outId} />}
       {route.view === 'controller' && <TabletControllerView />}
-      {route.view === 'demo' && <WebDemoView />}
-      {route.view === 'portal' && (
-        <EntryPortal
-          highContrast={highContrast}
-          onToggleHighContrast={() => setHighContrast((prev) => !prev)}
-          fontScale={fontScale}
-          onCycleFontScale={() =>
-            setFontScale((prev) => (prev === 1 ? 1.15 : prev === 1.15 ? 1.3 : 1))
-          }
-          onExploreEarth={() => navigateTo('demo')}
-          onOpenAuth={() => navigateTo('simulator')}
-          onOpenRegister={() => navigateTo('controller')}
+      {route.view === 'demo' && (
+        <WebDemoView
+          // TODO(erick): apontar para a tela intermediária do Erick (hub de seleção) quando entrar no repositório
+          onBackToHub={() => {
+            const params = new URLSearchParams();
+            params.set('view', 'hub');
+            window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
+            setRoute(parseRouteFromSearch(`?${params.toString()}`));
+          }}
+          onOpenSetup={() => navigateTo('setup')}
         />
       )}
       {route.view === 'audio-node' && (
@@ -142,57 +184,6 @@ export function App(): React.ReactElement {
           spkIndex={spkIndex}
           onChangeSpeakerIndex={(next) => navigateTo('audio-node', undefined, next)}
         />
-      )}
-
-      {/* Barra flutuante discreta APENAS em dev local (oculta nos projetores; posicionada à direita no Admin p/ não sobrepor a Sidebar) */}
-      {isDev && route.view !== 'projector' && (
-        <nav
-          aria-label="Dev View Switcher"
-          className={`fixed bottom-2.5 z-50 flex items-center gap-1 rounded-full border border-slate-400/20 bg-[#060c1a]/92 p-1 text-[11px] font-medium text-slate-300 shadow-lg backdrop-blur-md ${
-            route.view === 'setup' ? 'right-3' : 'left-2.5'
-          }`}
-        >
-          {(
-            [
-              ['portal', 'Portal'],
-              ['demo', 'Demo'],
-              ['controller', 'Tablet'],
-              ['simulator', 'Simulator'],
-            ] as [ViewRole, string][]
-          ).map(([v, label]) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => navigateTo(v)}
-              className={`rounded-full px-2.5 py-1 transition ${
-                route.view === v ? 'bg-white/15 font-semibold text-white' : 'hover:text-white'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-          <span className="mx-0.5 h-3.5 w-px bg-slate-500/35" aria-hidden="true" />
-          <button
-            type="button"
-            onClick={() => navigateTo('setup')}
-            className={`rounded-full px-2.5 py-1 transition ${
-              route.view === 'setup'
-                ? 'bg-sky-400/20 font-semibold text-sky-200 ring-1 ring-sky-400/40'
-                : 'text-sky-300/90 hover:text-sky-200'
-            }`}
-            title="Show Control Admin: Projetores, Som 8D, Caixas & Rede LAN (?view=admin)"
-          >
-            Show Control
-          </button>
-          <button
-            type="button"
-            onClick={() => navigateTo('projector', 1)}
-            className="rounded-full px-2.5 py-1 text-slate-400 hover:text-white"
-            title="Abrir saída limpa do Projetor 1"
-          >
-            Out 1
-          </button>
-        </nav>
       )}
     </ExperienceProvider>
   );

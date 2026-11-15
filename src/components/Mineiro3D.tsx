@@ -7,17 +7,21 @@ interface Mineiro3DProps {
   /** Whether MINEIRØ is actively speaking / explaining */
   isExplaining: boolean;
   /** Layout size preset for onboarding vs floating HUD copilot */
-  size?: 'full' | 'compact' | 'avatar';
+  size?: 'full' | 'compact' | 'avatar' | 'roaming' | 'hero' | 'spotlight';
+  /** Enables cheerful waving + periodic 360 twirl showcase during standby */
+  idleShowcase?: boolean;
 }
 
 export const Mineiro3D: React.FC<Mineiro3DProps> = ({
   stepIndex,
   isExplaining,
   size = 'full',
+  idleShowcase = false,
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const stepRef = useRef(stepIndex);
   const explainingRef = useRef(isExplaining);
+  const idleShowcaseRef = useRef(idleShowcase);
 
   useEffect(() => {
     stepRef.current = stepIndex;
@@ -26,6 +30,10 @@ export const Mineiro3D: React.FC<Mineiro3DProps> = ({
   useEffect(() => {
     explainingRef.current = isExplaining;
   }, [isExplaining]);
+
+  useEffect(() => {
+    idleShowcaseRef.current = idleShowcase;
+  }, [idleShowcase]);
 
   useEffect(() => {
     const container = mountRef.current;
@@ -37,9 +45,22 @@ export const Mineiro3D: React.FC<Mineiro3DProps> = ({
     const scene = new THREE.Scene();
 
     const camera = new THREE.PerspectiveCamera(36, width / height, 0.1, 100);
-    camera.position.set(0, size === 'avatar' ? 0.14 : 0.1, size === 'avatar' ? 4.35 : 4.9);
+    camera.position.set(
+      0,
+      size === 'avatar' ? 0.14 : 0.1,
+      size === 'avatar'
+        ? 4.35
+        : size === 'roaming' || size === 'hero' || size === 'spotlight'
+          ? 4.65
+          : 4.9
+    );
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    } catch {
+      return;
+    }
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -209,19 +230,32 @@ export const Mineiro3D: React.FC<Mineiro3DProps> = ({
       const dt = Math.min(clock.getDelta(), 0.05) || 0.016;
       const step = stepRef.current;
       const explaining = explainingRef.current;
+      const showcase = idleShowcaseRef.current;
 
-      // 1. Zero-G Floating (smooth figure-8 drift)
-      mineiro.position.y = Math.sin(elapsed * 1.45) * 0.14;
+      // 1. Zero-G Floating + Optional Idle Showcase 360 Perform Twirl
+      let showcaseSpinY = 0;
+      let showcaseBounceY = 0;
+      if (showcase) {
+        const cycle = elapsed % 8.4;
+        if (cycle >= 6.0) {
+          const p = (cycle - 6.0) / 2.4;
+          const eased = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+          showcaseSpinY = eased * Math.PI * 2;
+          showcaseBounceY = Math.sin(p * Math.PI) * 0.24;
+        }
+      }
+
+      mineiro.position.y = Math.sin(elapsed * (showcase ? 2.1 : 1.45)) * 0.14 + showcaseBounceY;
       mineiro.position.x = Math.cos(elapsed * 0.85) * 0.05;
-      mineiro.rotation.y = Math.sin(elapsed * 0.65) * 0.14;
-      mineiro.rotation.z = Math.sin(elapsed * 0.9) * 0.035;
+      mineiro.rotation.y = Math.sin(elapsed * 0.65) * 0.14 + showcaseSpinY;
+      mineiro.rotation.z = Math.sin(elapsed * (showcase ? 1.5 : 0.9)) * (showcase ? 0.065 : 0.035);
 
       // 2. Breathing (core orb gentle expansion)
       const breath = Math.sin(elapsed * 2.1);
       coreGroup.scale.set(1 + breath * 0.022, 1 + breath * 0.018, 1 + breath * 0.022);
 
       // 3. Diagonal Orbital Ring continuous rotation & gentle wobble
-      ringPivot.rotation.y += dt * 0.48;
+      ringPivot.rotation.y += dt * (showcase ? 1.1 : 0.48);
       ringPivot.rotation.x = 0.34 + Math.sin(elapsed * 1.1) * 0.06;
 
       // 4. Natural Eye Blinking
@@ -244,7 +278,7 @@ export const Mineiro3D: React.FC<Mineiro3DProps> = ({
       }
 
       // Eye glance & head nod while talking
-      eyesGroup.position.x = Math.sin(elapsed * 0.95) * 0.035;
+      eyesGroup.position.x = Math.sin(elapsed * (showcase ? 1.4 : 0.95)) * 0.04;
       coreGroup.rotation.x = explaining
         ? Math.sin(elapsed * 3.5) * 0.05 + 0.03
         : Math.sin(elapsed * 1.1) * 0.025;
@@ -254,13 +288,24 @@ export const Mineiro3D: React.FC<Mineiro3DProps> = ({
         if (explaining) {
           const wave = 1.0 + Math.abs(Math.sin(elapsed * 11.5 + i * 1.15)) * 2.9;
           bar.scale.y = wave;
+        } else if (showcase) {
+          bar.scale.y = 0.9 + Math.abs(Math.sin(elapsed * 4.5 + i * 0.7)) * 1.1;
         } else {
           bar.scale.y = 0.65 + Math.sin(elapsed * 2.2 + i * 0.6) * 0.2;
         }
       });
 
-      // 6. Floating Hands Gestures per Step
-      if (step === 0) {
+      // 6. Floating Hands Gestures per Step / Showcase
+      if (showcase) {
+        // Big cheerful wave + performing bounce
+        rightHand.position.y = 0.34 + Math.sin(elapsed * 3.2) * 0.1;
+        rightHand.position.x = 1.24 + Math.sin(elapsed * 5.8) * 0.13;
+        rightHand.rotation.z = -0.5 + Math.sin(elapsed * 6.4) * 0.42;
+
+        leftHand.position.y = -0.05 + Math.cos(elapsed * 2.8) * 0.14;
+        leftHand.position.x = -1.2 - Math.sin(elapsed * 2.4) * 0.08;
+        leftHand.rotation.z = 0.38 + Math.sin(elapsed * 3.2) * 0.24;
+      } else if (step === 0) {
         // Enthusiastic greeting wave with right hand
         rightHand.position.y = 0.25 + Math.sin(elapsed * 2.4) * 0.08;
         rightHand.position.x = 1.2 + Math.sin(elapsed * 4.5) * 0.1;
@@ -319,7 +364,13 @@ export const Mineiro3D: React.FC<Mineiro3DProps> = ({
           ? 'h-[62px] w-[62px]'
           : size === 'compact'
             ? 'h-[148px] w-[132px]'
-            : 'h-[320px] w-full max-w-[360px] sm:h-[380px]'
+            : size === 'roaming'
+              ? 'h-[178px] w-[178px]'
+              : size === 'hero'
+                ? 'h-[256px] w-[256px]'
+                : size === 'spotlight'
+                  ? 'h-[380px] w-[380px]'
+                  : 'h-[320px] w-full max-w-[360px] sm:h-[380px]'
       }
       aria-label="Mascote 3D flutuando e gesticulando enquanto explica o sistema"
     />

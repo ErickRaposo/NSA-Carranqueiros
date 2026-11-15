@@ -282,13 +282,10 @@ function renderVectorFlagSvg(code: string): React.ReactNode {
   }
 }
 
+const FLAG_ICON_CODE_SET = new Set(ALL_ISO_ALPHA2_CODES);
+
 export const CountryFlagIcon: React.FC<{ code?: string | null }> = ({ code }) => {
   const normalized = code?.trim().toUpperCase() || null;
-  const [imgFailed, setImgFailed] = React.useState(false);
-
-  React.useEffect(() => {
-    setImgFailed(false);
-  }, [normalized]);
 
   if (!normalized) {
     return (
@@ -298,19 +295,25 @@ export const CountryFlagIcon: React.FC<{ code?: string | null }> = ({ code }) =>
     );
   }
 
+  if (FLAG_ICON_CODE_SET.has(normalized) || /^[A-Z]{2}$/.test(normalized)) {
+    return (
+      <span className="country-flag-icon-wrap" aria-hidden="true">
+        <span
+          className={`fi fi-${normalized.toLowerCase()} block shrink-0 rounded-[2px]`}
+          style={{
+            width: '20px',
+            height: '15px',
+            backgroundSize: 'cover',
+            boxShadow: '0 0 0 1px rgba(255, 255, 255, 0.14)',
+          }}
+        />
+      </span>
+    );
+  }
+
   return (
     <span className="country-flag-icon-wrap" aria-hidden="true">
-      {!imgFailed ? (
-        <img
-          src={`https://flagcdn.com/w40/${normalized.toLowerCase()}.png`}
-          alt=""
-          loading="lazy"
-          className="h-[14px] w-[20px] rounded-[2px] object-cover"
-          onError={() => setImgFailed(true)}
-        />
-      ) : (
-        renderVectorFlagSvg(normalized)
-      )}
+      {renderVectorFlagSvg(normalized)}
     </span>
   );
 };
@@ -336,7 +339,23 @@ export const CountryFlagBadge: React.FC<CountryFlagBadgeProps> = ({
       data-testid="player-country-flag"
     >
       <span className="country-flag-icon-wrap" aria-hidden="true">
-        {normalized ? renderVectorFlagSvg(normalized) : <Globe size={12} />}
+        {normalized ? (
+          FLAG_ICON_CODE_SET.has(normalized) || /^[A-Z]{2}$/.test(normalized) ? (
+            <span
+              className={`fi fi-${normalized.toLowerCase()} block shrink-0 rounded-[2px]`}
+              style={{
+                width: '15px',
+                height: '11px',
+                backgroundSize: 'cover',
+                boxShadow: '0 0 0 1px rgba(255, 255, 255, 0.14)',
+              }}
+            />
+          ) : (
+            renderVectorFlagSvg(normalized)
+          )
+        ) : (
+          <Globe size={12} />
+        )}
       </span>
       {showName ? (
         <span className={`country-flag-name ${compactOnSmall ? 'hide-country-xs' : ''}`}>

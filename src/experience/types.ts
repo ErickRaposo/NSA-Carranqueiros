@@ -19,6 +19,8 @@ export type MissionPhase =
   | 'zero_g'
   | 'exploring'
   | 'ended';
+export type SpeechPlaybackStatus = 'idle' | 'speaking' | 'paused' | 'stopped';
+export type SpeechCommandType = 'pause' | 'resume' | 'stop';
 
 export const PROJECTOR_OUT_IDS: readonly ProjectorOutId[] = [1, 2, 3, 4] as const;
 export const SURFACE_IDS: readonly SurfaceId[] = ['leftWall', 'rightWall', 'ceiling'] as const;
@@ -478,4 +480,14 @@ export interface ExperienceContextValue {
   prevStoryStep: () => void;
   setRoomDimensions: (next: RoomDimensions) => void;
   resetExperienceToDefault: () => void;
+  audioSessionUnlocked: boolean;
+  voiceAutoEnabled: boolean;
+  speechStatus: SpeechPlaybackStatus;
+  speechCommandNonce: number;
+  lastSpeechCommand: SpeechCommandType | null;
+  unlockAudioSession: () => void;
+  setVoiceAutoEnabled: (enabled: boolean) => void;
+  stopRobotSpeech: () => void;
+  togglePauseRobotSpeech: () => void;
+  reportSpeechStatus: (status: SpeechPlaybackStatus) => void;
 }

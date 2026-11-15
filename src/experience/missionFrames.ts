@@ -40,12 +40,12 @@ export const SHAY_MISSION_FRAMES: ReadonlyArray<MissionFrameSpec> = [
     autoDurationMs: 3500,
     titlePt: '1. Repouso / Espera',
     titleEn: '1. Idle / Standby',
-    leftWallPt: 'Globo inteiro girando no espaço #000000',
-    leftWallEn: 'Full Earth globe rotating in #000000 space',
-    rightWallPt: 'Robô MINEIRØ em espera, sem balão de fala',
-    rightWallEn: 'MINEIRØ robot waiting, no speech bubble',
-    ceilingPt: 'Arco do Globo + 12 bandeiras flutuando',
-    ceilingEn: 'Globe rim + 12 floating country flags',
+    leftWallPt: 'Globo 3D + astros + MINEIRØ/faixas cruzando a quina',
+    leftWallEn: '3D Earth globe + cosmos + MINEIRØ/marquees crossing the corner',
+    rightWallPt: 'Texto inicial + Sol/astros espalhados + MINEIRØ/faixas em sincronia',
+    rightWallEn: 'Welcome prompt + Sun/spread planets + synced MINEIRØ/marquees',
+    ceilingPt: 'Céu estrelado profundo + astros espalhados + cometas (sem países)',
+    ceilingEn: 'Deep starfield + spread planets + comets (no flags yet)',
   },
   {
     id: 'briefing',
@@ -56,8 +56,8 @@ export const SHAY_MISSION_FRAMES: ReadonlyArray<MissionFrameSpec> = [
     titleEn: '2. Welcome',
     leftWallPt: 'Globo espacial aguardando embarque',
     leftWallEn: 'Space globe awaiting boarding',
-    rightWallPt: 'MINEIRØ apresenta a missão e chama para embarcar',
-    rightWallEn: 'MINEIRØ introduces mission and invites boarding',
+    rightWallPt: 'MINEIRØ 3D gigante em conversa + balão grande + ondas de voz',
+    rightWallEn: 'Giant 3D MINEIRØ welcoming visitor w/ large speech panel',
     ceilingPt: 'Céu estrelado aberto · #000000 livre',
     ceilingEn: 'Open starry sky · #000000 free',
   },
@@ -113,10 +113,10 @@ export const SHAY_MISSION_FRAMES: ReadonlyArray<MissionFrameSpec> = [
     titleEn: '6. Exploring · Pick',
     leftWallPt: 'Globo inteiro girando para escolha de país',
     leftWallEn: 'Full globe rotating for country selection',
-    rightWallPt: 'MINEIRØ pede para escolher um país no tablet/teto',
-    rightWallEn: 'MINEIRØ asks to pick a country on tablet/ceiling',
-    ceilingPt: '12 bandeiras flutuantes interativas',
-    ceilingEn: '12 interactive floating flags',
+    rightWallPt: 'MINEIRØ 3D no espaço convida a girar o Globo no tablet ou olhar as bandeiras no teto',
+    rightWallEn: 'Large 3D MINEIRØ invites visitor to spin the Globe on tablet or look at ceiling flags',
+    ceilingPt: '19 bandeiras em órbita interativas',
+    ceilingEn: '19 interactive orbiting flags',
   },
   {
     id: 'exploring-melody',
@@ -130,8 +130,8 @@ export const SHAY_MISSION_FRAMES: ReadonlyArray<MissionFrameSpec> = [
     titleEn: '7. Layer · Melody · Lightning',
     leftWallPt: 'País em destaque 2D + flashes de raios ISS-LIS',
     leftWallEn: 'Country in 2D highlight + ISS-LIS lightning flashes',
-    rightWallPt: 'MINEIRØ comenta os raios virando melodia',
-    rightWallEn: 'MINEIRØ explains lightning turning into melody',
+    rightWallPt: 'Estúdio entra em silêncio até ativar camadas; Melodia transforma raios em notas',
+    rightWallEn: 'Studio enters in silence until layers are enabled; Melody turns lightning into notes',
     ceilingPt: 'Card cultural + flashes dourados no céu',
     ceilingEn: 'Cultural card + golden lightning flashes overhead',
   },
@@ -212,8 +212,8 @@ export const SHAY_MISSION_FRAMES: ReadonlyArray<MissionFrameSpec> = [
     titleEn: '12. Mission Ended',
     leftWallPt: 'Nave descendo pela vigia -> pouso -> Globo final',
     leftWallEn: 'Ship descending in porthole -> landing -> final Globe',
-    rightWallPt: 'Descida -> Tranco + Medalha -> Logo MINEIRØ + Developed by',
-    rightWallEn: 'Descent -> Landing thud + Medal -> MINEIRØ Logo + Credits',
+    rightWallPt: 'Descida -> Pouso -> Homenagem + Logo MINEIRØ + Developed by',
+    rightWallEn: 'Descent -> Touchdown -> Tribute + MINEIRØ Logo + Credits',
     ceilingPt: 'Escotilha fechada na descida -> abre p/ céu e bandeiras',
     ceilingEn: 'Hatch closed on descent -> opens to sky and flags',
   },
@@ -346,17 +346,19 @@ export function resolveFramePrompts(
       return isPt
         ? {
             phrases: [
-              'Escolha qualquer país no tablet!',
-              'Se tiver dúvida, olhe para o teto e escolha um!',
+              'Gire o Globo no tablet para escolher um país!',
+              'Se preferir, olhe para as bandeiras orbitando no teto acima.',
             ],
-            spoken: 'Escolha um país no tablet, ou olhe para o teto e escolha um!',
+            spoken:
+              'Gire o Globo no tablet para escolher um país, ou olhe para as bandeiras orbitando no teto!',
           }
         : {
             phrases: [
-              'Choose any country on the tablet!',
-              'If unsure, look up at the ceiling and pick one!',
+              'Spin the Globe on the tablet to choose a country!',
+              'Or look up at the flags orbiting on the ceiling above.',
             ],
-            spoken: 'Choose any country on the tablet, or look up at the ceiling!',
+            spoken:
+              'Spin the Globe on the tablet to choose a country, or look up at the flags orbiting on the ceiling!',
           };
 
     case 'exploring-melody':

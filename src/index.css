@@ -8133,6 +8133,62 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   will-change: transform;
 }
 
+@keyframes ceiling-orbit-cw {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+@keyframes ceiling-orbit-ccw {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(-360deg);
+  }
+}
+
+.ceiling-orbit-cw {
+  animation: ceiling-orbit-cw linear infinite;
+  will-change: transform;
+}
+
+.ceiling-orbit-ccw {
+  animation: ceiling-orbit-ccw linear infinite;
+  will-change: transform;
+}
+
+@keyframes idle-marquee-left {
+  from {
+    transform: translate3d(0%, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes idle-marquee-right {
+  from {
+    transform: translate3d(-50%, 0, 0);
+  }
+  to {
+    transform: translate3d(0%, 0, 0);
+  }
+}
+
+.idle-marquee-left {
+  animation: idle-marquee-left 28s linear infinite;
+  will-change: transform;
+}
+
+.idle-marquee-right {
+  animation: idle-marquee-right 28s linear infinite;
+  will-change: transform;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .top-hud,
   .hud-left-col,
@@ -8145,9 +8201,16 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   .collective-orbit-pill,
   .ceiling-flag-float-a,
   .ceiling-flag-float-b,
-  .ceiling-flag-float-c {
+  .ceiling-flag-float-c,
+  .idle-marquee-left,
+  .idle-marquee-right {
     animation: none !important;
     transition: none !important;
+  }
+
+  .ceiling-orbit-cw,
+  .ceiling-orbit-ccw {
+    animation-play-state: paused !important;
   }
 }
 

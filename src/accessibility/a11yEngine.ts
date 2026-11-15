@@ -233,9 +233,25 @@ export const PIPER_VOICE_IDS = {
 
 let activePiperAudio: HTMLAudioElement | null = null;
 let activeSpeechOnEnd: (() => void) | null = null;
+let activeFallbackTimerId: number | null = null;
 let speechRequestNonce = 0;
 let speechVolume01 = 1.0;
+let activeSpeechMode: 'piper' | 'webspeech' | null = null;
+let pausedSpeechMode: 'piper' | 'webspeech' | null = null;
+let speechGateOpen = true;
 const piperAudioCache = new Map<string, string>();
+
+export function setSpeechGateOpen(open: boolean): void {
+  speechGateOpen = open;
+}
+
+export function isSpeechGateOpen(): boolean {
+  return speechGateOpen;
+}
+
+export function isSpeechUsingPiper(): boolean {
+  return activeSpeechMode === 'piper' || pausedSpeechMode === 'piper';
+}
 
 export function setSpeechVolume(volume: number): void {
   const clamped = Math.min(1, Math.max(0, Number.isFinite(volume) ? volume : 1));
@@ -255,8 +271,90 @@ export function isSpeechSupported(): boolean {
   return typeof window !== 'undefined' && ('speechSynthesis' in window || 'Audio' in window);
 }
 
+export function pauseSpeech(): 'piper' | 'webspeech' | 'none' {
+  if (activeFallbackTimerId !== null && typeof window !== 'undefined') {
+    window.clearTimeout(activeFallbackTimerId);
+    activeFallbackTimerId = null;
+  }
+
+  if (activePiperAudio && !activePiperAudio.ended) {
+    try {
+      activePiperAudio.pause();
+    } catch {
+      // ignore pause errors
+    }
+    activeSpeechMode = null;
+    pausedSpeechMode = 'piper';
+    return 'piper';
+  }
+
+  const webSpeechBusy =
+    typeof window !== 'undefined' &&
+    'speechSynthesis' in window &&
+    Boolean(window.speechSynthesis.speaking || window.speechSynthesis.pending);
+
+  if (activeSpeechMode === 'webspeech' || webSpeechBusy) {
+    speechRequestNonce += 1;
+    activeSpeechOnEnd = null;
+    activeSpeechMode = null;
+    pausedSpeechMode = 'webspeech';
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {
+        // ignore cancel errors
+      }
+    }
+    return 'webspeech';
+  }
+
+  speechRequestNonce += 1;
+  activeSpeechMode = null;
+  pausedSpeechMode = null;
+  return 'none';
+}
+
+export function resumeSpeech(): 'resumed-piper' | 'needs-replay' | 'none' {
+  speechGateOpen = true;
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+    return 'none';
+  }
+
+  if (pausedSpeechMode === 'piper' && activePiperAudio) {
+    pausedSpeechMode = null;
+    activeSpeechMode = 'piper';
+    activePiperAudio.volume = speechVolume01;
+    try {
+      void activePiperAudio.play().catch(() => {
+        if (activePiperAudio) {
+          activePiperAudio = null;
+        }
+        activeSpeechMode = null;
+      });
+    } catch {
+      activePiperAudio = null;
+      activeSpeechMode = null;
+      return 'needs-replay';
+    }
+    return 'resumed-piper';
+  }
+
+  if (pausedSpeechMode === 'webspeech') {
+    pausedSpeechMode = null;
+    return 'needs-replay';
+  }
+
+  return 'none';
+}
+
 export function stopSpeech(): void {
   speechRequestNonce += 1;
+  activeSpeechMode = null;
+  pausedSpeechMode = null;
+  if (activeFallbackTimerId !== null && typeof window !== 'undefined') {
+    window.clearTimeout(activeFallbackTimerId);
+    activeFallbackTimerId = null;
+  }
   if (activePiperAudio) {
     try {
       activePiperAudio.onplay = null;
@@ -264,6 +362,8 @@ export function stopSpeech(): void {
       activePiperAudio.onerror = null;
       activePiperAudio.pause();
       activePiperAudio.currentTime = 0;
+      activePiperAudio.removeAttribute('src');
+      activePiperAudio.load();
     } catch {
       // ignore audio stop errors
     }
@@ -272,6 +372,9 @@ export function stopSpeech(): void {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     try {
       window.speechSynthesis.cancel();
+      if (window.speechSynthesis.paused || window.speechSynthesis.pending || window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+      }
     } catch {
       // ignore speech engine errors
     }
@@ -336,7 +439,8 @@ function speakWithWebSpeechFallback(
   requestNonce: number,
   options?: { maleVoice?: boolean; onStart?: () => void; onEnd?: () => void }
 ): void {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window) || !text.trim()) return;
+  if (!speechGateOpen || typeof window === 'undefined' || !('speechSynthesis' in window) || !text.trim()) return;
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
   if (requestNonce !== speechRequestNonce) return;
   try {
     if (interrupt) window.speechSynthesis.cancel();
@@ -352,15 +456,19 @@ function speakWithWebSpeechFallback(
       utterance.voice = selectedVoice;
     }
 
+    activeSpeechMode = 'webspeech';
+    pausedSpeechMode = null;
     activeSpeechOnEnd = options?.onEnd ?? null;
     utterance.onstart = () => {
-      if (requestNonce !== speechRequestNonce) {
+      if (!speechGateOpen || requestNonce !== speechRequestNonce) {
         window.speechSynthesis.cancel();
         return;
       }
       options?.onStart?.();
     };
     const handleFinish = () => {
+      if (requestNonce !== speechRequestNonce) return;
+      if (activeSpeechMode === 'webspeech') activeSpeechMode = null;
       if (activeSpeechOnEnd === options?.onEnd) {
         activeSpeechOnEnd = null;
       }
@@ -400,7 +508,8 @@ export function speakTextPt(
   interrupt = true,
   options?: { maleVoice?: boolean; lang?: 'pt' | 'en'; onStart?: () => void; onEnd?: () => void }
 ): void {
-  if (!text.trim() || typeof window === 'undefined') return;
+  if (!speechGateOpen || !text.trim() || typeof window === 'undefined') return;
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
   const lang = options?.lang ?? 'pt';
   const voiceId = PIPER_VOICE_IDS[lang];
   const cacheKey = `${voiceId}:${text}`;
@@ -411,14 +520,17 @@ export function speakTextPt(
   const currentNonce = ++speechRequestNonce;
 
   const playUrl = (url: string): void => {
-    if (currentNonce !== speechRequestNonce) return;
+    if (!speechGateOpen || currentNonce !== speechRequestNonce) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
     try {
       const audio = new Audio(url);
       audio.volume = speechVolume01;
       activePiperAudio = audio;
+      activeSpeechMode = 'piper';
+      pausedSpeechMode = null;
       activeSpeechOnEnd = options?.onEnd ?? null;
       audio.onplay = () => {
-        if (currentNonce !== speechRequestNonce) {
+        if (!speechGateOpen || currentNonce !== speechRequestNonce) {
           audio.pause();
           return;
         }
@@ -426,14 +538,19 @@ export function speakTextPt(
       };
       audio.onended = () => {
         if (activePiperAudio === audio) activePiperAudio = null;
+        if (activeSpeechMode === 'piper') activeSpeechMode = null;
+        pausedSpeechMode = null;
         if (activeSpeechOnEnd === options?.onEnd) activeSpeechOnEnd = null;
         options?.onEnd?.();
       };
       audio.onerror = () => {
         if (activePiperAudio === audio) activePiperAudio = null;
+        if (activeSpeechMode === 'piper') activeSpeechMode = null;
         speakWithWebSpeechFallback(text, lang, interrupt, currentNonce, options);
       };
       void audio.play().catch(() => {
+        if (activePiperAudio === audio) activePiperAudio = null;
+        if (activeSpeechMode === 'piper') activeSpeechMode = null;
         speakWithWebSpeechFallback(text, lang, interrupt, currentNonce, options);
       });
     } catch {
@@ -456,26 +573,34 @@ export function speakTextPt(
   }
 
   let settled = false;
+  if (activeFallbackTimerId !== null) {
+    window.clearTimeout(activeFallbackTimerId);
+    activeFallbackTimerId = null;
+  }
   const fallbackTimer = window.setTimeout(() => {
-    if (settled || currentNonce !== speechRequestNonce) return;
+    if (activeFallbackTimerId === fallbackTimer) activeFallbackTimerId = null;
+    if (!speechGateOpen || settled || currentNonce !== speechRequestNonce) return;
     settled = true;
     speakWithWebSpeechFallback(text, lang, interrupt, currentNonce, options);
   }, 2500);
+  activeFallbackTimerId = fallbackTimer;
 
   void import('@mintplex-labs/piper-tts-web')
     .then(async (tts) => {
       const wavBlob = await tts.predict({ text, voiceId });
-      if (settled || currentNonce !== speechRequestNonce) return;
+      if (!speechGateOpen || settled || currentNonce !== speechRequestNonce) return;
       settled = true;
       window.clearTimeout(fallbackTimer);
+      if (activeFallbackTimerId === fallbackTimer) activeFallbackTimerId = null;
       const url = URL.createObjectURL(wavBlob);
       piperAudioCache.set(cacheKey, url);
       playUrl(url);
     })
     .catch(() => {
-      if (settled || currentNonce !== speechRequestNonce) return;
+      if (!speechGateOpen || settled || currentNonce !== speechRequestNonce) return;
       settled = true;
       window.clearTimeout(fallbackTimer);
+      if (activeFallbackTimerId === fallbackTimer) activeFallbackTimerId = null;
       speakWithWebSpeechFallback(text, lang, interrupt, currentNonce, options);
     });
 }
@@ -492,12 +617,26 @@ export function speakText(
 let audioCtx: AudioContext | null = null;
 let lastToneTimestamp = 0;
 
+export function stopUiAudioTones(): void {
+  if (!audioCtx) return;
+  const ctxToClose = audioCtx;
+  audioCtx = null;
+  try {
+    if (ctxToClose.state !== 'closed') {
+      void ctxToClose.close().catch(() => {});
+    }
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * Plays a short, gentle Web Audio API tone whose pitch corresponds to sampled intensity [0..1].
  * Rate-limited to prevent audio clutter during continuous keyboard or mouse movement.
  */
 export function playSonificationTone(intensity01: number): void {
   if (typeof window === 'undefined') return;
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
   const nowMs = performance.now();
   if (nowMs - lastToneTimestamp < 160) return;
   lastToneTimestamp = nowMs;
@@ -543,6 +682,7 @@ export function playStemPreviewSample(
   stemId: 'melody' | 'harmony' | 'rhythm' | 'bass' | 'fx'
 ): void {
   if (typeof window === 'undefined') return;
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
   const AudioCtor =
     window.AudioContext ||
     (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;

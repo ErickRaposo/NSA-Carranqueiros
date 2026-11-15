@@ -250,6 +250,7 @@ export class SpatialAudioEngine {
   private calibPinkGain: GainNode | null = null;
   private calibIntervalId: number | null = null;
   private onCalibModeChange?: (mode: CalibrationTestMode) => void;
+  private disposed = false;
 
   constructor(initialCalibration: AudioCalibrationState) {
     this.calibration = initialCalibration;
@@ -337,7 +338,7 @@ export class SpatialAudioEngine {
   }
 
   public ensureContext(): AudioContext | null {
-    if (typeof window === 'undefined') return null;
+    if (this.disposed || typeof window === 'undefined') return null;
     const AudioCtx =
       window.AudioContext ||
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -823,11 +824,17 @@ export class SpatialAudioEngine {
             const res = await window.fetch(url);
             if (!res.ok) throw new Error(`Missing stem ${url}`);
             const arr = await res.arrayBuffer();
+            if (this.disposed || this.ctx?.state === 'closed') {
+              throw new Error('Audio engine disposed');
+            }
             const decoded = await ctx.decodeAudioData(arr);
             return [stem, decoded] as const;
           })
         );
 
+        if (this.disposed || this.ctx?.state === 'closed') {
+          return false;
+        }
         const nextBuffers: Partial<Record<StemKey, AudioBuffer>> = {};
         for (const [stem, buf] of entries) {
           nextBuffers[stem] = buf;
@@ -870,7 +877,15 @@ export class SpatialAudioEngine {
     barLoop: BarLoopRange = null,
     totalBars = 8
   ): void {
-    if (!this.usingPreRenderedStems || !this.ctx || !this.componentBuses) return;
+    if (
+      this.disposed ||
+      !this.usingPreRenderedStems ||
+      !this.ctx ||
+      this.ctx.state === 'closed' ||
+      !this.componentBuses
+    ) {
+      return;
+    }
     this.stopStemPlayback();
 
     const refBuf = this.stemBuffers.chords_dry;
@@ -923,6 +938,83 @@ export class SpatialAudioEngine {
     }
     this.activeSources = [];
     this.stemsActivelyPlaying = false;
+  }
+
+  /**
+   * Interrompe stems, sinais de calibração e suspende contextos/sinks quando o usuário sai da aba ou página.
+   */
+  public suspendForPageExit(): void {
+    this.stopCalibrationSignal();
+    this.stopStemPlayback();
+    if (this.speakerChains) {
+      for (const id of SPEAKER_IDS) {
+        const chain = this.speakerChains[id];
+        if (chain.sinkAudioEl) {
+          try {
+            chain.sinkAudioEl.pause();
+          } catch {
+            // ignore
+          }
+        }
+        if (chain.sinkCtx && chain.sinkCtx.state === 'running') {
+          void chain.sinkCtx.suspend().catch(() => {});
+        }
+      }
+    }
+    if (this.ctx && this.ctx.state === 'running') {
+      void this.ctx.suspend().catch(() => {});
+    }
+  }
+
+  /**
+   * Encerra definitivamente o motor de áudio ao desmontar (ex.: troca para Portal ou fechamento).
+   */
+  public dispose(): void {
+    this.disposed = true;
+    this.loadingKey = null;
+    this.loadingPromise = null;
+    this.stopCalibrationSignal();
+    this.stopStemPlayback();
+    activeAudioEngines.delete(this);
+
+    if (this.speakerChains) {
+      for (const id of SPEAKER_IDS) {
+        const chain = this.speakerChains[id];
+        if (chain.sinkAudioEl) {
+          try {
+            chain.sinkAudioEl.pause();
+            chain.sinkAudioEl.srcObject = null;
+          } catch {
+            // ignore
+          }
+          chain.sinkAudioEl = null;
+        }
+        if (chain.sinkCtx) {
+          try {
+            if (chain.sinkCtx.state !== 'closed') {
+              void chain.sinkCtx.close().catch(() => {});
+            }
+          } catch {
+            // ignore
+          }
+          chain.sinkCtx = null;
+        }
+      }
+    }
+
+    if (this.ctx) {
+      const ctxToClose = this.ctx;
+      this.ctx = null;
+      this.speakerChains = null;
+      this.componentBuses = null;
+      try {
+        if (ctxToClose.state !== 'closed') {
+          void ctxToClose.close().catch(() => {});
+        }
+      } catch {
+        // ignore
+      }
+    }
   }
 
   /**

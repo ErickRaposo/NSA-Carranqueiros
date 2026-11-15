@@ -79,7 +79,24 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
   }, []);
 
   useEffect(() => {
+    const handleLeave = () => {
+      if (document.visibilityState === 'hidden') {
+        stopPreviewAudio();
+        stopSpeech();
+        setIsSpeaking(false);
+      }
+    };
+    const handleUnload = () => {
+      stopPreviewAudio();
+      stopSpeech();
+    };
+    document.addEventListener('visibilitychange', handleLeave);
+    window.addEventListener('pagehide', handleUnload);
+    window.addEventListener('beforeunload', handleUnload);
     return () => {
+      document.removeEventListener('visibilitychange', handleLeave);
+      window.removeEventListener('pagehide', handleUnload);
+      window.removeEventListener('beforeunload', handleUnload);
       stopPreviewAudio();
       stopSpeech();
     };
@@ -269,10 +286,10 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
             className="portal-login-btn"
             onClick={onOpenAuth ?? onExploreEarth}
             data-testid="open-login-btn"
-            title="Abrir Simulador 3D"
+            title="Abrir Demo Interativa"
           >
             <LogIn size={15} aria-hidden="true" />
-            <span>Simulador 3D</span>
+            <span>Demo Interativa</span>
           </button>
 
           <button

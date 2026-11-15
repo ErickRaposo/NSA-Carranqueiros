@@ -139,13 +139,14 @@ export const JukeboxStudioStage: React.FC<JukeboxStudioStageProps> = ({
     studioData,
     activeStudioSession,
     barLoop,
+    speechStatus,
     getLiveFrame,
     toggleEye,
     seekProgress,
   } = useExperience();
 
   const isPt = lang === 'pt';
-  const interactive = renderContext !== 'projector';
+  const interactive = renderContext === 'controller';
   const showTopHeader = renderContext !== 'controller';
 
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -1071,6 +1072,50 @@ export const JukeboxStudioStage: React.FC<JukeboxStudioStageProps> = ({
       ctx.lineWidth = Math.max(0.6, 1.0 * u);
       ctx.strokeRect(px0, py0, pw, ph);
 
+      // Callout de alto contraste quando todas as 5 camadas estão desligadas (Silêncio Intencional)
+      const allLayersSilent =
+        !melMainAudible &&
+        !spkAudible &&
+        !chdAudible &&
+        !basAudible &&
+        !wndEnabled &&
+        !tempRegionOn;
+      if (allLayersSilent && pw > 120 * u && ph > 60 * u) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(2, 5, 12, 0.72)';
+        ctx.fillRect(px0, py0, pw, ph);
+
+        const cardW = Math.min(pw - 24 * u, 520 * u);
+        const cardH = Math.min(ph - 18 * u, 88 * u);
+        const cardX = px0 + (pw - cardW) * 0.5;
+        const cardY = py0 + (ph - cardH) * 0.5;
+
+        drawRoundedRectPath(ctx, cardX, cardY, cardW, cardH, 12 * u);
+        ctx.fillStyle = 'rgba(8, 13, 25, 0.96)';
+        ctx.fill();
+        ctx.lineWidth = Math.max(0.8, 1.4 * u);
+        ctx.strokeStyle = 'rgba(125, 211, 252, 0.55)';
+        ctx.stroke();
+
+        const titleTxt = pt
+          ? 'Ative sua 1ª camada no tablet para acender a música'
+          : 'Enable your 1st layer on the tablet to light up the music';
+        const subTxt = pt
+          ? 'Toque no olhinho de Melodia, Acordes, Baixo, Vento ou Temperatura'
+          : 'Tap the eye toggle on Melody, Chords, Bass, Wind, or Temperature';
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = `700 ${(13.5 * u).toFixed(2)}px 'Poppins', system-ui, sans-serif`;
+        ctx.fillText(titleTxt, cardX + cardW * 0.5, cardY + cardH * 0.37, cardW - 28 * u);
+
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = `500 ${(10.2 * u).toFixed(2)}px 'Poppins', system-ui, sans-serif`;
+        ctx.fillText(subTxt, cardX + cardW * 0.5, cardY + cardH * 0.67, cardW - 28 * u);
+        ctx.restore();
+      }
+
       ctx.restore();
       raf = window.requestAnimationFrame(renderFrame);
     };
@@ -1160,12 +1205,12 @@ export const JukeboxStudioStage: React.FC<JukeboxStudioStageProps> = ({
       {/* Full-Wall 60fps Studio Canvas (100% width x 100% height — immune to DOM flex crush) */}
       <canvas
         ref={canvasRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        className={`block h-full w-full bg-black ${interactive ? 'cursor-pointer' : ''}`}
-        style={{ touchAction: 'none', backgroundColor: '#000000' }}
+        onPointerDown={interactive ? handlePointerDown : undefined}
+        onPointerMove={interactive ? handlePointerMove : undefined}
+        onPointerUp={interactive ? handlePointerUp : undefined}
+        onPointerCancel={interactive ? handlePointerUp : undefined}
+        className={`block h-full w-full bg-black ${interactive ? 'cursor-pointer' : 'pointer-events-none'}`}
+        style={{ touchAction: interactive ? 'none' : 'auto', backgroundColor: '#000000' }}
         aria-label={
           isPt
             ? 'Estúdio Jukebox NASA: 5 camadas geográficas e partitura MIDI em tempo real'
@@ -1207,16 +1252,18 @@ export const JukeboxStudioStage: React.FC<JukeboxStudioStageProps> = ({
                 transform: 'scale(0.419)',
               }}
             >
-              <Mineiro3D stepIndex={storyStep} isExplaining={true} size="avatar" />
+              <Mineiro3D stepIndex={storyStep} isExplaining={speechStatus === 'speaking'} size="avatar" />
             </div>
           </div>
 
           <p className="min-w-0 flex-1 truncate text-[10px] font-medium leading-none text-slate-200 whitespace-nowrap">
             {robotText}
-            <span
-              className="ml-0.5 inline-block h-2.5 w-[1.5px] animate-pulse bg-sky-300 align-middle"
-              aria-hidden="true"
-            />
+            {speechStatus !== 'stopped' && speechStatus !== 'paused' && (
+              <span
+                className="ml-0.5 inline-block h-2.5 w-[1.5px] animate-pulse bg-sky-300 align-middle"
+                aria-hidden="true"
+              />
+            )}
           </p>
         </div>
       )}
