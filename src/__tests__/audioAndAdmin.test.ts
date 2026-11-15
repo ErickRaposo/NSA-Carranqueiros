@@ -181,7 +181,7 @@ describe('Show Control Admin (?view=admin), Matriz de Projetores Out 1..4, Nós 
       activeChord: 'Dadd9',
       windMeanSpeed: 6.4,
     });
-    expect(exploringChordsEn.phrases[0]).toContain('Brazil (Dadd9)');
+    expect(exploringChordsEn.phrases[0]).toContain('Brazil · Dadd9');
   });
 
   it('calcula níveis ao vivo por caixa física (C1, C2, C3) coerentes com a posição geográfica do raio', () => {

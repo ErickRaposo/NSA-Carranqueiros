@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { setSpeechVolume, stopSpeech } from '../accessibility/a11yEngine';
 import {
   AudioDeviceOption,
   AudioOutputSupportStatus,
@@ -30,6 +31,8 @@ import {
   CALIBRATION_CHANNEL_NAME,
   CalibrationSurfaceKey,
   createDefaultCalibrationState,
+  createDefaultEdgeMask,
+  EdgeFeatherMask,
   isProjectionStateValid,
   loadCalibrationState,
   ProjectionCalibrationState,
@@ -49,6 +52,7 @@ import {
 import {
   AudioLevelsMap,
   AudioOutputMode,
+  AudioOwnerRole,
   CompareCountriesState,
   ExperienceContextValue,
   ExperienceCountry,
@@ -84,6 +88,8 @@ export interface AudioAdminContextValue {
   startPinkNoiseSingle: (speakerId: SpeakerSlotId) => void;
   startPinkNoiseAB: (targetSpeakerId: SpeakerSlotId) => void;
   startDelayClickTest: (targetSpeakerId: SpeakerSlotId) => void;
+  startPinkNoiseAll: () => void;
+  startDelayClickAll: () => void;
   stopCalibrationSignal: () => void;
   refreshOutputDevices: () => Promise<void>;
 }
@@ -95,6 +101,7 @@ export interface ProjectionAdminContextValue {
   toggleOutputSurface: (outId: ProjectorOutId, surfaceId: SurfaceId) => void;
   updateOutputConfig: (outId: ProjectorOutId, patch: Partial<ProjectorOutputConfig>) => void;
   updateSurfaceQuad: (key: CalibrationSurfaceKey, quad: QuadCorners) => void;
+  updateEdgeMask: (key: CalibrationSurfaceKey, patch: Partial<EdgeFeatherMask>) => void;
   resetSingleOutputQuads: (outId: ProjectorOutId) => void;
   resetAllProjectionQuads: () => void;
   triggerIdentifyOutputs: (durationMs?: number) => void;
@@ -297,6 +304,7 @@ interface SyncPayload {
   compareCountries?: CompareCountriesState;
   audioMode: AudioOutputMode;
   masterGain: number;
+  voiceVolume?: number;
   layers: ExperienceLayersState;
   isPlaying: boolean;
   progress01: number;
@@ -311,7 +319,9 @@ type RemoteCalibSignalCommand =
   | { action: 'stop' }
   | { action: 'pink-single'; speakerId: SpeakerSlotId }
   | { action: 'pink-ab'; targetSpeakerId: SpeakerSlotId }
-  | { action: 'delay-click'; targetSpeakerId: SpeakerSlotId };
+  | { action: 'delay-click'; targetSpeakerId: SpeakerSlotId }
+  | { action: 'pink-all' }
+  | { action: 'delay-click-all' };
 
 function detectInitialSpeakerSlotFromUrl(): SpeakerSlotId | null {
   if (typeof window === 'undefined') return null;
@@ -367,6 +377,11 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const raw = new URLSearchParams(window.location.search).get('view')?.toLowerCase() ?? '';
     return raw === 'projector'; // Janelas de projetor iniciam mudas por padrão para não vazar áudio ruim via HDMI
   });
+  const [audioOwner, setAudioOwnerState] = useState<AudioOwnerRole>('pc');
+  const [audioContextState, setAudioContextState] = useState<
+    AudioContextState | 'uninitialized'
+  >('uninitialized');
+  const [realAudioRms01, setRealAudioRms01] = useState<number>(0);
   const [audioSourceKind, setAudioSourceKind] = useState<'stems' | 'meta-synth'>('meta-synth');
   const [lanConnected, setLanConnected] = useState<boolean>(false);
   const [lanClients, setLanClients] = useState<LanPeerInfo[]>([]);
@@ -431,6 +446,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [seekSyncNonce, setSeekSyncNonce] = useState<number>(0);
   const [audioMode, setAudioModeState] = useState<AudioOutputMode>('hrtf');
   const [masterGain, setMasterGainState] = useState<number>(0.9);
+  const [voiceVolume, setVoiceVolumeState] = useState<number>(1.0);
   const [layers, setLayers] = useState<ExperienceLayersState>(DEFAULT_LAYERS_STATE);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [progress01, setProgress01] = useState<number>(0);
@@ -789,6 +805,9 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (data.compareCountries) setCompareCountriesState(data.compareCountries);
     setAudioModeState(data.audioMode);
     setMasterGainState(data.masterGain);
+    if (typeof data.voiceVolume === 'number') {
+      setVoiceVolumeState(data.voiceVolume);
+    }
     setLayers(data.layers);
     setIsPlaying(data.isPlaying);
     setProgress01(data.progress01);
@@ -810,6 +829,10 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       eng.startPinkNoiseAB(cmd.targetSpeakerId);
     } else if (cmd.action === 'delay-click') {
       eng.startDelayClickTest(cmd.targetSpeakerId);
+    } else if (cmd.action === 'pink-all') {
+      eng.startPinkNoiseAll();
+    } else if (cmd.action === 'delay-click-all') {
+      eng.startDelayClickAll();
     }
   }, []);
 
@@ -947,6 +970,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       compareCountries,
       audioMode,
       masterGain,
+      voiceVolume,
       layers,
       isPlaying,
       progress01: liveProgressRef.current,
@@ -978,6 +1002,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     seekSyncNonce,
     selectedCountryId,
     storyStep,
+    voiceVolume,
   ]);
 
   // --- Sincronização do Motor Web Audio 8D (Stems Gapless + Síntese meta.json) ---
@@ -986,6 +1011,10 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!eng) return;
     eng.setMasterGain(localAudioMuted ? 0 : masterGain);
   }, [localAudioMuted, masterGain]);
+
+  useEffect(() => {
+    setSpeechVolume(localAudioMuted ? 0 : voiceVolume);
+  }, [localAudioMuted, voiceVolume]);
 
   useEffect(() => {
     audioEngineRef.current?.setAudioMode(audioMode);
@@ -1218,23 +1247,94 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setMasterGainState(Math.min(1, Math.max(0, gain)));
   }, []);
 
+  const setVoiceVolume = useCallback((volume: number) => {
+    const clamped = Math.min(1, Math.max(0, volume));
+    setVoiceVolumeState(clamped);
+    setSpeechVolume(localAudioMuted ? 0 : clamped);
+  }, [localAudioMuted]);
+
   const setLocalAudioMuted = useCallback((muted: boolean) => {
     setLocalAudioMutedState(muted);
+  }, []);
+
+  const setAudioOwner = useCallback((owner: AudioOwnerRole) => {
+    setAudioOwnerState(owner);
+    if (typeof window === 'undefined') return;
+    const raw = new URLSearchParams(window.location.search).get('view')?.toLowerCase() ?? '';
+    if (raw === 'projector') {
+      setLocalAudioMutedState(true);
+      return;
+    }
+    const isTabletView = raw === 'controller' || raw === 'tablet';
+    if (owner === 'pc') {
+      setLocalAudioMutedState(isTabletView);
+    } else if (owner === 'tablet') {
+      setLocalAudioMutedState(!isTabletView);
+    } else {
+      setLocalAudioMutedState(false);
+    }
   }, []);
 
   const setAudioMode = useCallback((mode: AudioOutputMode) => {
     setAudioModeState(mode);
   }, []);
 
+  const refreshAudioTelemetry = useCallback(() => {
+    const eng = audioEngineRef.current;
+    if (!eng) return;
+    setAudioContextState(eng.getAudioContextState());
+    setRealAudioRms01(eng.getMasterRmsLevel());
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(refreshAudioTelemetry, 220);
+    return () => window.clearInterval(timer);
+  }, [refreshAudioTelemetry]);
+
+  const unlockAudioContext = useCallback(async (): Promise<
+    AudioContextState | 'uninitialized'
+  > => {
+    const state = (await audioEngineRef.current?.ensureUnlocked()) ?? 'uninitialized';
+    setAudioContextState(state);
+    return state;
+  }, []);
+
   const togglePlay = useCallback(() => {
     if (!localAudioMuted) {
-      audioEngineRef.current?.ensureContext();
+      void unlockAudioContext();
     }
     setIsPlaying((prev) => !prev);
-  }, [localAudioMuted]);
+  }, [localAudioMuted, unlockAudioContext]);
+
+  const playWithAudibleLayers = useCallback(() => {
+    void unlockAudioContext();
+    setLocalAudioMutedState(false);
+    setLayers((prev) => {
+      const anyEnabled = VISUAL_LAYER_ORDER.some((id) => prev[id].enabled);
+      if (anyEnabled) return prev;
+      return {
+        melody: { ...prev.melody, enabled: true },
+        chords: { ...prev.chords, enabled: true },
+        temperature: { ...prev.temperature, enabled: true },
+        bass: { ...prev.bass, enabled: true },
+        wind: { ...prev.wind, enabled: true },
+      };
+    });
+    setIsPlaying(true);
+  }, [unlockAudioContext]);
 
   const resetExperienceToDefault = useCallback(() => {
     audioEngineRef.current?.stopCalibrationSignal();
+    audioEngineRef.current?.stopStemPlayback();
+    stopSpeech();
+    setMasterGainState(0.9);
+    audioEngineRef.current?.setMasterGain(0.9);
+    setVoiceVolumeState(1.0);
+    setSpeechVolume(1.0);
+    if (typeof window !== 'undefined') {
+      const raw = new URLSearchParams(window.location.search).get('view')?.toLowerCase() ?? '';
+      setLocalAudioMutedState(raw === 'projector');
+    }
     setSelectedCountryId('076');
     setLayers(DEFAULT_LAYERS_STATE);
     setStoryStepState(0);
@@ -1245,7 +1345,8 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     liveProgressRef.current = 0;
     setIsPlaying(false);
     setSeekSyncNonce((n) => n + 1);
-  }, []);
+    refreshAudioTelemetry();
+  }, [refreshAudioTelemetry]);
 
   const sendWsJson = useCallback((body: Record<string, unknown>) => {
     try {
@@ -1355,6 +1456,38 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     [sendWsJson]
   );
 
+  const updateEdgeMask = useCallback(
+    (key: CalibrationSurfaceKey, patch: Partial<EdgeFeatherMask>) => {
+      setProjectionState((prev) => {
+        const current = prev.edgeMasks?.[key] ?? createDefaultEdgeMask();
+        const clampPct = (v: number | undefined, fallbackVal: number) =>
+          v === undefined ? fallbackVal : Math.max(0, Math.min(40, Math.round(v)));
+        const nextMask: EdgeFeatherMask = {
+          leftPct: clampPct(patch.leftPct, current.leftPct),
+          rightPct: clampPct(patch.rightPct, current.rightPct),
+          topPct: clampPct(patch.topPct, current.topPct),
+          bottomPct: clampPct(patch.bottomPct, current.bottomPct),
+        };
+        const next: ProjectionCalibrationState = {
+          ...prev,
+          edgeMasks: {
+            ...prev.edgeMasks,
+            [key]: nextMask,
+          },
+        };
+        saveCalibrationState(next);
+        try {
+          projBroadcastRef.current?.postMessage(next);
+        } catch {
+          // ignore
+        }
+        sendWsJson({ type: 'projection', payload: next });
+        return next;
+      });
+    },
+    [sendWsJson]
+  );
+
   const resetSingleOutputQuads = useCallback(
     (outId: ProjectorOutId) => {
       setProjectionState((prev) => {
@@ -1382,8 +1515,13 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               showGrid: false,
               globalBlackout: false,
               quads: defaults.quads,
+              edgeMasks: defaults.edgeMasks,
             }
-          : applyProjectionPreset(prev.preset, { ...prev, showGrid: false });
+          : applyProjectionPreset(prev.preset, {
+              ...prev,
+              showGrid: false,
+              edgeMasks: defaults.edgeMasks,
+            });
       saveCalibrationState(next);
       try {
         projBroadcastRef.current?.postMessage(next);
@@ -1546,10 +1684,10 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     audioEngineRef.current?.setIsolatedSpeakerSlot(slot);
   }, []);
 
-  const unlockAudioContext = useCallback((): boolean => {
-    const ctx = audioEngineRef.current?.ensureContext();
-    return Boolean(ctx);
-  }, []);
+  const unlockAudioContextLegacy = useCallback((): boolean => {
+    void unlockAudioContext();
+    return Boolean(audioEngineRef.current?.ensureContext());
+  }, [unlockAudioContext]);
 
   const broadcastCalibCommand = useCallback(
     (cmd: RemoteCalibSignalCommand) => {
@@ -1586,6 +1724,16 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     },
     [broadcastCalibCommand]
   );
+
+  const startPinkNoiseAll = useCallback(() => {
+    audioEngineRef.current?.startPinkNoiseAll();
+    broadcastCalibCommand({ action: 'pink-all' });
+  }, [broadcastCalibCommand]);
+
+  const startDelayClickAll = useCallback(() => {
+    audioEngineRef.current?.startDelayClickAll();
+    broadcastCalibCommand({ action: 'delay-click-all' });
+  }, [broadcastCalibCommand]);
 
   const stopCalibrationSignal = useCallback(() => {
     audioEngineRef.current?.stopCalibrationSignal();
@@ -1729,7 +1877,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       isSetSinkIdSupported: audioEngineRef.current?.isSetSinkIdSupported() ?? false,
       isolatedSpeakerSlot,
       setIsolatedSpeakerSlot,
-      unlockAudioContext,
+      unlockAudioContext: unlockAudioContextLegacy,
       unlockOutputDevices,
       updateSpeakerConfig,
       setReferenceSpeaker,
@@ -1737,6 +1885,8 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       startPinkNoiseSingle,
       startPinkNoiseAB,
       startDelayClickTest,
+      startPinkNoiseAll,
+      startDelayClickAll,
       stopCalibrationSignal,
       refreshOutputDevices,
     }),
@@ -1750,11 +1900,13 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsolatedSpeakerSlot,
       setReferenceSpeaker,
       speakerCalibration,
+      startDelayClickAll,
       startDelayClickTest,
       startPinkNoiseAB,
+      startPinkNoiseAll,
       startPinkNoiseSingle,
       stopCalibrationSignal,
-      unlockAudioContext,
+      unlockAudioContextLegacy,
       unlockOutputDevices,
       updateSpeakerConfig,
     ]
@@ -1768,6 +1920,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       toggleOutputSurface,
       updateOutputConfig,
       updateSurfaceQuad,
+      updateEdgeMask,
       resetSingleOutputQuads,
       resetAllProjectionQuads,
       triggerIdentifyOutputs,
@@ -1783,6 +1936,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       toggleGlobalShowGrid,
       toggleOutputSurface,
       triggerIdentifyOutputs,
+      updateEdgeMask,
       updateOutputConfig,
       updateProjectionState,
       updateSurfaceQuad,
@@ -1806,6 +1960,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       speakerLiveLevels,
       audioMode,
       masterGain,
+      voiceVolume,
       localAudioMuted,
       audioSourceKind,
       lanConnected,
@@ -1817,6 +1972,9 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       pngUrls,
       roomDimensions,
       getLiveFrame,
+      audioContextState,
+      realAudioRms01,
+      audioOwner,
       selectCountry,
       selectCountryPreserveBeat,
       setCompareSlot,
@@ -1832,9 +1990,13 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setWindWetMix,
       toggleSolo,
       setMasterGain,
+      setVoiceVolume,
       setLocalAudioMuted,
+      setAudioOwner,
       setAudioMode,
       togglePlay,
+      playWithAudibleLayers,
+      unlockAudioContext,
       seekBeat,
       seekBar,
       seekProgress,
@@ -1849,8 +2011,10 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     [
       activateMissionFrame,
       allCountries,
+      audioContextState,
       audioLevels,
       audioMode,
+      audioOwner,
       audioSourceKind,
       availableCountryIds,
       beatTimeline,
@@ -1869,8 +2033,10 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       nextStoryStep,
       pilotSet,
       playback,
+      playWithAudibleLayers,
       pngUrls,
       prevStoryStep,
+      realAudioRms01,
       replayActiveFrame,
       resetExperienceToDefault,
       roomDimensions,
@@ -1882,6 +2048,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       selectCountryPreserveBeat,
       setAllLayersEnabled,
       setAudioMode,
+      setAudioOwner,
       setCompareSlot,
       setLang,
       setLayerGain,
@@ -1891,6 +2058,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setMissionPhase,
       setRoomDimensions,
       setStoryStep,
+      setVoiceVolume,
       setWindWetMix,
       speakerLiveLevels,
       stepBeat,
@@ -1900,6 +2068,8 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       togglePlay,
       toggleSolo,
       toggleSparkle,
+      unlockAudioContext,
+      voiceVolume,
     ]
   );
 

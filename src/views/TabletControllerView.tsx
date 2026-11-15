@@ -745,9 +745,9 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
             </div>
           </section>
 
-          {/* Mixer das 5 Camadas Estilo Photoshop */}
+          {/* Mixer das 5 Camadas Estilo Photoshop (Rack Acoplado sem carditis) */}
           <section
-            className="flex flex-col gap-2"
+            className="flex flex-col divide-y divide-slate-400/12 overflow-hidden rounded-[18px] border border-slate-400/15 bg-[#080d19]/92"
             role="group"
             aria-label={isPt ? 'Mixer das 5 camadas NASA' : 'NASA 5-layer mixer'}
           >
@@ -758,14 +758,11 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
               return (
                 <div
                   key={layerId}
-                  className="flex flex-col gap-2 rounded-2xl border p-3 transition"
+                  className="flex flex-col gap-2 p-3 transition"
                   style={{
-                    borderColor: isEnabled
-                      ? `color-mix(in srgb, ${meta.accentHex} 45%, rgba(148,163,184,0.16))`
-                      : 'rgba(148, 163, 184, 0.14)',
                     background: isEnabled
-                      ? `color-mix(in srgb, ${meta.accentHex} 9%, rgba(8, 15, 30, 0.85))`
-                      : 'rgba(8, 15, 30, 0.58)',
+                      ? `color-mix(in srgb, ${meta.accentHex} 9%, rgba(8, 13, 25, 0.92))`
+                      : 'transparent',
                   }}
                 >
                   <div className="flex items-center justify-between gap-2.5">
@@ -894,11 +891,11 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                       <span>
                         {layers.temperature.enabled
                           ? isPt
-                            ? `Clima Real ativo (${playback.keyRootPt} · ${playback.bpm} BPM)`
-                            : `Real Climate active (${playback.keyRoot} · ${playback.bpm} BPM)`
+                            ? `Clima Real ativo · ${playback.keyRootPt} · ${playback.bpm} BPM`
+                            : `Real Climate active · ${playback.keyRoot} · ${playback.bpm} BPM`
                           : isPt
-                            ? 'Olhinho desligado → Base Neutra (Lá · 90 BPM)'
-                            : 'Eye off → Neutral Base (A · 90 BPM)'}
+                            ? 'Olhinho desligado → Base Neutra · Lá · 90 BPM'
+                            : 'Eye off → Neutral Base · A · 90 BPM'}
                       </span>
                     </div>
                   )}
@@ -933,7 +930,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
 
             <div className="flex items-center justify-between gap-2 rounded-2xl border border-slate-400/15 bg-white/[0.025] px-3.5 py-2">
               <span className="text-xs font-medium text-slate-300">
-                {isPt ? 'História do Robô (Parede Dir.)' : 'Robot Story (Right Wall)'}
+                {isPt ? 'História do Robô · Parede Dir.' : 'Robot Story · Right Wall'}
               </span>
               <div className="flex items-center gap-1.5">
                 {[0, 1, 2, 3].map((idx) => (

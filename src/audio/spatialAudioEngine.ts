@@ -16,7 +16,9 @@ export type CalibrationTestMode =
   | { kind: 'off' }
   | { kind: 'pink-single'; speakerId: SpeakerSlotId }
   | { kind: 'pink-ab'; targetSpeakerId: SpeakerSlotId; activeNow: SpeakerSlotId }
-  | { kind: 'delay-click'; targetSpeakerId: SpeakerSlotId };
+  | { kind: 'delay-click'; targetSpeakerId: SpeakerSlotId }
+  | { kind: 'pink-all' }
+  | { kind: 'delay-click-all' };
 
 export interface AudioDeviceOption {
   deviceId: string;
@@ -189,6 +191,8 @@ export function setSpatialMusicDucked(ducked: boolean): void {
 export class SpatialAudioEngine {
   private ctx: AudioContext | null = null;
   private masterGainNode: GainNode | null = null;
+  private masterAnalyserNode: AnalyserNode | null = null;
+  private analyserTimeData: Uint8Array<ArrayBuffer> | null = null;
   private windSendNode: GainNode | null = null;
   private windWetGainNode: GainNode | null = null;
   private windOrbitPanner: PannerNode | null = null;
@@ -313,9 +317,15 @@ export class SpatialAudioEngine {
       this.ctx = ctx;
 
       const master = ctx.createGain();
-      master.gain.value = this.masterGain;
+      master.gain.value = this.masterGain * this.voiceDuckMultiplier;
       master.connect(ctx.destination);
       this.masterGainNode = master;
+
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      master.connect(analyser);
+      this.masterAnalyserNode = analyser;
+      this.analyserTimeData = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
 
       // Build 3 Speaker Chains (for room3 VBAP + Pink Noise + Bluetooth Delay calibration)
       const makeChain = (slotId: SpeakerSlotId): SpeakerBusChain => {
@@ -333,6 +343,7 @@ export class SpatialAudioEngine {
         input.connect(delay);
         delay.connect(calibGain);
         calibGain.connect(stereoPan);
+        stereoPan.connect(masterMirrorGain);
         stereoPan.connect(master);
 
         return {
@@ -455,6 +466,38 @@ export class SpatialAudioEngine {
         }
       }
     }, 50);
+  }
+
+  public getAudioContextState(): AudioContextState | 'uninitialized' {
+    return this.ctx ? this.ctx.state : 'uninitialized';
+  }
+
+  public async ensureUnlocked(): Promise<AudioContextState | 'uninitialized'> {
+    const ctx = this.ensureContext();
+    if (!ctx) return 'uninitialized';
+    if (ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+      } catch {
+        // ignore resume errors
+      }
+    }
+    return ctx.state;
+  }
+
+  public getMasterRmsLevel(): number {
+    if (!this.ctx || this.ctx.state !== 'running' || !this.masterAnalyserNode || !this.analyserTimeData) {
+      return 0;
+    }
+    this.masterAnalyserNode.getByteTimeDomainData(this.analyserTimeData);
+    let sumSq = 0;
+    const len = this.analyserTimeData.length;
+    for (let i = 0; i < len; i += 1) {
+      const sample = (this.analyserTimeData[i] - 128) / 128;
+      sumSq += sample * sample;
+    }
+    const rms = Math.sqrt(sumSq / Math.max(1, len));
+    return Math.min(1, rms * 3.2);
   }
 
   public setMasterGain(gain: number): void {
@@ -692,7 +735,24 @@ export class SpatialAudioEngine {
 
       const gain = this.ctx.createGain();
       src.connect(gain);
-      gain.connect(this.masterGainNode);
+
+      if ((this.audioMode === 'room3' || this.isolatedSpeakerSlot !== null) && this.speakerChains) {
+        // Distribuição VBAP por função musical/geográfica do stem nas 3 caixas físicas
+        const stemWeights: Record<SpeakerSlotId, number> = stem.startsWith('melody')
+          ? { speaker1: 0.78, speaker2: 0.42, speaker3: 0.46 }
+          : stem.startsWith('chords')
+            ? { speaker1: 0.42, speaker2: 0.78, speaker3: 0.46 }
+            : { speaker1: 0.45, speaker2: 0.45, speaker3: 0.76 };
+
+        for (const id of SPEAKER_IDS) {
+          const send = this.ctx.createGain();
+          send.gain.value = stemWeights[id];
+          gain.connect(send);
+          send.connect(this.speakerChains[id].input);
+        }
+      } else {
+        gain.connect(this.masterGainNode);
+      }
 
       const offsetSec = (offsetProgress01 % 1) * buf.duration;
       src.start(startTime, offsetSec);
@@ -1037,6 +1097,63 @@ export class SpatialAudioEngine {
     this.calibTestMode = { kind: 'delay-click', targetSpeakerId };
     this.onCalibModeChange?.(this.calibTestMode);
     this.calibIntervalId = window.setInterval(triggerPair, 600);
+  }
+
+  public startPinkNoiseAll(): void {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.speakerChains) return;
+    this.stopCalibrationSignal();
+
+    if (!this.pinkBuffer) {
+      this.pinkBuffer = createPinkNoiseBuffer(ctx, 3.0);
+    }
+
+    const src = ctx.createBufferSource();
+    src.buffer = this.pinkBuffer;
+    src.loop = true;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.65;
+    src.connect(gain);
+    SPEAKER_IDS.forEach((speakerId) => {
+      gain.connect(this.speakerChains![speakerId].input);
+    });
+    src.start();
+
+    this.calibPinkSrc = src;
+    this.calibPinkGain = gain;
+    this.calibTestMode = { kind: 'pink-all' };
+    this.onCalibModeChange?.(this.calibTestMode);
+  }
+
+  public startDelayClickAll(): void {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.speakerChains || typeof window === 'undefined') return;
+    this.stopCalibrationSignal();
+
+    const triggerAllClicks = () => {
+      if (!this.ctx || !this.speakerChains) return;
+      const t = this.ctx.currentTime + 0.01;
+      SPEAKER_IDS.forEach((speakerId) => {
+        const osc = this.ctx!.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1750, t);
+        osc.frequency.exponentialRampToValueAtTime(280, t + 0.028);
+
+        const env = this.ctx!.createGain();
+        env.gain.setValueAtTime(0.9, t);
+        env.gain.exponentialRampToValueAtTime(0.0001, t + 0.032);
+
+        osc.connect(env);
+        env.connect(this.speakerChains![speakerId].input);
+        osc.start(t);
+        osc.stop(t + 0.04);
+      });
+    };
+
+    triggerAllClicks();
+    this.calibTestMode = { kind: 'delay-click-all' };
+    this.onCalibModeChange?.(this.calibTestMode);
+    this.calibIntervalId = window.setInterval(triggerAllClicks, 650);
   }
 
   public async listOutputDevices(): Promise<AudioDeviceOption[]> {

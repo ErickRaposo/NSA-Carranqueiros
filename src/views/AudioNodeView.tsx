@@ -65,6 +65,8 @@ export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
   };
 
   const isReceivingTest =
+    calibTestMode.kind === 'pink-all' ||
+    calibTestMode.kind === 'delay-click-all' ||
     (calibTestMode.kind === 'pink-single' && calibTestMode.speakerId === slotId) ||
     (calibTestMode.kind === 'pink-ab' && calibTestMode.activeNow === slotId) ||
     (calibTestMode.kind === 'delay-click' &&
@@ -149,8 +151,8 @@ export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
                 <CheckCircle2 size={16} className="text-emerald-300" />
                 <span>
                   {isPt
-                    ? `Motor Web Audio Ativo (Canal C${speakerSlotIdToIndex(slotId)})`
-                    : `Web Audio Active (Channel C${speakerSlotIdToIndex(slotId)})`}
+                    ? `Motor Web Audio Ativo · Canal C${speakerSlotIdToIndex(slotId)}`
+                    : `Web Audio Active · Channel C${speakerSlotIdToIndex(slotId)}`}
                 </span>
               </div>
               <button

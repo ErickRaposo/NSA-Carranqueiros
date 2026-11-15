@@ -54,7 +54,7 @@ export const WebDemoView: React.FC = () => {
 
       <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
         {showRoomPreview && (
-          <div className="h-[36vh] shrink-0 border-b border-slate-400/15 xl:h-full xl:w-[44%] xl:border-r xl:border-b-0">
+          <div className="h-[42vh] shrink-0 border-b border-slate-400/15 xl:h-full xl:w-[60%] xl:border-r xl:border-b-0">
             <SimulatorView embedded={true} />
           </div>
         )}

@@ -42,8 +42,8 @@ export const SHAY_MISSION_FRAMES: ReadonlyArray<MissionFrameSpec> = [
     titleEn: '1. Idle / Standby',
     leftWallPt: 'Globo inteiro girando no espaço #000000',
     leftWallEn: 'Full Earth globe rotating in #000000 space',
-    rightWallPt: 'Robô MINEIRØ em espera (sem balão de fala)',
-    rightWallEn: 'MINEIRØ robot waiting (no speech bubble)',
+    rightWallPt: 'Robô MINEIRØ em espera, sem balão de fala',
+    rightWallEn: 'MINEIRØ robot waiting, no speech bubble',
     ceilingPt: 'Arco do Globo + 12 bandeiras flutuando',
     ceilingEn: 'Globe rim + 12 floating country flags',
   },
@@ -52,14 +52,14 @@ export const SHAY_MISSION_FRAMES: ReadonlyArray<MissionFrameSpec> = [
     order: 2,
     phase: 'briefing',
     autoDurationMs: 6500,
-    titlePt: '2. Boas-vindas (Briefing)',
-    titleEn: '2. Welcome (Briefing)',
+    titlePt: '2. Boas-vindas',
+    titleEn: '2. Welcome',
     leftWallPt: 'Globo espacial aguardando embarque',
     leftWallEn: 'Space globe awaiting boarding',
     rightWallPt: 'MINEIRØ apresenta a missão e chama para embarcar',
     rightWallEn: 'MINEIRØ introduces mission and invites boarding',
-    ceilingPt: 'Céu estrelado aberto (#000000 livre)',
-    ceilingEn: 'Open starry sky (#000000 free)',
+    ceilingPt: 'Céu estrelado aberto · #000000 livre',
+    ceilingEn: 'Open starry sky · #000000 free',
   },
   {
     id: 'boarding',
@@ -80,8 +80,8 @@ export const SHAY_MISSION_FRAMES: ReadonlyArray<MissionFrameSpec> = [
     order: 4,
     phase: 'countdown',
     autoDurationMs: 6000,
-    titlePt: '4. Contagem (5..1)',
-    titleEn: '4. Countdown (5..1)',
+    titlePt: '4. Contagem 5..1',
+    titleEn: '4. Countdown 5..1',
     leftWallPt: 'Vibração da nave pela vigia circular',
     leftWallEn: 'Rocket vibration through porthole',
     rightWallPt: 'Contagem regressiva 5..4..3..2..1 + motores',
@@ -94,8 +94,8 @@ export const SHAY_MISSION_FRAMES: ReadonlyArray<MissionFrameSpec> = [
     order: 5,
     phase: 'zero_g',
     autoDurationMs: 5500,
-    titlePt: '5. Gravidade Zero (4s)',
-    titleEn: '5. Zero-G (4s)',
+    titlePt: '5. Gravidade Zero · 4s',
+    titleEn: '5. Zero-G · 4s',
     leftWallPt: 'Globo focado com marcações + portas abrindo devagar',
     leftWallEn: 'Focused globe with borders + doors pulling open',
     rightWallPt: 'Portas abrindo devagar + fumaça + Robô no círculo azul',
@@ -126,8 +126,8 @@ export const SHAY_MISSION_FRAMES: ReadonlyArray<MissionFrameSpec> = [
     focusLayer: 'melody',
     requiresCountry: true,
     autoDurationMs: 5500,
-    titlePt: '7. Camada · Melodia (Raios)',
-    titleEn: '7. Layer · Melody (Lightning)',
+    titlePt: '7. Camada · Melodia · Raios',
+    titleEn: '7. Layer · Melody · Lightning',
     leftWallPt: 'País em destaque 2D + flashes de raios ISS-LIS',
     leftWallEn: 'Country in 2D highlight + ISS-LIS lightning flashes',
     rightWallPt: 'MINEIRØ comenta os raios virando melodia',
@@ -143,8 +143,8 @@ export const SHAY_MISSION_FRAMES: ReadonlyArray<MissionFrameSpec> = [
     focusLayer: 'chords',
     requiresCountry: true,
     autoDurationMs: 5500,
-    titlePt: '8. Camada · Acordes (CO)',
-    titleEn: '8. Layer · Chords (CO)',
+    titlePt: '8. Camada · Acordes · CO',
+    titleEn: '8. Layer · Chords · CO',
     leftWallPt: 'País em destaque 2D + pluma de Monóxido de Carbono',
     leftWallEn: 'Country in 2D highlight + Carbon Monoxide plume',
     rightWallPt: 'MINEIRØ comenta a harmonia guiada pelo CO',
@@ -177,8 +177,8 @@ export const SHAY_MISSION_FRAMES: ReadonlyArray<MissionFrameSpec> = [
     focusLayer: 'bass',
     requiresCountry: true,
     autoDurationMs: 5500,
-    titlePt: '10. Camada · Base & Chuva (NO₂)',
-    titleEn: '10. Layer · Bass & Rain (NO₂)',
+    titlePt: '10. Camada · Base & Chuva · NO₂',
+    titleEn: '10. Layer · Bass & Rain · NO₂',
     leftWallPt: 'País em destaque 2D + concentração urbana de NO₂',
     leftWallEn: 'Country in 2D highlight + urban NO₂ density',
     rightWallPt: 'MINEIRØ comenta o pulso grave e chuva espacial',
@@ -194,12 +194,12 @@ export const SHAY_MISSION_FRAMES: ReadonlyArray<MissionFrameSpec> = [
     focusLayer: 'wind',
     requiresCountry: true,
     autoDurationMs: 5500,
-    titlePt: '11. Camada · Vento (8D)',
-    titleEn: '11. Layer · Wind (8D)',
+    titlePt: '11. Camada · Vento · 8D',
+    titleEn: '11. Layer · Wind · 8D',
     leftWallPt: 'País em destaque 2D + vetores de vento 10m',
     leftWallEn: 'Country in 2D highlight + 10m wind vectors',
-    rightWallPt: 'MINEIRØ lê vento (m/s) girando nas 3 caixas',
-    rightWallEn: 'MINEIRØ reads wind (m/s) panning across 3 speakers',
+    rightWallPt: 'MINEIRØ lê vento em m/s girando nas 3 caixas',
+    rightWallEn: 'MINEIRØ reads wind in m/s panning across 3 speakers',
     ceilingPt: 'Card cultural + rajadas de vento cruzando o céu',
     ceilingEn: 'Cultural card + wind streams sweeping overhead',
   },
@@ -260,11 +260,11 @@ export function resolveFramePrompts(
     case 'idle':
       return isPt
         ? {
-            phrases: ['(Modo espera: Robô MINEIRØ em repouso, sem balão de fala ativo)'],
+            phrases: ['Modo espera: Robô MINEIRØ em repouso, sem balão de fala ativo'],
             spoken: '',
           }
         : {
-            phrases: ['(Idle standby: MINEIRØ robot resting, no active speech bubble)'],
+            phrases: ['Idle standby: MINEIRØ robot resting, no active speech bubble'],
             spoken: '',
           };
 
@@ -382,7 +382,7 @@ export function resolveFramePrompts(
       return isPt
         ? {
             phrases: [
-              `Monóxido de Carbono (CO) em ${ctx.countryName} (${ctx.activeChord}).`,
+              `Monóxido de Carbono em ${ctx.countryName} · ${ctx.activeChord}.`,
               'A pluma atmosférica molda os acordes em tempo real!',
               'Veja os anéis harmônicos pulsando no teto.',
             ],
@@ -390,7 +390,7 @@ export function resolveFramePrompts(
           }
         : {
             phrases: [
-              `Carbon Monoxide (CO) over ${ctx.countryName} (${ctx.activeChord}).`,
+              `Carbon Monoxide over ${ctx.countryName} · ${ctx.activeChord}.`,
               'Atmospheric plumes shape the chords in real time!',
               'Watch the harmonic rings pulsing overhead.',
             ],
@@ -420,7 +420,7 @@ export function resolveFramePrompts(
       return isPt
         ? {
             phrases: [
-              `Dióxido de Nitrogênio (NO₂) em ${ctx.countryName}!`,
+              `Dióxido de Nitrogênio em ${ctx.countryName}!`,
               'As emissões urbanas viram pulso grave e gotículas no teto.',
               'Sinta o peso espacial vibrando nas caixas!',
             ],
@@ -428,7 +428,7 @@ export function resolveFramePrompts(
           }
         : {
             phrases: [
-              `Nitrogen Dioxide (NO₂) over ${ctx.countryName}!`,
+              `Nitrogen Dioxide over ${ctx.countryName}!`,
               'Urban emissions become deep bass pulses and rain streaks above.',
               'Feel the spatial weight across the speakers!',
             ],

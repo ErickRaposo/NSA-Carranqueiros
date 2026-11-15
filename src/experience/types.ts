@@ -89,10 +89,10 @@ export const LAYER_METAS: Record<VisualLayerId, LayerVisualMeta> = {
     roleKind: 'generator',
     labelPt: 'Melodia',
     labelEn: 'Melody',
-    musicalRolePt: 'Celesta / Rhodes + Tempestade (5ª/8ª)',
-    musicalRoleEn: 'Celesta / Rhodes + Storm Sparkle (5th/8th)',
-    phenomenonPt: 'Raios ISS (SVS 5011)',
-    phenomenonEn: 'ISS Lightning (SVS 5011)',
+    musicalRolePt: 'Celesta / Rhodes + Tempestade · 5ª/8ª',
+    musicalRoleEn: 'Celesta / Rhodes + Storm Sparkle · 5th/8th',
+    phenomenonPt: 'Raios ISS · SVS 5011',
+    phenomenonEn: 'ISS Lightning · SVS 5011',
   },
   chords: {
     id: 'chords',
@@ -101,10 +101,10 @@ export const LAYER_METAS: Record<VisualLayerId, LayerVisualMeta> = {
     roleKind: 'generator',
     labelPt: 'Acordes',
     labelEn: 'Chords',
-    musicalRolePt: 'Pad Harmônico (Lídio → Frígio)',
-    musicalRoleEn: 'Harmonic Pad (Lydian → Phrygian)',
-    phenomenonPt: 'Monóxido de Carbono CO (SVS 5153)',
-    phenomenonEn: 'Carbon Monoxide CO (SVS 5153)',
+    musicalRolePt: 'Pad Harmônico · Lídio → Frígio',
+    musicalRoleEn: 'Harmonic Pad · Lydian → Phrygian',
+    phenomenonPt: 'Monóxido de Carbono CO · SVS 5153',
+    phenomenonEn: 'Carbon Monoxide CO · SVS 5153',
   },
   temperature: {
     id: 'temperature',
@@ -113,10 +113,10 @@ export const LAYER_METAS: Record<VisualLayerId, LayerVisualMeta> = {
     roleKind: 'conductor',
     labelPt: 'Temperatura',
     labelEn: 'Temperature',
-    musicalRolePt: 'Regente: Tom & BPM (66–110 BPM vs Base 90)',
-    musicalRoleEn: 'Conductor: Key & BPM (66–110 BPM vs Base 90)',
-    phenomenonPt: 'Temperatura 2m T2M (SVS 5147)',
-    phenomenonEn: '2m Temperature T2M (SVS 5147)',
+    musicalRolePt: 'Regente: Tom & BPM · 66–110 BPM vs Base 90',
+    musicalRoleEn: 'Conductor: Key & BPM · 66–110 BPM vs Base 90',
+    phenomenonPt: 'Temperatura 2m T2M · SVS 5147',
+    phenomenonEn: '2m Temperature T2M · SVS 5147',
   },
   bass: {
     id: 'bass',
@@ -125,10 +125,10 @@ export const LAYER_METAS: Record<VisualLayerId, LayerVisualMeta> = {
     roleKind: 'generator',
     labelPt: 'Baixo',
     labelEn: 'Bass',
-    musicalRolePt: 'Sub-Bass Urbano (Cutoff & Drive)',
-    musicalRoleEn: 'Urban Sub-Bass (Cutoff & Drive)',
-    phenomenonPt: 'Óxidos de Nitrogênio NO₂ (SVS 5154)',
-    phenomenonEn: 'Nitrogen Oxides NO₂ (SVS 5154)',
+    musicalRolePt: 'Sub-Bass Urbano · Cutoff & Drive',
+    musicalRoleEn: 'Urban Sub-Bass · Cutoff & Drive',
+    phenomenonPt: 'Óxidos de Nitrogênio NO₂ · SVS 5154',
+    phenomenonEn: 'Nitrogen Oxides NO₂ · SVS 5154',
   },
   wind: {
     id: 'wind',
@@ -137,10 +137,10 @@ export const LAYER_METAS: Record<VisualLayerId, LayerVisualMeta> = {
     roleKind: 'fxBus',
     labelPt: 'Vento',
     labelEn: 'Wind',
-    musicalRolePt: 'Bus Espacial 8D (Delay + Shimmer Reverb)',
-    musicalRoleEn: '8D Spatial Bus (Delay + Shimmer Reverb)',
-    phenomenonPt: 'Ventos 10m (SVS 5148)',
-    phenomenonEn: '10m Winds (SVS 5148)',
+    musicalRolePt: 'Bus Espacial 8D · Delay + Shimmer Reverb',
+    musicalRoleEn: '8D Spatial Bus · Delay + Shimmer Reverb',
+    phenomenonPt: 'Ventos 10m · SVS 5148',
+    phenomenonEn: '10m Winds · SVS 5148',
   },
 };
 
@@ -266,6 +266,8 @@ export interface LanPeerInfo {
   connectedAt: number;
 }
 
+export type AudioOwnerRole = 'pc' | 'tablet' | 'both';
+
 export interface ExperienceContextValue {
   country: ExperienceCountry | null;
   allCountries: ReadonlyArray<ExperienceCountry>;
@@ -289,6 +291,7 @@ export interface ExperienceContextValue {
   speakerLiveLevels: Record<'speaker1' | 'speaker2' | 'speaker3', number>;
   audioMode: AudioOutputMode;
   masterGain: number;
+  voiceVolume: number;
   /** Silencia apenas este dispositivo/aba local (ex.: Projetores mudos por padrão ou Tablet remoto mudo) */
   localAudioMuted: boolean;
   /** Indica se o áudio vem dos 8 stems pré-gerados ('stems') ou da síntese 8D via meta.json ('meta-synth') */
@@ -308,6 +311,12 @@ export interface ExperienceContextValue {
   roomDimensions: RoomDimensions;
   /** Getter síncrono sem re-render para loops requestAnimationFrame (60fps) */
   getLiveFrame: () => LiveFrameSnapshot;
+  /** Estado real do AudioContext do navegador ('running' | 'suspended' | 'closed' | 'uninitialized') */
+  audioContextState: AudioContextState | 'uninitialized';
+  /** Nível RMS real medido pelo AnalyserNode do Web Audio [0..1] */
+  realAudioRms01: number;
+  /** Dono do áudio na instalação física (PC Mestre, Tablet ou Ambos) */
+  audioOwner: AudioOwnerRole;
 
   // Ações compartilhadas (Contrato Pessoa 1 <-> Pessoa 2)
   selectCountry: (countryId: string | null) => void;
@@ -329,9 +338,13 @@ export interface ExperienceContextValue {
   setWindWetMix: (wetMix: number) => void;
   toggleSolo: (layerId: SoloableLayerId) => void;
   setMasterGain: (gain: number) => void;
+  setVoiceVolume: (volume: number) => void;
   setLocalAudioMuted: (muted: boolean) => void;
+  setAudioOwner: (owner: AudioOwnerRole) => void;
   setAudioMode: (mode: AudioOutputMode) => void;
   togglePlay: () => void;
+  playWithAudibleLayers: () => void;
+  unlockAudioContext: () => Promise<AudioContextState | 'uninitialized'>;
   seekBeat: (beatIndex: number) => void;
   seekBar: (barIndex: number) => void;
   seekProgress: (progress01: number) => void;

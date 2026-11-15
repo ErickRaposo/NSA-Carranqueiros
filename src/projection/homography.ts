@@ -31,6 +31,15 @@ export interface ProjectorOutputConfig {
   blackout: boolean;
 }
 
+export type EdgeFeatherSide = 'left' | 'right' | 'top' | 'bottom';
+
+export interface EdgeFeatherMask {
+  leftPct: number;
+  rightPct: number;
+  topPct: number;
+  bottomPct: number;
+}
+
 export interface ProjectionCalibrationState {
   preset: ProjectionTopologyPreset;
   showGrid: boolean;
@@ -38,6 +47,7 @@ export interface ProjectionCalibrationState {
   identifyUntil: number;
   outputs: Record<ProjectorOutId, ProjectorOutputConfig>;
   quads: Record<CalibrationSurfaceKey, QuadCorners>;
+  edgeMasks: Record<CalibrationSurfaceKey, EdgeFeatherMask>;
 }
 
 export const CALIBRATION_STORAGE_KEY = 'earth-jukebox-calibration-v2';
@@ -62,6 +72,20 @@ export function createIdentityQuad(
     { x: x1, y: y1 },
     { x: x0, y: y1 },
   ];
+}
+
+export function createDefaultEdgeMask(): EdgeFeatherMask {
+  return { leftPct: 0, rightPct: 0, topPct: 0, bottomPct: 0 };
+}
+
+function createAllZeroEdgeMasks(): Record<CalibrationSurfaceKey, EdgeFeatherMask> {
+  const masks = {} as Record<CalibrationSurfaceKey, EdgeFeatherMask>;
+  for (const outId of PROJECTOR_OUT_IDS) {
+    for (const sId of SURFACE_IDS) {
+      masks[makeSurfaceQuadKey(outId, sId)] = createDefaultEdgeMask();
+    }
+  }
+  return masks;
 }
 
 function createAllIdentityQuads(): Record<CalibrationSurfaceKey, QuadCorners> {
@@ -160,6 +184,7 @@ export function applyProjectionPreset(
     identifyUntil: 0,
     outputs,
     quads,
+    edgeMasks: prev?.edgeMasks ?? createAllZeroEdgeMasks(),
   };
 }
 
@@ -211,9 +236,14 @@ export function resetOutputQuads(
   outId: ProjectorOutId
 ): ProjectionCalibrationState {
   const surfaces = state.outputs[outId]?.surfaces ?? [];
+  const nextMasks = { ...state.edgeMasks };
+  for (const sId of SURFACE_IDS) {
+    nextMasks[makeSurfaceQuadKey(outId, sId)] = createDefaultEdgeMask();
+  }
   return {
     ...state,
     quads: buildAutoQuadsForSurfaces(outId, surfaces, state.quads),
+    edgeMasks: nextMasks,
   };
 }
 
@@ -250,6 +280,21 @@ export function loadCalibrationState(): ProjectionCalibrationState {
       }
     }
 
+    const mergedMasks = { ...fallback.edgeMasks };
+    if (parsed.edgeMasks && typeof parsed.edgeMasks === 'object') {
+      for (const key of Object.keys(mergedMasks) as CalibrationSurfaceKey[]) {
+        const candidate = parsed.edgeMasks[key];
+        if (candidate && typeof candidate === 'object') {
+          mergedMasks[key] = {
+            leftPct: Math.max(0, Math.min(40, Number(candidate.leftPct) || 0)),
+            rightPct: Math.max(0, Math.min(40, Number(candidate.rightPct) || 0)),
+            topPct: Math.max(0, Math.min(40, Number(candidate.topPct) || 0)),
+            bottomPct: Math.max(0, Math.min(40, Number(candidate.bottomPct) || 0)),
+          };
+        }
+      }
+    }
+
     return {
       preset: parsed.preset ?? '2-projectors',
       showGrid: Boolean(parsed.showGrid),
@@ -260,6 +305,7 @@ export function loadCalibrationState(): ProjectionCalibrationState {
         ...fallback.quads,
         ...parsed.quads,
       },
+      edgeMasks: mergedMasks,
     };
   } catch {
     return fallback;

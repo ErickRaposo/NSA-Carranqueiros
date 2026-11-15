@@ -45,8 +45,8 @@ export function createDefaultAudioCalibration(): AudioCalibrationState {
     speakers: {
       speaker1: {
         id: 'speaker1',
-        labelPt: 'Caixa 1 · Parede Esquerda (Globo)',
-        labelEn: 'Speaker 1 · Left Wall (Globe)',
+        labelPt: 'Caixa 1 · Parede Esquerda · Globo',
+        labelEn: 'Speaker 1 · Left Wall · Globe',
         shortLabelPt: 'Parede Esq',
         shortLabelEn: 'Left Wall',
         posX: -0.85,
@@ -59,8 +59,8 @@ export function createDefaultAudioCalibration(): AudioCalibrationState {
       },
       speaker2: {
         id: 'speaker2',
-        labelPt: 'Caixa 2 · Parede Direita (Robô)',
-        labelEn: 'Speaker 2 · Right Wall (Robot)',
+        labelPt: 'Caixa 2 · Parede Direita · Robô',
+        labelEn: 'Speaker 2 · Right Wall · Robot',
         shortLabelPt: 'Parede Dir',
         shortLabelEn: 'Right Wall',
         posX: 0.85,

@@ -1,15 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ArrowUp,
   Box,
   Columns3,
   Compass,
   Eye,
   EyeOff,
   Maximize2,
+  Minus,
   Pause,
   Play,
+  Plus,
   SlidersHorizontal,
-  Sparkles,
 } from 'lucide-react';
 import { useExperience } from '../experience/ExperienceContext';
 import {
@@ -174,15 +176,8 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
         <div className="flex items-center gap-2.5">
           <Compass size={15} className="text-sky-400" />
           <span className="text-xs font-semibold text-slate-100">
-            {isPt
-              ? 'Simulador 3D do Quarto (2 Paredes 90° + Teto)'
-              : '3D Corner Room Simulator (2 Walls 90° + Ceiling)'}
+            {isPt ? 'Simulador 3D do Quarto' : '3D Corner Room Simulator'}
           </span>
-          {country && (
-            <span className="hidden rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-200 sm:inline-block [font-variant-numeric:tabular-nums]">
-              {isPt ? country.namePt : country.nameEn} · {playback.bpm} BPM · {playback.activeChord}
-            </span>
-          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
@@ -190,7 +185,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
             [
               ['overview', isPt ? 'Canto 3D' : '3D Corner', Box],
               ['visitor', isPt ? 'Visão Visitante' : 'Visitor POV', Maximize2],
-              ['ceiling', isPt ? 'Olhar p/ Teto' : 'Look at Ceiling', Sparkles],
+              ['ceiling', isPt ? 'Olhar p/ Teto' : 'Look at Ceiling', ArrowUp],
               ['flat', isPt ? 'Planificar 3 Telas' : 'Unfold 3 Screens', Columns3],
             ] as const
           ).map(([id, label, Icon]) => (
@@ -250,8 +245,8 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
         <div className="grid flex-1 grid-cols-1 gap-3 overflow-auto p-4 lg:grid-cols-3">
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] font-medium text-sky-300 [font-variant-numeric:tabular-nums]">
-              1 · {isPt ? 'Parede Esquerda — Globo' : 'Left Wall — Globe'} (
-              {roomDimensions.leftWall.widthCm}×{roomDimensions.leftWall.heightCm} cm)
+              1 · {isPt ? 'Parede Esquerda — Globo' : 'Left Wall — Globe'} ·{' '}
+              {roomDimensions.leftWall.widthCm}×{roomDimensions.leftWall.heightCm} cm
             </span>
             <div
               className="w-full overflow-hidden rounded-lg border border-slate-400/25 bg-black"
@@ -271,8 +266,8 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
 
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] font-medium text-amber-300 [font-variant-numeric:tabular-nums]">
-              2 · {isPt ? 'Parede Direita — Robozinho' : 'Right Wall — Robot'} (
-              {roomDimensions.rightWall.widthCm}×{roomDimensions.rightWall.heightCm} cm)
+              2 · {isPt ? 'Parede Direita — Robozinho' : 'Right Wall — Robot'} ·{' '}
+              {roomDimensions.rightWall.widthCm}×{roomDimensions.rightWall.heightCm} cm
             </span>
             <div
               className="w-full overflow-hidden rounded-lg border border-slate-400/25 bg-black"
@@ -292,8 +287,8 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
 
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] font-medium text-emerald-300 [font-variant-numeric:tabular-nums]">
-              3 · {isPt ? 'Teto — 5 PNGs Empilhados' : 'Ceiling — 5 Stacked PNGs'} (
-              {roomDimensions.ceiling.widthCm}×{roomDimensions.ceiling.heightCm} cm)
+              3 · {isPt ? 'Teto — 5 PNGs Empilhados' : 'Ceiling — 5 Stacked PNGs'} ·{' '}
+              {roomDimensions.ceiling.widthCm}×{roomDimensions.ceiling.heightCm} cm
             </span>
             <div
               className="w-full overflow-hidden rounded-lg border border-slate-400/25 bg-black"
@@ -429,6 +424,37 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
             </div>
           </div>
 
+          <div
+            className="absolute right-3.5 top-1/2 z-20 flex -translate-y-1/2 flex-col items-center gap-1 rounded-xl border border-slate-400/20 bg-[#080d19]/90 p-1 backdrop-blur-sm"
+            data-testid="simulator-zoom-controls"
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setZoomScale((prev) => Number(Math.min(1.85, prev + 0.15).toFixed(3)))
+              }
+              disabled={zoomScale >= 1.85}
+              aria-label={isPt ? 'Aproximar simulação 3D' : 'Zoom in 3D simulation'}
+              title={isPt ? 'Aproximar' : 'Zoom in'}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-200 transition hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              <Plus size={15} />
+            </button>
+            <div className="h-[1px] w-5 bg-slate-400/20" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={() =>
+                setZoomScale((prev) => Number(Math.max(0.62, prev - 0.15).toFixed(3)))
+              }
+              disabled={zoomScale <= 0.62}
+              aria-label={isPt ? 'Afastar simulação 3D' : 'Zoom out 3D simulation'}
+              title={isPt ? 'Afastar' : 'Zoom out'}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-200 transition hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              <Minus size={15} />
+            </button>
+          </div>
+
           <div className="pointer-events-none absolute bottom-3 left-3.5 rounded-full border border-slate-400/15 bg-[#080d19]/80 px-3 py-1 text-[11px] text-slate-400 [font-variant-numeric:tabular-nums]">
             {isPt
               ? 'Arraste para girar o quarto · Scroll para zoom'
@@ -508,7 +534,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
                             ? 'bg-amber-400 text-slate-950'
                             : 'text-slate-400 hover:bg-white/10 hover:text-slate-100'
                         }`}
-                        title="Solo (S)"
+                        title="Solo"
                       >
                         S
                       </button>

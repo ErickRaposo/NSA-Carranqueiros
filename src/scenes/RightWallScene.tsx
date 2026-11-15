@@ -271,7 +271,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         chords: {
           pt: {
             phrases: [
-              `Monóxido de Carbono (CO) em ${countryName} (${playback.activeChord}).`,
+              `Monóxido de Carbono em ${countryName} · ${playback.activeChord}.`,
               'A pluma atmosférica molda os acordes em tempo real!',
               'Veja os anéis harmônicos pulsando no teto.',
             ],
@@ -279,7 +279,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
           },
           en: {
             phrases: [
-              `Carbon Monoxide (CO) over ${countryName} (${playback.activeChord}).`,
+              `Carbon Monoxide over ${countryName} · ${playback.activeChord}.`,
               'Atmospheric plumes shape the chords in real time!',
               'Watch the harmonic rings pulsing overhead.',
             ],
@@ -307,7 +307,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         bass: {
           pt: {
             phrases: [
-              `Dióxido de Nitrogênio (NO₂) em ${countryName}!`,
+              `Dióxido de Nitrogênio em ${countryName}!`,
               'As emissões urbanas viram pulso grave e gotículas no teto.',
               'Sinta o peso espacial vibrando nas caixas!',
             ],
@@ -315,7 +315,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
           },
           en: {
             phrases: [
-              `Nitrogen Dioxide (NO₂) over ${countryName}!`,
+              `Nitrogen Dioxide over ${countryName}!`,
               'Urban emissions become deep bass pulses and rain streaks above.',
               'Feel the spatial weight across the speakers!',
             ],

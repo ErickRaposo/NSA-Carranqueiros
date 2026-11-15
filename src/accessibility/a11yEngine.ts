@@ -234,7 +234,20 @@ export const PIPER_VOICE_IDS = {
 let activePiperAudio: HTMLAudioElement | null = null;
 let activeSpeechOnEnd: (() => void) | null = null;
 let speechRequestNonce = 0;
+let speechVolume01 = 1.0;
 const piperAudioCache = new Map<string, string>();
+
+export function setSpeechVolume(volume: number): void {
+  const clamped = Math.min(1, Math.max(0, Number.isFinite(volume) ? volume : 1));
+  speechVolume01 = clamped;
+  if (activePiperAudio) {
+    activePiperAudio.volume = clamped;
+  }
+}
+
+export function getSpeechVolume(): number {
+  return speechVolume01;
+}
 const piperPreloadStarted = new Set<'pt' | 'en'>();
 const piperReadyVoices = new Set<string>();
 
@@ -330,6 +343,7 @@ function speakWithWebSpeechFallback(
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = lang === 'en' ? 'en-US' : 'pt-BR';
     utterance.rate = 1.0;
+    utterance.volume = speechVolume01;
     const preferMale = options?.maleVoice ?? true;
     utterance.pitch = preferMale ? 0.85 : 1.0;
 
@@ -400,6 +414,7 @@ export function speakTextPt(
     if (currentNonce !== speechRequestNonce) return;
     try {
       const audio = new Audio(url);
+      audio.volume = speechVolume01;
       activePiperAudio = audio;
       activeSpeechOnEnd = options?.onEnd ?? null;
       audio.onplay = () => {

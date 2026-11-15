@@ -88,7 +88,7 @@ export function App(): React.ReactElement {
   }, []);
 
   useEffect(() => {
-    if (route.view !== 'setup' && route.view !== 'audio-node') {
+    if (route.view !== 'setup' && route.view !== 'audio-node' && route.view !== 'projector') {
       startSpaceAmbient();
     }
   }, [route.view]);

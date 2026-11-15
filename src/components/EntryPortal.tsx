@@ -240,7 +240,7 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
             className={`portal-icon-btn entry-desktop-only ${highContrast ? 'is-active' : ''}`}
             onClick={onToggleHighContrast}
             aria-pressed={highContrast}
-            title="Alternar Alto Contraste WCAG AAA (C)"
+            title="Alternar Alto Contraste WCAG AAA"
             data-testid="portal-contrast-btn"
           >
             <Contrast size={16} aria-hidden="true" />

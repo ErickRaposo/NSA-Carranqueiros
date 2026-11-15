@@ -130,7 +130,7 @@ export const NasaDatasetCard: React.FC<NasaDatasetCardProps> = ({
           className="icon-btn-sm"
           style={{ minWidth: '44px', minHeight: '44px' }}
           onClick={onCloseOnce}
-          title={isPt ? 'Fechar card da base NASA (Esc)' : 'Close NASA dataset card (Esc)'}
+          title={isPt ? 'Fechar card da base NASA' : 'Close NASA dataset card'}
           aria-label={isPt ? 'Fechar card da base NASA' : 'Close NASA dataset card'}
         >
           <X size={16} aria-hidden="true" />
@@ -142,11 +142,11 @@ export const NasaDatasetCard: React.FC<NasaDatasetCardProps> = ({
           <strong className="nasa-scale-title">
             {ds.representationType === 'colorbar'
               ? isPt
-                ? 'Escala oficial de cores (NASA SVS)'
-                : 'Official colorbar scale (NASA SVS)'
+                ? 'Escala oficial de cores · NASA SVS'
+                : 'Official colorbar scale · NASA SVS'
               : isPt
-                ? 'Representação por eventos ópticos (sem escala contínua)'
-                : 'Discrete optical flash representation (no continuous scale)'}
+                ? 'Representação por eventos ópticos · sem escala contínua'
+                : 'Discrete optical flash representation · no continuous scale'}
           </strong>
           <span className="nasa-scale-unit">{unitLabel}</span>
         </div>
@@ -188,7 +188,7 @@ export const NasaDatasetCard: React.FC<NasaDatasetCardProps> = ({
               <span className="nasa-discrete-swatch is-lightning-flash" aria-hidden="true" />
               <div className="nasa-discrete-copy">
                 <strong>
-                  {isPt ? 'Pontos Amarelos (Flashes ISS-LIS)' : 'Yellow Dots (ISS-LIS Flashes)'}
+                  {isPt ? 'Pontos Amarelos · Flashes ISS-LIS' : 'Yellow Dots · ISS-LIS Flashes'}
                 </strong>
                 <span>
                   {isPt

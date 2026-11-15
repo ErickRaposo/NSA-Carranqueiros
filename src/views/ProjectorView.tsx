@@ -227,6 +227,55 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
             >
               {renderSurfaceScene(surfaceId, aspect)}
 
+              {(() => {
+                const edgeMask = projectionState.edgeMasks?.[quadKey];
+                if (!edgeMask) return null;
+                return (
+                  <>
+                    {edgeMask.leftPct > 0 && (
+                      <div
+                        className="pointer-events-none absolute inset-y-0 left-0"
+                        style={{
+                          width: `${edgeMask.leftPct}%`,
+                          background:
+                            'linear-gradient(to right, #000000 0%, rgba(0,0,0,0.68) 42%, rgba(0,0,0,0) 100%)',
+                        }}
+                      />
+                    )}
+                    {edgeMask.rightPct > 0 && (
+                      <div
+                        className="pointer-events-none absolute inset-y-0 right-0"
+                        style={{
+                          width: `${edgeMask.rightPct}%`,
+                          background:
+                            'linear-gradient(to left, #000000 0%, rgba(0,0,0,0.68) 42%, rgba(0,0,0,0) 100%)',
+                        }}
+                      />
+                    )}
+                    {edgeMask.topPct > 0 && (
+                      <div
+                        className="pointer-events-none absolute inset-x-0 top-0"
+                        style={{
+                          height: `${edgeMask.topPct}%`,
+                          background:
+                            'linear-gradient(to bottom, #000000 0%, rgba(0,0,0,0.68) 42%, rgba(0,0,0,0) 100%)',
+                        }}
+                      />
+                    )}
+                    {edgeMask.bottomPct > 0 && (
+                      <div
+                        className="pointer-events-none absolute inset-x-0 bottom-0"
+                        style={{
+                          height: `${edgeMask.bottomPct}%`,
+                          background:
+                            'linear-gradient(to top, #000000 0%, rgba(0,0,0,0.68) 42%, rgba(0,0,0,0) 100%)',
+                        }}
+                      />
+                    )}
+                  </>
+                );
+              })()}
+
               {isGridVisible && (
                 <div
                   className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
@@ -308,8 +357,8 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
             <div className="mt-3 text-base font-medium text-slate-200">
               {outputCfg.surfaces.length === 0
                 ? isPt
-                  ? 'Sem superfície atribuída (Standby #000000)'
-                  : 'No assigned surface (Standby #000000)'
+                  ? 'Sem superfície atribuída · Standby #000000'
+                  : 'No assigned surface · Standby #000000'
                 : outputCfg.surfaces
                     .map((s) => (isPt ? SURFACE_META[s].titlePt : SURFACE_META[s].titleEn))
                     .join('  +  ')}
