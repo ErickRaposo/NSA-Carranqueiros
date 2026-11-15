@@ -1,11 +1,13 @@
+import { getActiveUnmutedAudioEngine, SpatialSfxTarget } from './spatialAudioEngine';
+
 /**
- * Motor leve de música espacial ambiente (Web Audio API) para tocar desde o início
- * da demonstração sem depender de arquivos externos de áudio.
- * Respeita políticas de autoplay dos navegadores: inicia imediatamente se permitido
- * ou desbloqueia automaticamente no primeiro toque/clique do usuário.
+ * Motor espacial de ambientação e efeitos mecânicos da nave (Web Audio API).
+ * Roteia integralmente pelos 3 barramentos físicos (C1 Esquerda, C2 Direita, C3 Teto/Fundo)
+ * do `SpatialAudioEngine` (incluindo `setSinkId`, calibração de ganho/delay e nós `?view=audio-node`),
+ * mantendo abas mutadas (Projetor / Celular Controle) 100% silenciosas.
  */
 
-let ambientCtx: AudioContext | null = null;
+let ambientTarget: SpatialSfxTarget | null = null;
 let ambientMaster: GainNode | null = null;
 let ambientNodes: AudioNode[] = [];
 let activeSfxNodes = new Set<AudioNode>();
@@ -61,9 +63,46 @@ function stopAndDisconnectNodes(nodes: Iterable<AudioNode>): void {
   }
 }
 
-function buildSpacePad(ctx: AudioContext): void {
-  if (ambientMaster) return;
+function acquireSfxTarget(
+  panX = 0,
+  panY = 0,
+  options?: { duckWithVoice?: boolean }
+): SpatialSfxTarget | null {
+  const engine = getActiveUnmutedAudioEngine();
+  if (!engine) return null;
+  return engine.createSpatialSfxTarget(panX, panY, options);
+}
 
+function scheduleSweepPan(
+  target: SpatialSfxTarget,
+  durationSec: number,
+  sampleAt01: (t01: number) => [number, number]
+): void {
+  if (typeof window === 'undefined') return;
+  const startMs = performance.now();
+  const totalMs = Math.max(100, durationSec * 1000);
+  const intervalId = window.setInterval(() => {
+    const elapsed = performance.now() - startMs;
+    const t01 = Math.min(1, Math.max(0, elapsed / totalMs));
+    const [px, py] = sampleAt01(t01);
+    target.setPan(px, py);
+    if (t01 >= 1) {
+      window.clearInterval(intervalId);
+    }
+  }, 45);
+
+  window.setTimeout(() => {
+    window.clearInterval(intervalId);
+    target.disconnect();
+  }, totalMs + 260);
+}
+
+function buildSpacePad(): void {
+  if (ambientMaster) return;
+  const target = acquireSfxTarget(0, -0.15, { duckWithVoice: true });
+  if (!target) return;
+
+  const { ctx, destination } = target;
   const master = ctx.createGain();
   master.gain.setValueAtTime(0.0001, ctx.currentTime);
   master.gain.exponentialRampToValueAtTime(0.075, ctx.currentTime + 2.8);
@@ -74,9 +113,8 @@ function buildSpacePad(ctx: AudioContext): void {
   filter.Q.setValueAtTime(0.7, ctx.currentTime);
 
   filter.connect(master);
-  master.connect(ctx.destination);
+  master.connect(destination);
 
-  // LFO lento para respiração orgânica do filtro espacial
   const lfo = ctx.createOscillator();
   const lfoGain = ctx.createGain();
   lfo.type = 'sine';
@@ -86,7 +124,6 @@ function buildSpacePad(ctx: AudioContext): void {
   lfoGain.connect(filter.frequency);
   lfo.start();
 
-  // Acorde cósmico suave em Lá menor suspenso (A1, E2, A2, B2, E3, C#4 sutil)
   const voices: Array<{ freq: number; type: OscillatorType; gain: number; detune: number }> = [
     { freq: 55.0, type: 'sine', gain: 0.34, detune: 0 },
     { freq: 82.41, type: 'sine', gain: 0.24, detune: -4 },
@@ -111,6 +148,7 @@ function buildSpacePad(ctx: AudioContext): void {
     created.push(osc, g);
   }
 
+  ambientTarget = target;
   ambientMaster = master;
   ambientNodes = created;
   ambientStarted = true;
@@ -119,10 +157,6 @@ function buildSpacePad(ctx: AudioContext): void {
 export function startSpaceAmbient(): void {
   if (typeof window === 'undefined') return;
   if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-  const AudioCtor =
-    window.AudioContext ||
-    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioCtor) return;
 
   if (stopAmbientTimerId !== null) {
     window.clearTimeout(stopAmbientTimerId);
@@ -131,37 +165,38 @@ export function startSpaceAmbient(): void {
   ambientSessionActive = true;
 
   try {
-    if (!ambientCtx || ambientCtx.state === 'closed') {
-      ambientCtx = new AudioCtor();
-    }
     if (!ambientStarted) {
-      buildSpacePad(ambientCtx);
+      buildSpacePad();
     }
-    if (ambientCtx.state === 'suspended') {
-      void ambientCtx.resume().catch(() => {});
+    const ctx = ambientTarget?.ctx;
+    if (ctx && ctx.state === 'suspended') {
+      void ctx.resume().catch(() => {});
     }
 
-    if (!unlockHandler && ambientCtx.state === 'suspended') {
+    if (!unlockHandler && (!ctx || ctx.state === 'suspended')) {
       const unlock = () => {
-        if (!ambientSessionActive || !ambientCtx || ambientCtx.state === 'closed') {
+        if (!ambientSessionActive) {
           detachUnlockListeners();
           return;
         }
-        void ambientCtx
-          .resume()
-          .then(() => {
-            if (!ambientSessionActive || !ambientCtx || ambientCtx.state === 'closed') {
-              detachUnlockListeners();
-              return;
-            }
-            if (!ambientStarted) {
-              buildSpacePad(ambientCtx);
-            }
-            if (ambientCtx.state === 'running') {
-              detachUnlockListeners();
-            }
-          })
-          .catch(() => {});
+        if (!ambientStarted) {
+          buildSpacePad();
+        }
+        const activeCtx = ambientTarget?.ctx;
+        if (activeCtx) {
+          void activeCtx
+            .resume()
+            .then(() => {
+              if (!ambientSessionActive) {
+                detachUnlockListeners();
+                return;
+              }
+              if (activeCtx.state === 'running') {
+                detachUnlockListeners();
+              }
+            })
+            .catch(() => {});
+        }
       };
       unlockHandler = unlock;
       window.addEventListener('pointerdown', unlock, { capture: true, passive: true });
@@ -191,13 +226,11 @@ export function stopAllSpaceAudio(): void {
   ambientMaster = null;
   ambientStarted = false;
 
-  if (ambientCtx) {
-    const ctxToClose = ambientCtx;
-    ambientCtx = null;
+  if (ambientTarget) {
+    const targetToDisconnect = ambientTarget;
+    ambientTarget = null;
     try {
-      if (ctxToClose.state !== 'closed') {
-        void ctxToClose.close().catch(() => {});
-      }
+      targetToDisconnect.disconnect();
     } catch {
       // ignore
     }
@@ -207,73 +240,71 @@ export function stopAllSpaceAudio(): void {
 export function stopSpaceAmbient(): void {
   ambientSessionActive = false;
   detachUnlockListeners();
-  if (!ambientCtx || !ambientMaster) {
+  if (!ambientTarget || !ambientMaster) {
     stopAllSpaceAudio();
     return;
   }
+  const targetRef = ambientTarget;
+  const masterRef = ambientMaster;
+  const nodesRef = ambientNodes;
+  ambientTarget = null;
+  ambientMaster = null;
+  ambientNodes = [];
+  ambientStarted = false;
+
   try {
-    const now = ambientCtx.currentTime;
-    ambientMaster.gain.cancelScheduledValues(now);
-    ambientMaster.gain.setValueAtTime(Math.max(ambientMaster.gain.value, 0.0001), now);
-    ambientMaster.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+    const now = targetRef.ctx.currentTime;
+    masterRef.gain.cancelScheduledValues(now);
+    masterRef.gain.setValueAtTime(Math.max(masterRef.gain.value, 0.0001), now);
+    masterRef.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
     if (stopAmbientTimerId !== null) {
       window.clearTimeout(stopAmbientTimerId);
     }
     stopAmbientTimerId = window.setTimeout(() => {
       stopAmbientTimerId = null;
-      if (!ambientSessionActive) {
-        stopAllSpaceAudio();
+      stopAndDisconnectNodes(nodesRef);
+      try {
+        targetRef.disconnect();
+      } catch {
+        // ignore
       }
     }, 380);
   } catch {
-    stopAllSpaceAudio();
+    try {
+      targetRef.disconnect();
+    } catch {
+      // ignore
+    }
   }
-}
-
-function ensureAmbientContext(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
-  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return null;
-  const AudioCtor =
-    window.AudioContext ||
-    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioCtor) return null;
-  if (!ambientCtx || ambientCtx.state === 'closed') {
-    ambientCtx = new AudioCtor();
-  }
-  if (ambientCtx.state === 'suspended') {
-    void ambientCtx.resume().catch(() => {});
-  }
-  return ambientCtx;
 }
 
 /**
  * Abaixa suavemente a música espacial enquanto o robô fala e restaura depois.
  */
 export function setSpaceAmbientDucked(ducked: boolean): void {
-  if (!ambientCtx || !ambientMaster) return;
+  if (!ambientTarget || !ambientMaster) return;
   try {
-    const now = ambientCtx.currentTime;
-    const target = ducked ? 0.028 : 0.085;
+    const now = ambientTarget.ctx.currentTime;
+    const target = ducked ? 0.028 : 0.075;
     ambientMaster.gain.cancelScheduledValues(now);
     ambientMaster.gain.setValueAtTime(Math.max(ambientMaster.gain.value, 0.0001), now);
-    ambientMaster.gain.exponentialRampToValueAtTime(target, now + 0.55);
+    ambientMaster.gain.exponentialRampToValueAtTime(target, now + 0.45);
   } catch {
     // ignore
   }
 }
 
 /**
- * Efeito sonoro 8D dos motores de propulsão durante a contagem e decolagem (5, 4, 3, 2, 1 -> espaço):
- * ruído filtrado espacial varrendo o panorama estéreo/8D + sub-grave crescente.
+ * Efeito sonoro 8D dos motores de propulsão durante a contagem e decolagem (5..1 -> espaço):
+ * circula pelas 3 caixas (C1 Parede Esq -> C2 Parede Dir -> C3 Teto/Fundo -> centro).
  */
 export function playLaunchThrust8D(durationSec = 10.0): void {
   try {
-    const ctx = ensureAmbientContext();
-    if (!ctx) return;
-
+    const target = acquireSfxTarget(-0.85, 0.35);
+    if (!target) return;
+    const { ctx, destination } = target;
     const now = ctx.currentTime;
 
-    // Buffer de ruído branco para o som dos propulsores
     const bufferSize = Math.floor(ctx.sampleRate * durationSec);
     const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = noiseBuffer.getChannelData(0);
@@ -291,57 +322,55 @@ export function playLaunchThrust8D(durationSec = 10.0): void {
     filter.frequency.exponentialRampToValueAtTime(220, now + durationSec);
     filter.Q.value = 0.85;
 
-    const panner = ctx.createStereoPanner();
-    panner.pan.setValueAtTime(-0.85, now);
-    panner.pan.linearRampToValueAtTime(0.85, now + durationSec * 0.35);
-    panner.pan.linearRampToValueAtTime(-0.75, now + durationSec * 0.7);
-    panner.pan.linearRampToValueAtTime(0, now + durationSec);
-
     const thrustGain = ctx.createGain();
     thrustGain.gain.setValueAtTime(0.001, now);
-    thrustGain.gain.exponentialRampToValueAtTime(0.16, now + 0.8);
-    thrustGain.gain.setValueAtTime(0.18, now + durationSec * 0.68);
+    thrustGain.gain.exponentialRampToValueAtTime(0.22, now + 0.8);
+    thrustGain.gain.setValueAtTime(0.24, now + durationSec * 0.68);
     thrustGain.gain.exponentialRampToValueAtTime(0.001, now + durationSec);
 
-    // Sub-grave dos motores
     const subOsc = ctx.createOscillator();
     const subGain = ctx.createGain();
     subOsc.type = 'sawtooth';
     subOsc.frequency.setValueAtTime(42, now);
     subOsc.frequency.exponentialRampToValueAtTime(92, now + durationSec * 0.75);
     subGain.gain.setValueAtTime(0.001, now);
-    subGain.gain.exponentialRampToValueAtTime(0.07, now + 0.9);
+    subGain.gain.exponentialRampToValueAtTime(0.11, now + 0.9);
     subGain.gain.exponentialRampToValueAtTime(0.001, now + durationSec);
 
     noise.connect(filter);
     filter.connect(thrustGain);
-    thrustGain.connect(panner);
-    panner.connect(ctx.destination);
+    thrustGain.connect(destination);
 
     subOsc.connect(subGain);
-    subGain.connect(panner);
+    subGain.connect(destination);
 
-    registerSfxSource(noise, [filter, thrustGain, panner]);
+    registerSfxSource(noise, [filter, thrustGain]);
     registerSfxSource(subOsc, [subGain]);
     noise.start(now);
     noise.stop(now + durationSec + 0.05);
     subOsc.start(now);
     subOsc.stop(now + durationSec + 0.05);
+
+    scheduleSweepPan(target, durationSec, (t01) => {
+      const angle = t01 * Math.PI * 3;
+      const radius = 1 - t01 * 0.45;
+      return [Math.cos(angle) * 0.9 * radius, Math.sin(angle) * 0.85 * radius];
+    });
   } catch {
     // ignore browser audio errors
   }
 }
 
 /**
- * Efeito espacial 3 pontos (L/C/R) de portas blindadas fechando + vapor pneumático suave.
+ * Efeito espacial 3 pontos (C1 -> C3 -> C2) de portas blindadas fechando + vapor pneumático.
  */
 export function playBlastDoorSlamSfx(): void {
   try {
-    const ctx = ensureAmbientContext();
-    if (!ctx) return;
+    const steamTarget = acquireSfxTarget(-0.8, 0.45);
+    if (!steamTarget) return;
+    const { ctx } = steamTarget;
     const now = ctx.currentTime;
 
-    // Vapor pneumático varrendo da esquerda para a direita da sala
     const steamLen = Math.floor(ctx.sampleRate * 1.5);
     const steamBuf = ctx.createBuffer(1, steamLen, ctx.sampleRate);
     const data = steamBuf.getChannelData(0);
@@ -356,41 +385,48 @@ export function playBlastDoorSlamSfx(): void {
     steamFilter.frequency.exponentialRampToValueAtTime(280, now + 1.4);
     steamFilter.Q.value = 1.1;
 
-    const steamPan = ctx.createStereoPanner();
-    steamPan.pan.setValueAtTime(-0.75, now);
-    steamPan.pan.linearRampToValueAtTime(0.75, now + 1.35);
-
     const steamGain = ctx.createGain();
     steamGain.gain.setValueAtTime(0.001, now);
-    steamGain.gain.exponentialRampToValueAtTime(0.085, now + 0.18);
+    steamGain.gain.exponentialRampToValueAtTime(0.12, now + 0.18);
     steamGain.gain.exponentialRampToValueAtTime(0.001, now + 1.45);
     steam.connect(steamFilter);
     steamFilter.connect(steamGain);
-    steamGain.connect(steamPan);
-    steamPan.connect(ctx.destination);
-    registerSfxSource(steam, [steamFilter, steamGain, steamPan]);
+    steamGain.connect(steamTarget.destination);
+    registerSfxSource(steam, [steamFilter, steamGain]);
     steam.start(now);
     steam.stop(now + 1.5);
 
-    // Travamento metálico em dois pontos (Parede Esquerda -0.55 e Direita +0.55)
-    [-0.55, 0.55].forEach((panVal, idx) => {
-      const impactAt = now + 0.92 + idx * 0.08;
-      const clang = ctx.createOscillator();
-      const clangGain = ctx.createGain();
-      const clangPan = ctx.createStereoPanner();
-      clangPan.pan.value = panVal;
+    scheduleSweepPan(steamTarget, 1.45, (t01) => [
+      -0.85 + t01 * 1.7,
+      0.45 - Math.sin(t01 * Math.PI) * 1.1,
+    ]);
+
+    // Travamento metálico nas 3 zonas (C1 Esquerda, C2 Direita e C3 Teto/Fundo)
+    const points: Array<[number, number]> = [
+      [-0.8, 0.45],
+      [0.8, 0.45],
+      [0.0, -0.8],
+    ];
+    points.forEach(([px, py], idx) => {
+      const clangTarget = acquireSfxTarget(px, py);
+      if (!clangTarget) return;
+      const impactAt = now + 0.88 + idx * 0.07;
+      const clang = clangTarget.ctx.createOscillator();
+      const clangGain = clangTarget.ctx.createGain();
       clang.type = 'triangle';
-      clang.frequency.setValueAtTime(105, impactAt);
+      clang.frequency.setValueAtTime(108, impactAt);
       clang.frequency.exponentialRampToValueAtTime(34, impactAt + 0.45);
       clangGain.gain.setValueAtTime(0.001, impactAt);
-      clangGain.gain.exponentialRampToValueAtTime(0.14, impactAt + 0.025);
+      clangGain.gain.exponentialRampToValueAtTime(0.18, impactAt + 0.025);
       clangGain.gain.exponentialRampToValueAtTime(0.001, impactAt + 0.55);
       clang.connect(clangGain);
-      clangGain.connect(clangPan);
-      clangPan.connect(ctx.destination);
-      registerSfxSource(clang, [clangGain, clangPan]);
+      clangGain.connect(clangTarget.destination);
+      registerSfxSource(clang, [clangGain]);
       clang.start(impactAt);
       clang.stop(impactAt + 0.6);
+      if (typeof window !== 'undefined') {
+        window.setTimeout(() => clangTarget.disconnect(), 1800);
+      }
     });
   } catch {
     // ignore
@@ -398,34 +434,29 @@ export function playBlastDoorSlamSfx(): void {
 }
 
 /**
- * Efeito suave e sensorial de abertura/ejeção do teto ao entrar em gravidade zero (3 pontos L -> C -> R).
+ * Efeito espacial de abertura/ejeção da escotilha em gravidade zero subindo das paredes para o teto (C1/C2 -> C3).
  */
 export function playHatchEjectSfx(): void {
   try {
-    const ctx = ensureAmbientContext();
-    if (!ctx) return;
+    const target = acquireSfxTarget(-0.6, 0.45);
+    if (!target) return;
+    const { ctx, destination } = target;
     const now = ctx.currentTime;
 
-    // Tom espacial suave de destravamento (sem estalo agressivo)
     const latch = ctx.createOscillator();
     const latchGain = ctx.createGain();
-    const latchPan = ctx.createStereoPanner();
-    latchPan.pan.setValueAtTime(-0.4, now);
-    latchPan.pan.linearRampToValueAtTime(0.4, now + 0.8);
     latch.type = 'sine';
     latch.frequency.setValueAtTime(196, now);
     latch.frequency.exponentialRampToValueAtTime(98, now + 0.85);
     latchGain.gain.setValueAtTime(0.001, now);
-    latchGain.gain.exponentialRampToValueAtTime(0.065, now + 0.12);
+    latchGain.gain.exponentialRampToValueAtTime(0.09, now + 0.12);
     latchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
     latch.connect(latchGain);
-    latchGain.connect(latchPan);
-    latchPan.connect(ctx.destination);
-    registerSfxSource(latch, [latchGain, latchPan]);
+    latchGain.connect(destination);
+    registerSfxSource(latch, [latchGain]);
     latch.start(now);
     latch.stop(now + 0.95);
 
-    // Brisa pneumática bem suave (lowpass) circulando pelos 3 pontos da sala
     const len = Math.floor(ctx.sampleRate * 1.4);
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const data = buf.getChannelData(0);
@@ -436,52 +467,52 @@ export function playHatchEjectSfx(): void {
     lp.type = 'lowpass';
     lp.frequency.setValueAtTime(520, now);
     lp.frequency.exponentialRampToValueAtTime(180, now + 1.35);
-    const pan = ctx.createStereoPanner();
-    pan.pan.setValueAtTime(-0.75, now);
-    pan.pan.linearRampToValueAtTime(0.75, now + 1.35);
     const hg = ctx.createGain();
     hg.gain.setValueAtTime(0.001, now + 0.05);
-    hg.gain.exponentialRampToValueAtTime(0.045, now + 0.3);
+    hg.gain.exponentialRampToValueAtTime(0.075, now + 0.3);
     hg.gain.exponentialRampToValueAtTime(0.001, now + 1.35);
     hiss.connect(lp);
     lp.connect(hg);
-    hg.connect(pan);
-    pan.connect(ctx.destination);
-    registerSfxSource(hiss, [lp, hg, pan]);
+    hg.connect(destination);
+    registerSfxSource(hiss, [lp, hg]);
     hiss.start(now);
     hiss.stop(now + 1.4);
+
+    scheduleSweepPan(target, 1.4, (t01) => [-0.65 + t01 * 1.3, 0.45 - t01 * 1.3]);
   } catch {
     // ignore
   }
 }
 
 /**
- * Efeito espacial 3 pontos suave quando toda a cabine espacial abre/se desfaz revelando a Terra e as bandeiras.
+ * Efeito espacial 3 pontos quando a cabine se desfaz revelando a Terra (C1, C2 e C3 simultâneos).
  */
 export function playCabinDissolveSfx(): void {
   try {
-    const ctx = ensureAmbientContext();
-    if (!ctx) return;
-    const now = ctx.currentTime;
+    const zones: Array<{ pan: [number, number]; freq: number }> = [
+      { pan: [-0.8, 0.45], freq: 174.61 },
+      { pan: [0.8, 0.45], freq: 220.0 },
+      { pan: [0.0, -0.85], freq: 196.0 },
+    ];
 
-    [-0.75, 0.75].forEach((startPan, idx) => {
-      const sweep = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const pan = ctx.createStereoPanner();
-      pan.pan.setValueAtTime(startPan, now);
-      pan.pan.linearRampToValueAtTime(0, now + 1.4);
+    zones.forEach(({ pan: [sx, sy], freq }) => {
+      const target = acquireSfxTarget(sx, sy);
+      if (!target) return;
+      const now = target.ctx.currentTime;
+      const sweep = target.ctx.createOscillator();
+      const gain = target.ctx.createGain();
       sweep.type = 'sine';
-      sweep.frequency.setValueAtTime(idx === 0 ? 174.61 : 220, now);
+      sweep.frequency.setValueAtTime(freq, now);
       sweep.frequency.exponentialRampToValueAtTime(82.41, now + 1.45);
       gain.gain.setValueAtTime(0.001, now);
-      gain.gain.exponentialRampToValueAtTime(0.055, now + 0.2);
+      gain.gain.exponentialRampToValueAtTime(0.075, now + 0.2);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
       sweep.connect(gain);
-      gain.connect(pan);
-      pan.connect(ctx.destination);
-      registerSfxSource(sweep, [gain, pan]);
+      gain.connect(target.destination);
+      registerSfxSource(sweep, [gain]);
       sweep.start(now);
       sweep.stop(now + 1.55);
+      scheduleSweepPan(target, 1.5, (t01) => [sx * (1 - t01), sy * (1 - t01)]);
     });
   } catch {
     // ignore
@@ -489,30 +520,29 @@ export function playCabinDissolveSfx(): void {
 }
 
 /**
- * Efeito físico de tranco/pouso da nave ao tocar o solo terrestre no final da missão (`ended`).
+ * Efeito físico de tranco/pouso da nave distribuído nas 3 caixas (`C1 + C2 + C3`).
  */
 export function playLandingThudSfx(): void {
   try {
-    const ctx = ensureAmbientContext();
-    if (!ctx) return;
+    const target = acquireSfxTarget(0, 0);
+    if (!target) return;
+    const { ctx, destination } = target;
     const now = ctx.currentTime;
 
-    // Impacto sub-grave (tranco de pouso)
     const sub = ctx.createOscillator();
     const subGain = ctx.createGain();
     sub.type = 'triangle';
     sub.frequency.setValueAtTime(118, now);
     sub.frequency.exponentialRampToValueAtTime(34, now + 0.38);
     subGain.gain.setValueAtTime(0.001, now);
-    subGain.gain.exponentialRampToValueAtTime(0.32, now + 0.018);
+    subGain.gain.exponentialRampToValueAtTime(0.36, now + 0.018);
     subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
     sub.connect(subGain);
-    subGain.connect(ctx.destination);
+    subGain.connect(destination);
     registerSfxSource(sub, [subGain]);
     sub.start(now);
     sub.stop(now + 0.5);
 
-    // Choque metálico curto nos trens de pouso
     const len = Math.floor(ctx.sampleRate * 0.25);
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const data = buf.getChannelData(0);
@@ -524,14 +554,18 @@ export function playLandingThudSfx(): void {
     lp.frequency.setValueAtTime(420, now);
     lp.frequency.exponentialRampToValueAtTime(90, now + 0.22);
     const ng = ctx.createGain();
-    ng.gain.setValueAtTime(0.16, now);
+    ng.gain.setValueAtTime(0.18, now);
     ng.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
     noise.connect(lp);
     lp.connect(ng);
-    ng.connect(ctx.destination);
+    ng.connect(destination);
     registerSfxSource(noise, [lp, ng]);
     noise.start(now);
     noise.stop(now + 0.25);
+
+    if (typeof window !== 'undefined') {
+      window.setTimeout(() => target.disconnect(), 700);
+    }
   } catch {
     // ignore
   }

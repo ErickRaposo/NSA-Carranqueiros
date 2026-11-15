@@ -1,5 +1,6 @@
 import React from 'react';
 import { ExternalLink, type LucideIcon } from 'lucide-react';
+import { buildViewUrl } from '../../lan/roomCode';
 import { ADMIN_FOCUS, AdminModuleId } from './adminMeta';
 
 export interface AdminNavItem {
@@ -13,6 +14,7 @@ interface AdminSidebarProps {
   isPt: boolean;
   activeModule: AdminModuleId;
   navItems: AdminNavItem[];
+  roomCode?: string | null;
   onSelectModule: (id: AdminModuleId) => void;
 }
 
@@ -20,6 +22,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   isPt,
   activeModule,
   navItems,
+  roomCode,
   onSelectModule,
 }) => {
   return (
@@ -49,7 +52,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       {/* Atalho externo exclusivo da barra lateral */}
       <div className="hidden flex-col gap-1.5 border-t border-[#1e3a66]/45 pt-3 lg:flex">
         <a
-          href="?view=demo"
+          href={buildViewUrl(null, 'demo', { roomCode })}
           target="_blank"
           rel="noreferrer"
           className={`flex min-h-[40px] items-center justify-between rounded-xl border border-[#1e3a66]/65 bg-[#060c1a] px-3 text-xs font-medium text-slate-200 transition hover:border-[#2563eb] hover:text-white ${ADMIN_FOCUS}`}

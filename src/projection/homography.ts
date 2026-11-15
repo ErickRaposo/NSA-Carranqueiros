@@ -50,7 +50,7 @@ export interface ProjectionCalibrationState {
   edgeMasks: Record<CalibrationSurfaceKey, EdgeFeatherMask>;
 }
 
-export const CALIBRATION_STORAGE_KEY = 'earth-jukebox-calibration-v2';
+export const CALIBRATION_STORAGE_KEY = 'earth-jukebox-calibration-v3';
 export const CALIBRATION_CHANNEL_NAME = 'earth-jukebox-calibration-sync-v1';
 
 export function makeSurfaceQuadKey(
@@ -58,6 +58,37 @@ export function makeSurfaceQuadKey(
   surfaceId: SurfaceId
 ): CalibrationSurfaceKey {
   return `out${outId}-${surfaceId}`;
+}
+
+export function parseSurfaceQuadKey(key: CalibrationSurfaceKey): {
+  outId: ProjectorOutId;
+  surfaceId: SurfaceId;
+} {
+  const match = /^out([1-4])-(leftWall|rightWall|ceiling)$/.exec(key);
+  if (!match) {
+    return { outId: 1, surfaceId: 'leftWall' };
+  }
+  return {
+    outId: Number(match[1]) as ProjectorOutId,
+    surfaceId: match[2] as SurfaceId,
+  };
+}
+
+export interface CornerVertexRef {
+  surfaceId: SurfaceId;
+  cornerIdx: 0 | 1 | 2 | 3;
+}
+
+export interface DeduplicatedPinHandle {
+  id: string;
+  quadKey: CalibrationSurfaceKey;
+  surfaceId: SurfaceId;
+  cornerIdx: 0 | 1 | 2 | 3;
+  point: Point2D;
+  label: 'TL' | 'TR' | 'BR' | 'BL';
+  isShared: boolean;
+  memberCount: number;
+  members: ReadonlyArray<CornerVertexRef>;
 }
 
 export function createIdentityQuad(
@@ -100,7 +131,8 @@ function createAllIdentityQuads(): Record<CalibrationSurfaceKey, QuadCorners> {
 
 /**
  * Distribui automaticamente os quadriláteros das superfícies atribuídas a uma saída HDMI
- * aproveitando 100% da resolução quando há 1 superfície, 50/50 quando há 2, ou layout canto quando há 3.
+ * aproveitando 100% da resolução quando há 1 superfície, 50/50 soldado no meio quando há 2,
+ * ou Canto 3D Isométrico (Teto em losango + Parede Esq + Parede Dir com pins soldados) quando há 3.
  */
 export function buildAutoQuadsForSurfaces(
   outId: ProjectorOutId,
@@ -114,12 +146,39 @@ export function buildAutoQuadsForSurfaces(
     next[makeSurfaceQuadKey(outId, surfaces[0])] = createIdentityQuad(0, 0, 0.5, 1);
     next[makeSurfaceQuadKey(outId, surfaces[1])] = createIdentityQuad(0.5, 0, 1, 1);
   } else if (surfaces.length >= 3) {
-    // Caso 1 Projetor Grande-Angular: Teto em cima, Parede Esq embaixo-esq, Parede Dir embaixo-dir
-    const hasCeiling = surfaces.includes('ceiling');
-    if (hasCeiling) {
-      next[makeSurfaceQuadKey(outId, 'ceiling')] = createIdentityQuad(0.15, 0, 0.85, 0.45);
-      next[makeSurfaceQuadKey(outId, 'leftWall')] = createIdentityQuad(0, 0.45, 0.5, 1);
-      next[makeSurfaceQuadKey(outId, 'rightWall')] = createIdentityQuad(0.5, 0.45, 1, 1);
+    const hasAllThreeRoomSurfaces =
+      surfaces.includes('ceiling') &&
+      surfaces.includes('leftWall') &&
+      surfaces.includes('rightWall');
+
+    if (hasAllThreeRoomSurfaces) {
+      // Canto 3D Isométrico para 1 Projetor Grande-Angular (pins compartilhados 100% soldados)
+      const pCeilingPeak: Point2D = { x: 0.5, y: 0.06 };
+      const pLeftTop: Point2D = { x: 0.21, y: 0.35 };
+      const pRightTop: Point2D = { x: 0.79, y: 0.35 };
+      const pCenterTop: Point2D = { x: 0.5, y: 0.45 };
+      const pLeftBottom: Point2D = { x: 0.21, y: 0.83 };
+      const pRightBottom: Point2D = { x: 0.79, y: 0.83 };
+      const pCenterBottom: Point2D = { x: 0.5, y: 0.94 };
+
+      next[makeSurfaceQuadKey(outId, 'ceiling')] = [
+        { ...pLeftTop },
+        { ...pCeilingPeak },
+        { ...pRightTop },
+        { ...pCenterTop },
+      ];
+      next[makeSurfaceQuadKey(outId, 'leftWall')] = [
+        { ...pLeftTop },
+        { ...pCenterTop },
+        { ...pCenterBottom },
+        { ...pLeftBottom },
+      ];
+      next[makeSurfaceQuadKey(outId, 'rightWall')] = [
+        { ...pCenterTop },
+        { ...pRightTop },
+        { ...pRightBottom },
+        { ...pCenterBottom },
+      ];
     } else {
       surfaces.forEach((sId, idx) => {
         const w = 1 / surfaces.length;
@@ -133,6 +192,226 @@ export function buildAutoQuadsForSurfaces(
     }
   }
   return next;
+}
+
+/**
+ * Retorna os grupos de vértices soldados entre paredes que dividem a mesma saída física (`outId`).
+ */
+export function getSharedCornerGroupsForSurfaces(
+  surfaces: readonly SurfaceId[]
+): ReadonlyArray<ReadonlyArray<CornerVertexRef>> {
+  const hasAllThree =
+    surfaces.includes('leftWall') &&
+    surfaces.includes('rightWall') &&
+    surfaces.includes('ceiling');
+
+  if (hasAllThree) {
+    return [
+      // Junta Tripla Central: Parede Esq TR [1] === Parede Dir TL [0] === Teto BL [3]
+      [
+        { surfaceId: 'leftWall', cornerIdx: 1 },
+        { surfaceId: 'rightWall', cornerIdx: 0 },
+        { surfaceId: 'ceiling', cornerIdx: 3 },
+      ],
+      // Base Central: Parede Esq BR [2] === Parede Dir BL [3]
+      [
+        { surfaceId: 'leftWall', cornerIdx: 2 },
+        { surfaceId: 'rightWall', cornerIdx: 3 },
+      ],
+      // Quina Superior Esquerda: Teto TL [0] === Parede Esq TL [0]
+      [
+        { surfaceId: 'ceiling', cornerIdx: 0 },
+        { surfaceId: 'leftWall', cornerIdx: 0 },
+      ],
+      // Quina Superior Direita: Teto BR [2] === Parede Dir TR [1]
+      [
+        { surfaceId: 'ceiling', cornerIdx: 2 },
+        { surfaceId: 'rightWall', cornerIdx: 1 },
+      ],
+    ];
+  }
+
+  if (surfaces.length === 2) {
+    const [first, second] = surfaces;
+    return [
+      [
+        { surfaceId: first, cornerIdx: 1 },
+        { surfaceId: second, cornerIdx: 0 },
+      ],
+      [
+        { surfaceId: first, cornerIdx: 2 },
+        { surfaceId: second, cornerIdx: 3 },
+      ],
+    ];
+  }
+
+  return [];
+}
+
+function cloneQuadCorners(q: QuadCorners): QuadCorners {
+  return [{ ...q[0] }, { ...q[1] }, { ...q[2] }, { ...q[3] }];
+}
+
+/**
+ * Atualiza um quadrilátero propagando automaticamente qualquer movimento nos pins soldados
+ * entre paredes compartilhadas na mesma saída (`2-projectors` e `1-projector`).
+ */
+export function updateQuadWithSharedSeams(
+  state: ProjectionCalibrationState,
+  key: CalibrationSurfaceKey,
+  nextQuad: QuadCorners
+): Record<CalibrationSurfaceKey, QuadCorners> {
+  const { outId, surfaceId } = parseSurfaceQuadKey(key);
+  const surfaces = state.outputs[outId]?.surfaces ?? [];
+  const prevQuad = state.quads[key];
+
+  const nextQuads: Record<CalibrationSurfaceKey, QuadCorners> = {
+    ...state.quads,
+    [key]: cloneQuadCorners(nextQuad),
+  };
+
+  if (surfaces.length < 2) {
+    return nextQuads;
+  }
+
+  const groups = getSharedCornerGroupsForSurfaces(surfaces);
+  for (const idx of [0, 1, 2, 3] as const) {
+    const changed =
+      !prevQuad ||
+      Math.abs(nextQuad[idx].x - prevQuad[idx].x) > 1e-7 ||
+      Math.abs(nextQuad[idx].y - prevQuad[idx].y) > 1e-7;
+    if (!changed) continue;
+
+    const group = groups.find((g) =>
+      g.some((m) => m.surfaceId === surfaceId && m.cornerIdx === idx)
+    );
+    if (!group) continue;
+
+    for (const member of group) {
+      if (member.surfaceId === surfaceId && member.cornerIdx === idx) continue;
+      const peerKey = makeSurfaceQuadKey(outId, member.surfaceId);
+      const peerQuad = cloneQuadCorners(nextQuads[peerKey]);
+      peerQuad[member.cornerIdx] = {
+        x: nextQuad[idx].x,
+        y: nextQuad[idx].y,
+      };
+      nextQuads[peerKey] = peerQuad;
+    }
+  }
+
+  return nextQuads;
+}
+
+/**
+ * Translada solidariamente todas as superfícies conectadas em uma mesma saída (`outId`),
+ * preservando a união das quinas ao arrastar o interior da malha.
+ */
+export function translateOutputSurfacesTogether(
+  outId: ProjectorOutId,
+  surfaces: readonly SurfaceId[],
+  startQuads: Record<CalibrationSurfaceKey, QuadCorners>,
+  rawDx: number,
+  rawDy: number
+): Record<CalibrationSurfaceKey, QuadCorners> {
+  const nextQuads = { ...startQuads };
+  if (surfaces.length === 0) return nextQuads;
+
+  let minDx = -Infinity;
+  let maxDx = Infinity;
+  let minDy = -Infinity;
+  let maxDy = Infinity;
+
+  for (const sId of surfaces) {
+    const q = startQuads[makeSurfaceQuadKey(outId, sId)];
+    if (!q) continue;
+    for (const pt of q) {
+      minDx = Math.max(minDx, -pt.x);
+      maxDx = Math.min(maxDx, 1 - pt.x);
+      minDy = Math.max(minDy, -pt.y);
+      maxDy = Math.min(maxDy, 1 - pt.y);
+    }
+  }
+
+  const dx = Math.min(maxDx, Math.max(minDx, rawDx));
+  const dy = Math.min(maxDy, Math.max(minDy, rawDy));
+
+  for (const sId of surfaces) {
+    const k = makeSurfaceQuadKey(outId, sId);
+    const base = startQuads[k];
+    if (!base) continue;
+    nextQuads[k] = [
+      { x: Number((base[0].x + dx).toFixed(4)), y: Number((base[0].y + dy).toFixed(4)) },
+      { x: Number((base[1].x + dx).toFixed(4)), y: Number((base[1].y + dy).toFixed(4)) },
+      { x: Number((base[2].x + dx).toFixed(4)), y: Number((base[2].y + dy).toFixed(4)) },
+      { x: Number((base[3].x + dx).toFixed(4)), y: Number((base[3].y + dy).toFixed(4)) },
+    ];
+  }
+
+  return nextQuads;
+}
+
+/**
+ * Deduplica visualmente as alças de Corner-Pin para que vértices soldados exibam 1 único pino limpo
+ * em vez de 2 ou 3 botões empilhados na mesma coordenada.
+ */
+export function getUniquePinHandlesForOutput(
+  outId: ProjectorOutId,
+  surfaces: readonly SurfaceId[],
+  quads: Record<CalibrationSurfaceKey, QuadCorners>
+): DeduplicatedPinHandle[] {
+  const cornerLabels = ['TL', 'TR', 'BR', 'BL'] as const;
+  const groups = getSharedCornerGroupsForSurfaces(surfaces);
+  const visited = new Set<string>();
+  const handles: DeduplicatedPinHandle[] = [];
+
+  for (const surfaceId of surfaces) {
+    const quadKey = makeSurfaceQuadKey(outId, surfaceId);
+    const q = quads[quadKey];
+    if (!q) continue;
+
+    for (const idx of [0, 1, 2, 3] as const) {
+      const token = `${surfaceId}:${idx}`;
+      if (visited.has(token)) continue;
+
+      const group = groups.find((g) =>
+        g.some((m) => m.surfaceId === surfaceId && m.cornerIdx === idx)
+      );
+      if (group) {
+        for (const m of group) {
+          visited.add(`${m.surfaceId}:${m.cornerIdx}`);
+        }
+        const primary = group[0];
+        const primaryKey = makeSurfaceQuadKey(outId, primary.surfaceId);
+        const pt = quads[primaryKey]?.[primary.cornerIdx] ?? q[idx];
+        handles.push({
+          id: `${outId}-shared-${primary.surfaceId}-${cornerLabels[primary.cornerIdx]}`,
+          quadKey: primaryKey,
+          surfaceId: primary.surfaceId,
+          cornerIdx: primary.cornerIdx,
+          point: pt,
+          label: cornerLabels[primary.cornerIdx],
+          isShared: true,
+          memberCount: group.length,
+          members: group,
+        });
+      } else {
+        visited.add(token);
+        handles.push({
+          id: `${quadKey}-${cornerLabels[idx]}`,
+          quadKey,
+          surfaceId,
+          cornerIdx: idx,
+          point: q[idx],
+          label: cornerLabels[idx],
+          isShared: false,
+          memberCount: 1,
+          members: [{ surfaceId, cornerIdx: idx }],
+        });
+      }
+    }
+  }
+
+  return handles;
 }
 
 export function applyProjectionPreset(

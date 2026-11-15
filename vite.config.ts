@@ -14,6 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 interface LanClientMeta {
   id: string;
   role: string;
+  room: string;
   ip: string;
   connectedAt: number;
   socket: Duplex;
@@ -121,23 +122,63 @@ function decodeWsFrames(buffer: Buffer): { messages: string[]; rest: Buffer; clo
 
 function earthJukeboxLanPlugin(): Plugin {
   const clients = new Map<string, LanClientMeta>();
-  let lastSyncSnapshot: string | null = null;
-  let lastProjectionSnapshot: string | null = null;
-  let lastSpeakerCalibSnapshot: string | null = null;
+  const registeredRooms = new Map<
+    string,
+    { code: string; active: boolean; createdAt: number; updatedAt: number }
+  >();
+  const roomSnapshots = new Map<
+    string,
+    {
+      sync: string | null;
+      projection: string | null;
+      speakerCalib: string | null;
+    }
+  >();
 
-  const broadcastPresence = () => {
-    const list = Array.from(clients.values()).map((c) => ({
-      id: c.id,
-      role: c.role,
-      ip: c.ip,
-      connectedAt: c.connectedAt,
-    }));
-    const frame = encodeWsTextFrame(JSON.stringify({ type: 'presence', clients: list }));
-    for (const c of clients.values()) {
-      try {
-        c.socket.write(frame);
-      } catch {
-        // ignore broken socket
+  const touchRegisteredRoom = (rawRoom: string, active = true) => {
+    const clean = rawRoom.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    if (clean.length < 3 || clean.length > 24) return null;
+    const now = Date.now();
+    const prev = registeredRooms.get(clean);
+    const next = {
+      code: clean,
+      active,
+      createdAt: prev?.createdAt ?? now,
+      updatedAt: now,
+    };
+    registeredRooms.set(clean, next);
+    return next;
+  };
+
+  const getRoomSnap = (room: string) => {
+    let entry = roomSnapshots.get(room);
+    if (!entry) {
+      entry = { sync: null, projection: null, speakerCalib: null };
+      roomSnapshots.set(room, entry);
+    }
+    return entry;
+  };
+
+  const broadcastPresence = (targetRoom?: string) => {
+    const roomsToUpdate = targetRoom
+      ? [targetRoom]
+      : Array.from(new Set(Array.from(clients.values()).map((c) => c.room)));
+
+    for (const room of roomsToUpdate) {
+      const roomClients = Array.from(clients.values()).filter((c) => c.room === room);
+      const list = roomClients.map((c) => ({
+        id: c.id,
+        role: c.role,
+        ip: c.ip,
+        connectedAt: c.connectedAt,
+      }));
+      const frame = encodeWsTextFrame(JSON.stringify({ type: 'presence', clients: list }));
+      for (const c of roomClients) {
+        try {
+          c.socket.write(frame);
+        } catch {
+          // ignore broken socket
+        }
       }
     }
   };
@@ -148,13 +189,18 @@ function earthJukeboxLanPlugin(): Plugin {
   ) => {
     middlewares.use((req, res, next) => {
       if (req.url?.startsWith('/api/lan-info')) {
+        const reqUrl = new URL(req.url, 'http://localhost');
+        const queryRoom = (reqUrl.searchParams.get('room') ?? '').trim().toUpperCase();
         const rendered = countRenderedCountries();
+        const visibleClients = Array.from(clients.values()).filter(
+          (c) => !queryRoom || c.room === queryRoom
+        );
         const payload = {
           lanIps: getLocalLanIpv4s(),
           port: 5173,
           renderedCountryCount: rendered.count,
           renderedCountryIds: rendered.ids,
-          clients: Array.from(clients.values()).map((c) => ({
+          clients: visibleClients.map((c) => ({
             id: c.id,
             role: c.role,
             ip: c.ip,
@@ -164,6 +210,42 @@ function earthJukeboxLanPlugin(): Plugin {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');
         res.end(JSON.stringify(payload));
+        return;
+      }
+
+      if (req.url?.startsWith('/api/rooms')) {
+        const reqUrl = new URL(req.url, 'http://localhost');
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+
+        if (req.method === 'POST') {
+          let body = '';
+          req.on('data', (chunk: Buffer) => {
+            body += chunk.toString('utf8');
+          });
+          req.on('end', () => {
+            try {
+              const parsed = JSON.parse(body || '{}') as { room?: string; active?: boolean };
+              const saved = touchRegisteredRoom(parsed.room ?? '', parsed.active !== false);
+              if (!saved) {
+                res.end(JSON.stringify({ ok: false, exists: false }));
+                return;
+              }
+              res.end(JSON.stringify({ ok: true, exists: saved.active, room: saved }));
+            } catch {
+              res.end(JSON.stringify({ ok: false, exists: false }));
+            }
+          });
+          return;
+        }
+
+        const queryRoom = (reqUrl.searchParams.get('room') ?? '')
+          .trim()
+          .toUpperCase()
+          .replace(/[^A-Z0-9_-]/g, '');
+        const entry = queryRoom ? registeredRooms.get(queryRoom) : undefined;
+        const exists = Boolean(entry?.active);
+        res.end(JSON.stringify({ ok: true, exists, room: entry ?? null }));
         return;
       }
       next();
@@ -196,18 +278,28 @@ function earthJukeboxLanPlugin(): Plugin {
 
       const urlObj = new URL(req.url, 'http://localhost');
       const role = urlObj.searchParams.get('role') ?? 'unknown';
+      const rawRoom = (urlObj.searchParams.get('room') ?? 'default')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9_-]/g, '');
+      const room = rawRoom || 'DEFAULT';
+      if ((role === 'setup' || role === 'admin') && room !== 'DEFAULT') {
+        touchRegisteredRoom(room, true);
+      }
       const clientId = `ws-${Math.random().toString(36).slice(2, 9)}`;
       const remoteIp = (req.socket.remoteAddress ?? 'local').replace(/^::ffff:/, '');
 
       clients.set(clientId, {
         id: clientId,
         role,
+        room,
         ip: remoteIp,
         connectedAt: Date.now(),
         socket,
       });
 
-      for (const snap of [lastSyncSnapshot, lastProjectionSnapshot, lastSpeakerCalibSnapshot]) {
+      const snapObj = getRoomSnap(room);
+      for (const snap of [snapObj.sync, snapObj.projection, snapObj.speakerCalib]) {
         if (snap) {
           try {
             socket.write(encodeWsTextFrame(snap));
@@ -216,7 +308,7 @@ function earthJukeboxLanPlugin(): Plugin {
           }
         }
       }
-      broadcastPresence();
+      broadcastPresence(room);
 
       let recvBuf: Buffer = Buffer.alloc(0);
       socket.on('data', (chunk: Buffer) => {
@@ -224,43 +316,50 @@ function earthJukeboxLanPlugin(): Plugin {
         const decoded = decodeWsFrames(recvBuf);
         recvBuf = Buffer.from(decoded.rest);
         if (decoded.closed) {
+          const prev = clients.get(clientId);
           clients.delete(clientId);
-          if (
-            clients.size === 0 ||
-            !Array.from(clients.values()).some((c) => c.role === 'controller')
-          ) {
-            lastSyncSnapshot = null;
+          if (prev) {
+            const hasRoomController = Array.from(clients.values()).some(
+              (c) => c.room === prev.room && c.role === 'controller'
+            );
+            if (!hasRoomController) {
+              getRoomSnap(prev.room).sync = null;
+            }
           }
           socket.end();
-          broadcastPresence();
+          if (prev) broadcastPresence(prev.room);
           return;
         }
 
         for (const msg of decoded.messages) {
           try {
-            const parsed = JSON.parse(msg) as { type?: string; role?: string };
+            const parsed = JSON.parse(msg) as { type?: string; role?: string; room?: string };
+            const currentMeta = clients.get(clientId);
+            const activeRoom = currentMeta?.room ?? room;
+
             if (parsed.type === 'hello' && parsed.role) {
-              const curr = clients.get(clientId);
-              if (curr) {
-                curr.role = parsed.role;
-                broadcastPresence();
+              if (currentMeta) {
+                currentMeta.role = parsed.role;
+                broadcastPresence(currentMeta.room);
               }
             } else if (
               parsed.type === 'sync' ||
               parsed.type === 'projection' ||
               parsed.type === 'speaker-calib' ||
-              parsed.type === 'calib-signal'
+              parsed.type === 'calib-signal' ||
+              parsed.type === 'request-state'
             ) {
+              const roomSnap = getRoomSnap(activeRoom);
               if (parsed.type === 'sync') {
-                lastSyncSnapshot = msg;
+                roomSnap.sync = msg;
               } else if (parsed.type === 'projection') {
-                lastProjectionSnapshot = msg;
+                roomSnap.projection = msg;
               } else if (parsed.type === 'speaker-calib') {
-                lastSpeakerCalibSnapshot = msg;
+                roomSnap.speakerCalib = msg;
               }
               const outFrame = encodeWsTextFrame(msg);
               for (const [otherId, peer] of clients.entries()) {
-                if (otherId === clientId) continue;
+                if (otherId === clientId || peer.room !== activeRoom) continue;
                 try {
                   peer.socket.write(outFrame);
                 } catch {
@@ -275,14 +374,15 @@ function earthJukeboxLanPlugin(): Plugin {
       });
 
       const cleanup = () => {
-        if (clients.delete(clientId)) {
-          if (
-            clients.size === 0 ||
-            !Array.from(clients.values()).some((c) => c.role === 'controller')
-          ) {
-            lastSyncSnapshot = null;
+        const prev = clients.get(clientId);
+        if (clients.delete(clientId) && prev) {
+          const hasRoomController = Array.from(clients.values()).some(
+            (c) => c.room === prev.room && c.role === 'controller'
+          );
+          if (!hasRoomController) {
+            getRoomSnap(prev.room).sync = null;
           }
-          broadcastPresence();
+          broadcastPresence(prev.room);
         }
       };
       socket.on('close', cleanup);
@@ -302,6 +402,7 @@ function earthJukeboxLanPlugin(): Plugin {
 }
 
 export default defineConfig({
+  base: process.env.VITE_BASE_PATH || '/',
   plugins: [react(), tailwindcss(), earthJukeboxLanPlugin()],
   server: {
     host: true,

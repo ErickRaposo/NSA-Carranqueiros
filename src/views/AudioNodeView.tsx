@@ -2,6 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Volume2, VolumeX } from 'lucide-react';
 import symbollLogo from '../assets/symboll.png';
 import { speakerIndexToSlotId } from '../audio/speakerCalibration';
+import {
+  isDelayClickSpeakerActive,
+  isPinkNoiseSpeakerActive,
+} from '../audio/spatialAudioEngine';
 import { useAudioAdmin, useExperience } from '../experience/ExperienceContext';
 import { SpeakerNodeIndex } from '../experience/types';
 import { AdminSelect } from './admin/AdminSelect';
@@ -33,6 +37,8 @@ export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
     country,
     playback,
     lanConnected,
+    roomCode,
+    syncNetworkMode,
     localAudioMuted,
     setLocalAudioMuted,
     speakerLiveLevels,
@@ -78,13 +84,8 @@ export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
   const isAudioReady = unlocked || audioContextState === 'running';
 
   const isReceivingTest =
-    calibTestMode.kind === 'pink-all' ||
-    calibTestMode.kind === 'delay-click-all' ||
-    (calibTestMode.kind === 'pink-single' && calibTestMode.speakerId === slotId) ||
-    (calibTestMode.kind === 'pink-ab' && calibTestMode.activeNow === slotId) ||
-    (calibTestMode.kind === 'delay-click' &&
-      (calibTestMode.targetSpeakerId === slotId ||
-        speakerCalibration.referenceSpeakerId === slotId));
+    isPinkNoiseSpeakerActive(calibTestMode, slotId) ||
+    isDelayClickSpeakerActive(calibTestMode, slotId, speakerCalibration.referenceSpeakerId);
 
   const isMuted = spk.muted || localAudioMuted;
   const meterLevel = isReceivingTest
@@ -145,7 +146,13 @@ export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
               }`}
               aria-hidden="true"
             />
-            <span>{lanConnected ? 'LAN Sync' : 'Local'}</span>
+            <span>
+              {roomCode
+                ? `${syncNetworkMode === 'cloud-room' ? 'Cloud' : 'LAN'} · ${roomCode}`
+                : lanConnected
+                  ? 'LAN Sync'
+                  : 'Local'}
+            </span>
           </span>
 
           <button

@@ -1,10 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useExperience, useProjectionAdmin } from '../experience/ExperienceContext';
+import {
+  useAudioAdmin,
+  useExperience,
+  useProjectionAdmin,
+} from '../experience/ExperienceContext';
 import { ProjectorOutId, SurfaceId } from '../experience/types';
 import {
   CalibrationSurfaceKey,
   computeHomographyMatrix3d,
   fitQuadAspectContain,
+  getUniquePinHandlesForOutput,
   makeSurfaceQuadKey,
   Point2D,
   QuadCorners,
@@ -53,6 +58,7 @@ const SURFACE_META: Record<
  */
 export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
   const { roomDimensions, lang, sceneReplayKey } = useExperience();
+  const { calibTestMode, calibBeatSeq, speakerCalibration } = useAudioAdmin();
   const {
     projectionState,
     updateOutputConfig,
@@ -62,6 +68,22 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
 
   const isPt = lang === 'pt';
   const containerRef = useRef<HTMLElement | null>(null);
+  const [beatFlashOn, setBeatFlashOn] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (calibBeatSeq <= 0) {
+      setBeatFlashOn(false);
+      return;
+    }
+    setBeatFlashOn(true);
+    const timer = window.setTimeout(() => setBeatFlashOn(false), 115);
+    return () => window.clearTimeout(timer);
+  }, [calibBeatSeq]);
+
+  const isClickSyncActive =
+    calibTestMode.kind === 'delay-click-multi' ||
+    calibTestMode.kind === 'delay-click-all' ||
+    calibTestMode.kind === 'delay-click';
 
   const [viewport, setViewport] = useState<{ w: number; h: number }>(() => ({
     w: typeof window !== 'undefined' ? Math.max(1, window.innerWidth) : 1920,
@@ -312,37 +334,78 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
           );
         })}
 
-      {/* Handles arrastáveis de Corner-Pin (visíveis apenas com grade ativa e sem blackout) */}
+      {/* Handles arrastáveis de Corner-Pin (com pins compartilhados soldados em 1 única alça limpa) */}
       {!isBlackout &&
         isGridVisible &&
-        outputCfg.surfaces.map((surfaceId) => {
-          const quadKey = makeSurfaceQuadKey(outId, surfaceId);
-          const meta = SURFACE_META[surfaceId];
-          const normQuad = projectionState.quads[quadKey];
-          const cornerLabels = ['TL', 'TR', 'BR', 'BL'] as const;
-          return normQuad.map((pt, idx) => {
-            const cornerIdx = idx as 0 | 1 | 2 | 3;
+        getUniquePinHandlesForOutput(outId, outputCfg.surfaces, projectionState.quads).map(
+          (handle) => {
+            const meta = SURFACE_META[handle.surfaceId];
             return (
               <button
-                key={`${quadKey}-${cornerLabels[idx]}`}
+                key={handle.id}
                 type="button"
                 onPointerDown={(e) => {
                   e.preventDefault();
-                  setDraggingPin({ surfaceKey: quadKey, cornerIdx });
+                  setDraggingPin({ surfaceKey: handle.quadKey, cornerIdx: handle.cornerIdx });
                 }}
-                className="absolute z-50 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center rounded-full border-2 bg-black/90 text-[11px] font-bold text-white active:cursor-grabbing"
+                className={`absolute z-50 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center rounded-full border-2 bg-black/90 text-[11px] font-bold text-white active:cursor-grabbing ${
+                  handle.isShared ? 'ring-2 ring-sky-300/60' : ''
+                }`}
                 style={{
-                  left: `${pt.x * 100}%`,
-                  top: `${pt.y * 100}%`,
-                  borderColor: meta.accentHex,
+                  left: `${handle.point.x * 100}%`,
+                  top: `${handle.point.y * 100}%`,
+                  borderColor: handle.isShared ? '#f8fafc' : meta.accentHex,
                 }}
-                title={`OUT ${outId} · ${isPt ? meta.titlePt : meta.titleEn} · ${cornerLabels[idx]}`}
+                title={
+                  handle.isShared
+                    ? `OUT ${outId} · ${isPt ? 'Junta Soldada' : 'Welded Joint'} (${handle.memberCount}×)`
+                    : `OUT ${outId} · ${isPt ? meta.titlePt : meta.titleEn} · ${handle.label}`
+                }
               >
-                {cornerLabels[idx]}
+                {handle.isShared ? `${handle.memberCount}×` : handle.label}
               </button>
             );
-          });
-        })}
+          }
+        )}
+
+      {/* Flash Visual de Sincronia Vídeo × Som (ativo apenas durante Pulso Rítmico de Calibração) */}
+      {isClickSyncActive && !isBlackout && (
+        <div
+          data-testid="projector-sync-beat-flash"
+          className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center"
+        >
+          <div
+            style={{
+              transition: beatFlashOn ? 'none' : 'all 130ms ease-out',
+            }}
+            className={`flex flex-col items-center justify-center rounded-3xl border-4 px-10 py-8 text-center [font-variant-numeric:tabular-nums] ${
+              beatFlashOn
+                ? 'scale-105 border-white bg-white text-black shadow-[0_0_90px_rgba(255,255,255,0.95)]'
+                : 'scale-100 border-sky-400/50 bg-black/88 text-slate-200'
+            }`}
+          >
+            <div
+              style={{ transition: beatFlashOn ? 'none' : 'all 130ms ease-out' }}
+              className={`h-12 w-12 rounded-full ${
+                beatFlashOn ? 'bg-black' : 'border-2 border-sky-400/70 bg-transparent'
+              }`}
+            />
+            <div className="mt-3 text-xl font-bold tracking-wider uppercase">
+              {isPt ? 'SINCRONIA VÍDEO × SOM' : 'VIDEO × AUDIO SYNC'}
+            </div>
+            <div
+              className={`mt-1 text-sm font-semibold ${
+                beatFlashOn ? 'text-slate-900' : 'text-sky-300'
+              }`}
+            >
+              OUT {outId} ·{' '}
+              {(speakerCalibration.avOffsetMs ?? 0) > 0
+                ? `+${speakerCalibration.avOffsetMs} ms`
+                : `${speakerCalibration.avOffsetMs ?? 0} ms`}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Overlay Técnico Temporário "Identificar Projetores" acionado pelo Admin */}
       {isIdentifying && !isBlackout && (

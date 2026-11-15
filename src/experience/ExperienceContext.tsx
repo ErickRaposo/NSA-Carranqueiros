@@ -9,21 +9,36 @@ import React, {
 } from 'react';
 import {
   pauseSpeech,
+  preloadPiperVoice,
   setSpeechGateOpen,
   setSpeechVolume,
+  speakText,
   stopSpeech,
   stopUiAudioTones,
 } from '../accessibility/a11yEngine';
-import { setSpaceAmbientDucked, stopAllSpaceAudio } from '../audio/spaceAmbient';
+import {
+  playBlastDoorSlamSfx,
+  playCabinDissolveSfx,
+  playHatchEjectSfx,
+  playLandingThudSfx,
+  playLaunchThrust8D,
+  setSpaceAmbientDucked,
+  startSpaceAmbient,
+  stopAllSpaceAudio,
+  stopSpaceAmbient,
+} from '../audio/spaceAmbient';
 import {
   AudioDeviceOption,
   AudioOutputSupportStatus,
   CalibrationTestMode,
   setSpatialMusicDucked,
   SpatialAudioEngine,
+  SpeakerSinkStatusMap,
 } from '../audio/spatialAudioEngine';
 import {
   AudioCalibrationState,
+  clampCalibrationDelayMs,
+  computeEffectiveAudioVisualDelays,
   createDefaultAudioCalibration,
   loadAudioCalibration,
   saveAudioCalibration,
@@ -34,6 +49,19 @@ import {
 } from '../audio/speakerCalibration';
 import { resolveAssetUrl } from '../datasets/nasaDatasets';
 import { CountryEntry, loadWorldCountries } from '../geo/countries';
+import {
+  generateRoomCode,
+  isLocalLanHost,
+  normalizeRoomCode,
+  readRoomCodeFromSearch,
+  resolveSyncNetworkMode,
+} from '../lan/roomCode';
+import { isSupabaseRealtimeConfigured } from '../lan/roomRealtimeClient';
+import { registerActiveRoom } from '../lan/roomRegistry';
+import {
+  createRoomSyncTransport,
+  RoomSyncTransportHandle,
+} from '../lan/roomSyncTransport';
 import {
   applyProjectionPreset,
   CALIBRATION_CHANNEL_NAME,
@@ -50,6 +78,8 @@ import {
   resetOutputQuads,
   saveCalibrationState,
   toggleSurfaceOnOutput,
+  translateOutputSurfacesTogether,
+  updateQuadWithSharedSeams,
 } from '../projection/homography';
 import {
   advanceLoopProgress,
@@ -57,6 +87,10 @@ import {
   computeSpeakerLiveLevels,
   resolveCompareSwapTarget,
 } from './cueEngine';
+import {
+  resolveActiveMissionFrameId,
+  resolveFramePrompts,
+} from './missionFrames';
 import {
   AudioLevelsMap,
   AudioOutputMode,
@@ -83,6 +117,7 @@ import {
   STUDIO_SAVED_GAINS,
   StudioSessionData,
   SurfaceId,
+  SyncNetworkMode,
   ViewRole,
   VISUAL_LAYER_ORDER,
   VisualLayerId,
@@ -91,16 +126,24 @@ import {
 export interface AudioAdminContextValue {
   speakerCalibration: AudioCalibrationState;
   calibTestMode: CalibrationTestMode;
+  calibBeatSeq: number;
+  visualDelayMs: number;
   outputDevices: AudioDeviceOption[];
   outputSupportStatus: AudioOutputSupportStatus;
+  speakerSinkStatuses: SpeakerSinkStatusMap;
   isSetSinkIdSupported: boolean;
   isolatedSpeakerSlot: SpeakerSlotId | null;
   setIsolatedSpeakerSlot: (slot: SpeakerSlotId | null) => void;
   unlockAudioContext: () => boolean;
   unlockOutputDevices: () => Promise<AudioDeviceOption[]>;
+  retrySpeakerSink: (speakerId: SpeakerSlotId, toggleEngine?: boolean) => void;
   updateSpeakerConfig: (speakerId: SpeakerSlotId, patch: Partial<SpeakerSlotConfig>) => void;
+  updateAvOffsetMs: (avOffsetMs: number) => void;
   setReferenceSpeaker: (speakerId: SpeakerSlotId) => void;
   resetSpeakerCalibration: () => void;
+  togglePinkNoiseSpeaker: (speakerId: SpeakerSlotId) => void;
+  toggleDelayClickSpeaker: (speakerId: SpeakerSlotId) => void;
+  toggleHeadphoneDelayClick: () => void;
   startPinkNoiseSingle: (speakerId: SpeakerSlotId) => void;
   startPinkNoiseAB: (targetSpeakerId: SpeakerSlotId) => void;
   startDelayClickTest: (targetSpeakerId: SpeakerSlotId) => void;
@@ -117,6 +160,12 @@ export interface ProjectionAdminContextValue {
   toggleOutputSurface: (outId: ProjectorOutId, surfaceId: SurfaceId) => void;
   updateOutputConfig: (outId: ProjectorOutId, patch: Partial<ProjectorOutputConfig>) => void;
   updateSurfaceQuad: (key: CalibrationSurfaceKey, quad: QuadCorners) => void;
+  translateOutputMesh: (
+    outId: ProjectorOutId,
+    startQuads: Record<CalibrationSurfaceKey, QuadCorners>,
+    rawDx: number,
+    rawDy: number
+  ) => void;
   updateEdgeMask: (key: CalibrationSurfaceKey, patch: Partial<EdgeFeatherMask>) => void;
   resetSingleOutputQuads: (outId: ProjectorOutId) => void;
   resetAllProjectionQuads: () => void;
@@ -265,6 +314,7 @@ interface SyncPayload {
   barLoop?: BarLoopRange;
   compareCountries?: CompareCountriesState;
   audioMode: AudioOutputMode;
+  audioOwner?: AudioOwnerRole;
   masterGain: number;
   voiceVolume?: number;
   layers: ExperienceLayersState;
@@ -283,11 +333,33 @@ const ProjectionAdminContext = createContext<ProjectionAdminContextValue | null>
 
 type RemoteCalibSignalCommand =
   | { action: 'stop' }
+  | { action: 'pink-multi'; speakers: SpeakerSlotId[] }
+  | { action: 'delay-click-multi'; speakers: SpeakerSlotId[]; headphones?: boolean }
+  | { action: 'calib-beat'; beatSeq: number }
   | { action: 'pink-single'; speakerId: SpeakerSlotId }
   | { action: 'pink-ab'; targetSpeakerId: SpeakerSlotId }
   | { action: 'delay-click'; targetSpeakerId: SpeakerSlotId }
   | { action: 'pink-all' }
   | { action: 'delay-click-all' };
+
+function shiftProgressBackwardBySeconds(
+  rawProg01: number,
+  delaySeconds: number,
+  fullDurationSeconds: number,
+  barLoop: BarLoopRange,
+  totalBars: number
+): number {
+  if (delaySeconds <= 0.0005 || fullDurationSeconds <= 0.05) return rawProg01;
+  const barSec = fullDurationSeconds / Math.max(1, totalBars);
+  const loopStartSec = barLoop ? Math.max(0, Math.min(barLoop[0], barLoop[1])) * barSec : 0;
+  const loopEndSec = barLoop
+    ? Math.min(fullDurationSeconds, (Math.max(barLoop[0], barLoop[1]) + 1) * barSec)
+    : fullDurationSeconds;
+  const spanSec = Math.max(0.05, loopEndSec - loopStartSec);
+  const curSec = rawProg01 * fullDurationSeconds;
+  const rel = (((curSec - loopStartSec - delaySeconds) % spanSec) + spanSec) % spanSec;
+  return Math.min(0.9999, Math.max(0, (loopStartSec + rel) / fullDurationSeconds));
+}
 
 function detectInitialSpeakerSlotFromUrl(): SpeakerSlotId | null {
   if (typeof window === 'undefined') return null;
@@ -299,11 +371,25 @@ function detectInitialSpeakerSlotFromUrl(): SpeakerSlotId | null {
   return speakerIndexToSlotId(idx);
 }
 
-function detectCurrentRole(): string {
+function detectCurrentView(): ViewRole {
   if (typeof window === 'undefined') return 'demo';
   const params = new URLSearchParams(window.location.search);
   const raw = params.get('view')?.toLowerCase() ?? '';
-  if (raw === 'admin' || raw === 'setup') return 'admin';
+  if (raw === 'setup') return 'setup';
+  if (raw === 'admin') return 'admin';
+  if (raw === 'projector') return 'projector';
+  if (raw === 'audio-node') return 'audio-node';
+  if (raw === 'controller' || raw === 'simulator' || raw === 'demo' || raw === 'portal') {
+    return raw;
+  }
+  return 'portal';
+}
+
+function detectCurrentRole(activeView?: ViewRole): string {
+  if (typeof window === 'undefined') return activeView ?? 'demo';
+  const params = new URLSearchParams(window.location.search);
+  const raw = activeView ?? (params.get('view')?.toLowerCase() ?? '');
+  if (raw === 'admin' || raw === 'setup') return raw;
   if (raw === 'projector') {
     const out = params.get('out') ?? '1';
     return `projector-${out}`;
@@ -312,22 +398,10 @@ function detectCurrentRole(): string {
     const spk = params.get('spk') ?? '1';
     return `audio-node-C${spk}`;
   }
-  if (raw === 'controller' || raw === 'simulator' || raw === 'demo') return raw;
+  if (raw === 'controller' || raw === 'simulator' || raw === 'demo' || raw === 'portal') {
+    return raw;
+  }
   return 'demo';
-}
-
-function isLocalLanHost(): boolean {
-  if (typeof window === 'undefined') return false;
-  const { protocol, hostname } = window.location;
-  if (protocol !== 'http:') return false;
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname.startsWith('192.168.') ||
-    hostname.startsWith('10.') ||
-    hostname.startsWith('172.') ||
-    hostname.endsWith('.local')
-  );
 }
 
 const ZERO_VU: AudioLevelsMap = {
@@ -339,23 +413,112 @@ const ZERO_VU: AudioLevelsMap = {
   master: 0,
 };
 
-export const ExperienceProvider: React.FC<{
-  children: React.ReactNode;
+export interface ExperienceProviderProps {
+  activeView?: ViewRole;
   routeView?: ViewRole;
   initialMissionPhase?: MissionPhase;
   initialStoryStep?: number;
-}> = ({ children, routeView, initialMissionPhase = 'idle', initialStoryStep = 0 }) => {
+  roomCode?: string | null;
+  onRegenerateRoomCode?: () => string;
+  children: React.ReactNode;
+}
+
+export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
+  activeView,
+  routeView,
+  initialMissionPhase = 'idle',
+  initialStoryStep = 0,
+  roomCode: propRoomCode,
+  onRegenerateRoomCode,
+  children,
+}) => {
+  const resolvedRouteView = activeView ?? routeView;
   const senderIdRef = useRef<string>(`node-${Math.random().toString(36).slice(2, 9)}`);
   const channelRef = useRef<BroadcastChannel | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const transportRef = useRef<RoomSyncTransportHandle | null>(null);
   const calibBroadcastRef = useRef<BroadcastChannel | null>(null);
   const projBroadcastRef = useRef<BroadcastChannel | null>(null);
   const suppressBroadcastRef = useRef(false);
+  const latestSyncSnapshotRef = useRef<SyncPayload | null>(null);
+  const latestProjectionRef = useRef<ProjectionCalibrationState | null>(null);
+  const latestSpeakerCalibRef = useRef<AudioCalibrationState | null>(null);
+
+  const [fallbackRoomCode, setFallbackRoomCode] = useState<string | null>(() =>
+    typeof window !== 'undefined' ? readRoomCodeFromSearch(window.location.search) : null
+  );
+
+  const effectiveRoomCode =
+    propRoomCode !== undefined ? normalizeRoomCode(propRoomCode) : fallbackRoomCode;
+
+  const effectiveView: ViewRole = resolvedRouteView ?? detectCurrentView();
+
+  const forceCloud = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('transport') === 'cloud';
+  }, []);
+
+  const syncNetworkMode: SyncNetworkMode = useMemo(
+    () =>
+      resolveSyncNetworkMode({
+        view: effectiveView,
+        roomCode: effectiveRoomCode,
+        isLocalHost: isLocalLanHost(),
+        forceCloud,
+        supabaseConfigured: isSupabaseRealtimeConfigured(),
+      }),
+    [effectiveRoomCode, effectiveView, forceCloud]
+  );
+
+  // Registra oficialmente a sala quando criada/aberta no Setup ou Painel Técnico (com retry + heartbeat)
+  useEffect(() => {
+    if ((effectiveView !== 'setup' && effectiveView !== 'admin') || !effectiveRoomCode) {
+      return;
+    }
+    let cancelled = false;
+    let retryTimer: number | null = null;
+
+    const syncRoomRegistration = async () => {
+      const res = await registerActiveRoom(effectiveRoomCode, syncNetworkMode);
+      if (!cancelled && !res.ok && retryTimer === null) {
+        retryTimer = window.setTimeout(() => {
+          retryTimer = null;
+          if (!cancelled) {
+            void registerActiveRoom(effectiveRoomCode, syncNetworkMode);
+          }
+        }, 2500);
+      }
+    };
+
+    void syncRoomRegistration();
+    const heartbeat = window.setInterval(() => {
+      void registerActiveRoom(effectiveRoomCode, syncNetworkMode);
+    }, 45_000);
+
+    return () => {
+      cancelled = true;
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+      window.clearInterval(heartbeat);
+    };
+  }, [effectiveRoomCode, effectiveView, syncNetworkMode]);
+
+  const regenerateRoomCode = useCallback((): string => {
+    if (onRegenerateRoomCode) {
+      return onRegenerateRoomCode();
+    }
+    const next = generateRoomCode();
+    setFallbackRoomCode(next);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      params.set('room', next);
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+    }
+    return next;
+  }, [onRegenerateRoomCode]);
 
   const [localAudioMuted, setLocalAudioMutedState] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     const raw = new URLSearchParams(window.location.search).get('view')?.toLowerCase() ?? '';
-    return raw === 'projector';
+    return raw === 'projector' || raw === 'controller';
   });
   const [audioOwner, setAudioOwnerState] = useState<AudioOwnerRole>('pc');
   const [audioContextState, setAudioContextState] = useState<
@@ -380,13 +543,22 @@ export const ExperienceProvider: React.FC<{
     detectInitialSpeakerSlotFromUrl
   );
   const [calibTestMode, setCalibTestMode] = useState<CalibrationTestMode>({ kind: 'off' });
+  const [calibBeatSeq, setCalibBeatSeq] = useState<number>(0);
   const [outputDevices, setOutputDevices] = useState<AudioDeviceOption[]>([]);
+  const [speakerSinkStatuses, setSpeakerSinkStatuses] = useState<SpeakerSinkStatusMap>({
+    speaker1: { status: 'default', engine: 'native' },
+    speaker2: { status: 'default', engine: 'native' },
+    speaker3: { status: 'default', engine: 'native' },
+  });
+  const localAudioMutedRef = useRef<boolean>(localAudioMuted);
+  localAudioMutedRef.current = localAudioMuted;
 
   const audioEngineRef = useRef<SpatialAudioEngine | null>(null);
   if (!audioEngineRef.current && typeof window !== 'undefined') {
     const eng = new SpatialAudioEngine(speakerCalibration);
     eng.setIsolatedSpeakerSlot(isolatedSpeakerSlot);
     eng.setOnCalibrationModeChange((mode) => setCalibTestMode(mode));
+    eng.setOnSinkStatusChange((statuses) => setSpeakerSinkStatuses(statuses));
     audioEngineRef.current = eng;
   }
 
@@ -466,6 +638,14 @@ export const ExperienceProvider: React.FC<{
   const scrubTimerRef = useRef<number | null>(null);
   const [seekSyncNonce, setSeekSyncNonce] = useState<number>(0);
   const [audioMode, setAudioModeState] = useState<AudioOutputMode>('hrtf');
+  const visualDelayMs = useMemo(
+    () =>
+      computeEffectiveAudioVisualDelays(speakerCalibration, audioMode, isolatedSpeakerSlot)
+        .visualDelayMs,
+    [audioMode, isolatedSpeakerSlot, speakerCalibration]
+  );
+  const visualDelayMsRef = useRef<number>(visualDelayMs);
+  visualDelayMsRef.current = visualDelayMs;
   const [masterGain, setMasterGainState] = useState<number>(STUDIO_SAVED_GAINS.master);
   const [voiceVolume, setVoiceVolumeState] = useState<number>(1.0);
   const [layers, setLayers] = useState<ExperienceLayersState>(DEFAULT_LAYERS_STATE);
@@ -799,31 +979,36 @@ export const ExperienceProvider: React.FC<{
     []
   );
 
-  const prevRouteViewRef = useRef<ViewRole | undefined>(routeView);
-  const currentRouteViewRef = useRef<ViewRole | undefined>(routeView);
-  currentRouteViewRef.current = routeView;
+  const prevRouteViewRef = useRef<ViewRole | undefined>(resolvedRouteView);
+  const currentRouteViewRef = useRef<ViewRole | undefined>(resolvedRouteView);
+  currentRouteViewRef.current = resolvedRouteView;
 
   // Silencia imediatamente fala, efeitos e música ao desmontar, trocar de página SPA ou sair/ocultar a aba
   useEffect(() => {
     const prevView = prevRouteViewRef.current;
-    prevRouteViewRef.current = routeView;
+    prevRouteViewRef.current = resolvedRouteView;
 
-    if (routeView === 'projector') {
+    if (resolvedRouteView === 'projector') {
       setLocalAudioMutedState(true);
-    } else if (prevView === 'projector' && routeView) {
+    } else if (prevView === 'projector' && resolvedRouteView) {
       setLocalAudioMutedState(false);
     }
 
-    if (prevView && routeView && prevView !== routeView) {
+    if (prevView && resolvedRouteView && prevView !== resolvedRouteView) {
       stopSpeech();
       stopAllSpaceAudio();
       stopUiAudioTones();
-      if (routeView === 'projector' || routeView === 'setup' || routeView === 'audio-node') {
+      if (
+        resolvedRouteView === 'projector' ||
+        resolvedRouteView === 'setup' ||
+        resolvedRouteView === 'admin' ||
+        resolvedRouteView === 'audio-node'
+      ) {
         setIsPlaying(false);
         audioEngineRef.current?.suspendForPageExit();
       }
     }
-  }, [routeView]);
+  }, [resolvedRouteView]);
 
   useEffect(() => {
     const haltAllAudio = (pausePlayback: boolean) => {
@@ -881,7 +1066,7 @@ export const ExperienceProvider: React.FC<{
       const eng = audioEngineRef.current;
       const hwProg = eng?.getPlayheadProgress01() ?? null;
 
-      const nextProg =
+      const rawProg =
         hwProg !== null
           ? hwProg
           : advanceLoopProgress(
@@ -893,10 +1078,18 @@ export const ExperienceProvider: React.FC<{
               barLoopRef.current
             );
 
-      liveProgressRef.current = nextProg;
+      liveProgressRef.current = rawProg;
+
+      const nextProg = shiftProgressBackwardBySeconds(
+        rawProg,
+        visualDelayMsRef.current / 1000,
+        durationSeconds,
+        barLoopRef.current,
+        totalBars
+      );
 
       if (eng && eng.isStemAudioPlaying()) {
-        const activeNotes = extractRealNotesAtProgress(nextProg);
+        const activeNotes = extractRealNotesAtProgress(rawProg);
         const melFocus = activeNotes.find((n) => n.layer === 'melody' || n.layer === 'sparkle');
         if (melFocus) {
           eng.steerMelodySpatialFocus(melFocus.source_x, melFocus.source_y);
@@ -993,7 +1186,14 @@ export const ExperienceProvider: React.FC<{
     const pb = playbackRef.current;
     const eng = audioEngineRef.current;
     const hwProg = eng?.getPlayheadProgress01() ?? null;
-    const prog = hwProg !== null ? hwProg : liveProgressRef.current;
+    const rawProg = hwProg !== null ? hwProg : liveProgressRef.current;
+    const prog = shiftProgressBackwardBySeconds(
+      rawProg,
+      visualDelayMsRef.current / 1000,
+      pb.durationSeconds,
+      barLoopRef.current,
+      pb.totalBars
+    );
     const active = pb.isPlaying || scrubPreviewActive;
 
     const activeNotes = active ? extractRealNotesAtProgress(prog) : [];
@@ -1044,6 +1244,24 @@ export const ExperienceProvider: React.FC<{
     }
     if (data.compareCountries) setCompareCountriesState(data.compareCountries);
     setAudioModeState(data.audioMode);
+    if (data.audioOwner) {
+      setAudioOwnerState(data.audioOwner);
+      if (typeof window !== 'undefined') {
+        const raw = new URLSearchParams(window.location.search).get('view')?.toLowerCase() ?? '';
+        if (raw === 'projector') {
+          setLocalAudioMutedState(true);
+        } else {
+          const isTabletView = raw === 'controller' || raw === 'tablet';
+          if (data.audioOwner === 'pc') {
+            setLocalAudioMutedState(isTabletView);
+          } else if (data.audioOwner === 'tablet') {
+            setLocalAudioMutedState(!isTabletView);
+          } else {
+            setLocalAudioMutedState(false);
+          }
+        }
+      }
+    }
     setMasterGainState(data.masterGain);
     if (typeof data.voiceVolume === 'number') {
       setVoiceVolumeState(data.voiceVolume);
@@ -1085,10 +1303,39 @@ export const ExperienceProvider: React.FC<{
   }, []);
 
   const applyRemoteCalibSignal = useCallback((cmd: RemoteCalibSignalCommand) => {
+    if (cmd.action === 'calib-beat') {
+      setCalibBeatSeq(cmd.beatSeq);
+      return;
+    }
+
+    // Abas silenciosas (como ?view=projector) refletem o estado visual do Pulso Rítmico sem emitir som
+    if (localAudioMutedRef.current) {
+      if (cmd.action === 'stop') {
+        setCalibTestMode({ kind: 'off' });
+      } else if (cmd.action === 'delay-click-multi') {
+        setCalibTestMode({
+          kind: 'delay-click-multi',
+          speakers: cmd.speakers,
+          headphones: cmd.headphones,
+        });
+      } else if (cmd.action === 'delay-click-all') {
+        setCalibTestMode({ kind: 'delay-click-all' });
+      } else if (cmd.action === 'delay-click') {
+        setCalibTestMode({ kind: 'delay-click', targetSpeakerId: cmd.targetSpeakerId });
+      } else {
+        setCalibTestMode({ kind: 'off' });
+      }
+      return;
+    }
+
     const eng = audioEngineRef.current;
     if (!eng) return;
     if (cmd.action === 'stop') {
       eng.stopCalibrationSignal();
+    } else if (cmd.action === 'pink-multi') {
+      eng.setPinkNoiseSpeakers(cmd.speakers);
+    } else if (cmd.action === 'delay-click-multi') {
+      eng.setDelayClickSpeakers(cmd.speakers, Boolean(cmd.headphones));
     } else if (cmd.action === 'pink-single') {
       eng.startPinkNoiseSingle(cmd.speakerId);
     } else if (cmd.action === 'pink-ab') {
@@ -1102,18 +1349,24 @@ export const ExperienceProvider: React.FC<{
     }
   }, []);
 
-  const isUnifiedDemoMode =
-    typeof window !== 'undefined' && detectCurrentRole() === 'demo';
+  // Mantém refs dos últimos snapshots atualizados para responder Late Join (request-state)
+  latestProjectionRef.current = projectionState;
+  latestSpeakerCalibRef.current = speakerCalibration;
+
+  const isUnifiedDemoMode = effectiveView === 'demo' && !effectiveRoomCode;
   const didMountBroadcastRef = useRef(false);
 
-  // Multi-tab 1-PC sync via BroadcastChannel (desativado no Demo Web autônomo para evitar interferência externa)
+  // Multi-tab 1-PC sync via BroadcastChannel (escopado por ?room= para isolar salas diferentes e a Demo pública)
   useEffect(() => {
     if (isUnifiedDemoMode || typeof BroadcastChannel === 'undefined') return;
-    const ch = new BroadcastChannel(SYNC_CHANNEL_NAME);
+    // Visitante público isolado não compartilha BroadcastChannel com salas de instalação
+    const scopeSuffix = effectiveRoomCode ? `room-${effectiveRoomCode}` : 'isolated';
+
+    const ch = new BroadcastChannel(`${SYNC_CHANNEL_NAME}:${scopeSuffix}`);
     channelRef.current = ch;
     ch.onmessage = (ev: MessageEvent<SyncPayload>) => applyIncomingSync(ev.data);
 
-    const calibCh = new BroadcastChannel(SPEAKER_CALIBRATION_CHANNEL);
+    const calibCh = new BroadcastChannel(`${SPEAKER_CALIBRATION_CHANNEL}:${scopeSuffix}`);
     calibBroadcastRef.current = calibCh;
     calibCh.onmessage = (
       ev: MessageEvent<AudioCalibrationState | { type: 'calib-signal'; cmd: RemoteCalibSignalCommand }>
@@ -1129,7 +1382,7 @@ export const ExperienceProvider: React.FC<{
       }
     };
 
-    const projCh = new BroadcastChannel(CALIBRATION_CHANNEL_NAME);
+    const projCh = new BroadcastChannel(`${CALIBRATION_CHANNEL_NAME}:${scopeSuffix}`);
     projBroadcastRef.current = projCh;
     projCh.onmessage = (ev: MessageEvent<ProjectionCalibrationState>) => {
       if (isProjectionStateValid(ev.data)) {
@@ -1146,86 +1399,69 @@ export const ExperienceProvider: React.FC<{
       calibBroadcastRef.current = null;
       projBroadcastRef.current = null;
     };
-  }, [applyIncomingSync, applyRemoteCalibSignal, isUnifiedDemoMode]);
+  }, [applyIncomingSync, applyRemoteCalibSignal, effectiveRoomCode, isUnifiedDemoMode]);
 
-  // Multi-Device Wi-Fi LAN Sync via /ws-earth-sync (Offline-First)
+  // Barramento Unificado Multi-Sala: Isolado vs LAN Local (/ws-earth-sync) vs Sala Online (Supabase Realtime)
   useEffect(() => {
-    if (isUnifiedDemoMode || !isLocalLanHost() || typeof WebSocket === 'undefined') return;
-    let disposed = false;
-    let reconnectTimer: number | null = null;
+    if (isUnifiedDemoMode) return;
+    const role = detectCurrentRole(effectiveView);
+    const transport = createRoomSyncTransport({
+      mode: syncNetworkMode,
+      roomCode: effectiveRoomCode,
+      peerId: senderIdRef.current,
+      role,
+      getHostSnapshot: () => ({
+        sync: latestSyncSnapshotRef.current,
+        projection: latestProjectionRef.current,
+        speakerCalib: latestSpeakerCalibRef.current,
+      }),
+      onSync: (payload) => {
+        applyIncomingSync(payload as SyncPayload);
+      },
+      onProjection: (payload) => {
+        if (isProjectionStateValid(payload)) {
+          setProjectionState(payload);
+          saveCalibrationState(payload);
+        }
+      },
+      onSpeakerCalib: (payload) => {
+        if (
+          payload &&
+          typeof payload === 'object' &&
+          'speakers' in (payload as AudioCalibrationState)
+        ) {
+          const calib = payload as AudioCalibrationState;
+          setSpeakerCalibration(calib);
+          saveAudioCalibration(calib);
+          audioEngineRef.current?.updateSpeakerCalibration(calib);
+        }
+      },
+      onCalibSignal: (cmd) => {
+        if (cmd && typeof cmd === 'object' && 'action' in (cmd as RemoteCalibSignalCommand)) {
+          applyRemoteCalibSignal(cmd as RemoteCalibSignalCommand);
+        }
+      },
+      onPresence: (peers) => {
+        setLanClients(peers);
+      },
+      onConnectionChange: (connected) => {
+        setLanConnected(connected);
+      },
+    });
+    transportRef.current = transport;
 
-    const connect = () => {
-      if (disposed) return;
-      const role = detectCurrentRole();
-      const wsUrl = `ws://${window.location.host}/ws-earth-sync?role=${encodeURIComponent(role)}`;
-      try {
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
-
-        ws.onopen = () => {
-          if (disposed) return;
-          setLanConnected(true);
-          ws.send(JSON.stringify({ type: 'hello', role }));
-        };
-
-        ws.onmessage = (ev) => {
-          if (typeof ev.data !== 'string') return;
-          try {
-            const msg = JSON.parse(ev.data) as {
-              type?: string;
-              payload?: unknown;
-              clients?: LanPeerInfo[];
-              cmd?: RemoteCalibSignalCommand;
-            };
-            if (msg.type === 'sync' && msg.payload) {
-              applyIncomingSync(msg.payload as SyncPayload);
-            } else if (msg.type === 'projection' && isProjectionStateValid(msg.payload)) {
-              setProjectionState(msg.payload);
-              saveCalibrationState(msg.payload);
-            } else if (
-              msg.type === 'speaker-calib' &&
-              msg.payload &&
-              typeof msg.payload === 'object' &&
-              'speakers' in (msg.payload as AudioCalibrationState)
-            ) {
-              const calib = msg.payload as AudioCalibrationState;
-              setSpeakerCalibration(calib);
-              saveAudioCalibration(calib);
-              audioEngineRef.current?.updateSpeakerCalibration(calib);
-            } else if (msg.type === 'calib-signal' && msg.cmd) {
-              applyRemoteCalibSignal(msg.cmd);
-            } else if (msg.type === 'presence' && Array.isArray(msg.clients)) {
-              setLanClients(msg.clients);
-            }
-          } catch {
-            // ignore malformed JSON
-          }
-        };
-
-        ws.onclose = () => {
-          setLanConnected(false);
-          wsRef.current = null;
-          if (!disposed) {
-            reconnectTimer = window.setTimeout(connect, 2500);
-          }
-        };
-
-        ws.onerror = () => {
-          ws.close();
-        };
-      } catch {
-        // ignore WebSocket creation failure in test environments
-      }
-    };
-
-    connect();
     return () => {
-      disposed = true;
-      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
-      wsRef.current?.close();
-      wsRef.current = null;
+      transport.dispose();
+      transportRef.current = null;
     };
-  }, [applyIncomingSync, applyRemoteCalibSignal, isUnifiedDemoMode]);
+  }, [
+    applyIncomingSync,
+    applyRemoteCalibSignal,
+    effectiveRoomCode,
+    effectiveView,
+    isUnifiedDemoMode,
+    syncNetworkMode,
+  ]);
 
   useEffect(() => {
     if (!didMountBroadcastRef.current) {
@@ -1244,6 +1480,7 @@ export const ExperienceProvider: React.FC<{
       barLoop,
       compareCountries,
       audioMode,
+      audioOwner,
       masterGain,
       voiceVolume,
       layers,
@@ -1255,20 +1492,16 @@ export const ExperienceProvider: React.FC<{
       speechCommandNonce,
       lastSpeechCommand,
     };
+    latestSyncSnapshotRef.current = payload;
     try {
       channelRef.current?.postMessage(payload);
     } catch {
       // ignore closed channel errors
     }
-    try {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'sync', payload }));
-      }
-    } catch {
-      // ignore socket send errors
-    }
+    transportRef.current?.sendSync(payload);
   }, [
     audioMode,
+    audioOwner,
     barLoop,
     compareCountries,
     isPlaying,
@@ -1756,7 +1989,7 @@ export const ExperienceProvider: React.FC<{
     setSpeechVolume(1.0);
     if (typeof window !== 'undefined') {
       const raw = new URLSearchParams(window.location.search).get('view')?.toLowerCase() ?? '';
-      setLocalAudioMutedState(raw === 'projector');
+      setLocalAudioMutedState(raw === 'projector' || (audioOwner === 'pc' && raw === 'controller'));
     }
     setSelectedCountryId('076');
     setLayers(DEFAULT_LAYERS_STATE);
@@ -1771,64 +2004,49 @@ export const ExperienceProvider: React.FC<{
     setIsPlaying(false);
     setSeekSyncNonce((n) => n + 1);
     refreshAudioTelemetry();
-  }, [refreshAudioTelemetry]);
+  }, [audioOwner, refreshAudioTelemetry]);
 
-  const sendWsJson = useCallback((body: Record<string, unknown>) => {
-    try {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify(body));
-      }
-    } catch {
-      // ignore socket send errors
-    }
-  }, []);
-
-  const updateProjectionState = useCallback(
-    (next: ProjectionCalibrationState) => {
-      setProjectionState(next);
+  const publishProjectionUpdate = useCallback(
+    (next: ProjectionCalibrationState, immediate = true) => {
       saveCalibrationState(next);
       try {
         projBroadcastRef.current?.postMessage(next);
       } catch {
         // ignore
       }
-      sendWsJson({ type: 'projection', payload: next });
+      transportRef.current?.sendProjection(next, immediate);
     },
-    [sendWsJson]
+    []
+  );
+
+  const updateProjectionState = useCallback(
+    (next: ProjectionCalibrationState) => {
+      setProjectionState(next);
+      publishProjectionUpdate(next, true);
+    },
+    [publishProjectionUpdate]
   );
 
   const selectProjectionPreset = useCallback(
     (preset: Exclude<ProjectionTopologyPreset, 'custom'>) => {
       setProjectionState((prev) => {
         const next = applyProjectionPreset(preset, prev);
-        saveCalibrationState(next);
-        try {
-          projBroadcastRef.current?.postMessage(next);
-        } catch {
-          // ignore
-        }
-        sendWsJson({ type: 'projection', payload: next });
+        publishProjectionUpdate(next, true);
         return next;
       });
     },
-    [sendWsJson]
+    [publishProjectionUpdate]
   );
 
   const toggleOutputSurface = useCallback(
     (outId: ProjectorOutId, surfaceId: SurfaceId) => {
       setProjectionState((prev) => {
         const next = toggleSurfaceOnOutput(prev, outId, surfaceId);
-        saveCalibrationState(next);
-        try {
-          projBroadcastRef.current?.postMessage(next);
-        } catch {
-          // ignore
-        }
-        sendWsJson({ type: 'projection', payload: next });
+        publishProjectionUpdate(next, true);
         return next;
       });
     },
-    [sendWsJson]
+    [publishProjectionUpdate]
   );
 
   const updateOutputConfig = useCallback(
@@ -1845,17 +2063,11 @@ export const ExperienceProvider: React.FC<{
             },
           },
         };
-        saveCalibrationState(next);
-        try {
-          projBroadcastRef.current?.postMessage(next);
-        } catch {
-          // ignore
-        }
-        sendWsJson({ type: 'projection', payload: next });
+        publishProjectionUpdate(next, true);
         return next;
       });
     },
-    [sendWsJson]
+    [publishProjectionUpdate]
   );
 
   const updateSurfaceQuad = useCallback(
@@ -1863,22 +2075,33 @@ export const ExperienceProvider: React.FC<{
       setProjectionState((prev) => {
         const next: ProjectionCalibrationState = {
           ...prev,
-          quads: {
-            ...prev.quads,
-            [key]: quad,
-          },
+          quads: updateQuadWithSharedSeams(prev, key, quad),
         };
-        saveCalibrationState(next);
-        try {
-          projBroadcastRef.current?.postMessage(next);
-        } catch {
-          // ignore
-        }
-        sendWsJson({ type: 'projection', payload: next });
+        publishProjectionUpdate(next, false);
         return next;
       });
     },
-    [sendWsJson]
+    [publishProjectionUpdate]
+  );
+
+  const translateOutputMesh = useCallback(
+    (
+      outId: ProjectorOutId,
+      startQuads: Record<CalibrationSurfaceKey, QuadCorners>,
+      rawDx: number,
+      rawDy: number
+    ) => {
+      setProjectionState((prev) => {
+        const surfaces = prev.outputs[outId]?.surfaces ?? [];
+        const next: ProjectionCalibrationState = {
+          ...prev,
+          quads: translateOutputSurfacesTogether(outId, surfaces, startQuads, rawDx, rawDy),
+        };
+        publishProjectionUpdate(next, false);
+        return next;
+      });
+    },
+    [publishProjectionUpdate]
   );
 
   const updateEdgeMask = useCallback(
@@ -1900,34 +2123,22 @@ export const ExperienceProvider: React.FC<{
             [key]: nextMask,
           },
         };
-        saveCalibrationState(next);
-        try {
-          projBroadcastRef.current?.postMessage(next);
-        } catch {
-          // ignore
-        }
-        sendWsJson({ type: 'projection', payload: next });
+        publishProjectionUpdate(next, true);
         return next;
       });
     },
-    [sendWsJson]
+    [publishProjectionUpdate]
   );
 
   const resetSingleOutputQuads = useCallback(
     (outId: ProjectorOutId) => {
       setProjectionState((prev) => {
         const next = resetOutputQuads(prev, outId);
-        saveCalibrationState(next);
-        try {
-          projBroadcastRef.current?.postMessage(next);
-        } catch {
-          // ignore
-        }
-        sendWsJson({ type: 'projection', payload: next });
+        publishProjectionUpdate(next, true);
         return next;
       });
     },
-    [sendWsJson]
+    [publishProjectionUpdate]
   );
 
   const resetAllProjectionQuads = useCallback(() => {
@@ -1947,16 +2158,10 @@ export const ExperienceProvider: React.FC<{
               showGrid: false,
               edgeMasks: defaults.edgeMasks,
             });
-      saveCalibrationState(next);
-      try {
-        projBroadcastRef.current?.postMessage(next);
-      } catch {
-        // ignore
-      }
-      sendWsJson({ type: 'projection', payload: next });
+      publishProjectionUpdate(next, true);
       return next;
     });
-  }, [sendWsJson]);
+  }, [publishProjectionUpdate]);
 
   const triggerIdentifyOutputs = useCallback(
     (durationMs = 7000) => {
@@ -1965,17 +2170,11 @@ export const ExperienceProvider: React.FC<{
           ...prev,
           identifyUntil: Date.now() + durationMs,
         };
-        saveCalibrationState(next);
-        try {
-          projBroadcastRef.current?.postMessage(next);
-        } catch {
-          // ignore
-        }
-        sendWsJson({ type: 'projection', payload: next });
+        publishProjectionUpdate(next, true);
         return next;
       });
     },
-    [sendWsJson]
+    [publishProjectionUpdate]
   );
 
   const toggleGlobalBlackout = useCallback(() => {
@@ -1984,16 +2183,10 @@ export const ExperienceProvider: React.FC<{
         ...prev,
         globalBlackout: !prev.globalBlackout,
       };
-      saveCalibrationState(next);
-      try {
-        projBroadcastRef.current?.postMessage(next);
-      } catch {
-        // ignore
-      }
-      sendWsJson({ type: 'projection', payload: next });
+      publishProjectionUpdate(next, true);
       return next;
     });
-  }, [sendWsJson]);
+  }, [publishProjectionUpdate]);
 
   const toggleGlobalShowGrid = useCallback(() => {
     setProjectionState((prev) => {
@@ -2002,19 +2195,45 @@ export const ExperienceProvider: React.FC<{
         ...prev,
         showGrid: nextVal,
       };
-      saveCalibrationState(next);
-      try {
-        projBroadcastRef.current?.postMessage(next);
-      } catch {
-        // ignore
-      }
-      sendWsJson({ type: 'projection', payload: next });
+      publishProjectionUpdate(next, true);
       return next;
     });
-  }, [sendWsJson]);
+  }, [publishProjectionUpdate]);
 
-  const persistAndSyncSpeakerCalibration = useCallback(
-    (next: AudioCalibrationState) => {
+  const persistAndSyncSpeakerCalibration = useCallback((next: AudioCalibrationState) => {
+    setSpeakerCalibration(next);
+    saveAudioCalibration(next);
+    audioEngineRef.current?.updateSpeakerCalibration(next);
+    try {
+      calibBroadcastRef.current?.postMessage(next);
+    } catch {
+      // ignore
+    }
+    transportRef.current?.sendSpeakerCalib(next, true);
+  }, []);
+
+  const updateSpeakerConfig = useCallback(
+    (speakerId: SpeakerSlotId, patch: Partial<SpeakerSlotConfig>) => {
+      if (patch.sinkDeviceId) {
+        audioEngineRef.current?.ensureContext();
+        setAudioModeState('room3');
+      }
+      const prev = latestSpeakerCalibRef.current ?? speakerCalibration;
+      const sanitizedPatch =
+        patch.delayMs !== undefined
+          ? { ...patch, delayMs: clampCalibrationDelayMs(patch.delayMs) }
+          : patch;
+      const next: AudioCalibrationState = {
+        ...prev,
+        speakers: {
+          ...prev.speakers,
+          [speakerId]: {
+            ...prev.speakers[speakerId],
+            ...sanitizedPatch,
+          },
+        },
+      };
+      latestSpeakerCalibRef.current = next;
       setSpeakerCalibration(next);
       saveAudioCalibration(next);
       audioEngineRef.current?.updateSpeakerCalibration(next);
@@ -2023,40 +2242,35 @@ export const ExperienceProvider: React.FC<{
       } catch {
         // ignore
       }
-      sendWsJson({ type: 'speaker-calib', payload: next });
+      transportRef.current?.sendSpeakerCalib(next, false);
     },
-    [sendWsJson]
+    [speakerCalibration]
   );
 
-  const updateSpeakerConfig = useCallback(
-    (speakerId: SpeakerSlotId, patch: Partial<SpeakerSlotConfig>) => {
-      if (patch.sinkDeviceId) {
-        audioEngineRef.current?.ensureContext();
-        setAudioModeState('room3');
+  const retrySpeakerSink = useCallback((speakerId: SpeakerSlotId, toggleEngine = false) => {
+    audioEngineRef.current?.retrySpeakerSink(speakerId, toggleEngine);
+  }, []);
+
+  const updateAvOffsetMs = useCallback(
+    (rawOffsetMs: number) => {
+      const clamped = clampCalibrationDelayMs(rawOffsetMs);
+      const prev = latestSpeakerCalibRef.current ?? speakerCalibration;
+      const next: AudioCalibrationState = {
+        ...prev,
+        avOffsetMs: clamped,
+      };
+      latestSpeakerCalibRef.current = next;
+      setSpeakerCalibration(next);
+      saveAudioCalibration(next);
+      audioEngineRef.current?.updateSpeakerCalibration(next);
+      try {
+        calibBroadcastRef.current?.postMessage(next);
+      } catch {
+        // ignore
       }
-      setSpeakerCalibration((prev) => {
-        const next: AudioCalibrationState = {
-          ...prev,
-          speakers: {
-            ...prev.speakers,
-            [speakerId]: {
-              ...prev.speakers[speakerId],
-              ...patch,
-            },
-          },
-        };
-        saveAudioCalibration(next);
-        audioEngineRef.current?.updateSpeakerCalibration(next);
-        try {
-          calibBroadcastRef.current?.postMessage(next);
-        } catch {
-          // ignore
-        }
-        sendWsJson({ type: 'speaker-calib', payload: next });
-        return next;
-      });
+      transportRef.current?.sendSpeakerCalib(next, false);
     },
-    [sendWsJson]
+    [speakerCalibration]
   );
 
   const setReferenceSpeaker = useCallback(
@@ -2095,6 +2309,7 @@ export const ExperienceProvider: React.FC<{
     }
     const handleDeviceChange = () => {
       void refreshOutputDevices();
+      audioEngineRef.current?.retryErroredSinks();
     };
     navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
     return () => {
@@ -2112,30 +2327,78 @@ export const ExperienceProvider: React.FC<{
     return Boolean(audioEngineRef.current?.ensureContext());
   }, [unlockAudioContext]);
 
-  const broadcastCalibCommand = useCallback(
-    (cmd: RemoteCalibSignalCommand) => {
-      try {
-        calibBroadcastRef.current?.postMessage({ type: 'calib-signal', cmd });
-      } catch {
-        // ignore
+  const broadcastCalibCommand = useCallback((cmd: RemoteCalibSignalCommand) => {
+    try {
+      calibBroadcastRef.current?.postMessage({ type: 'calib-signal', cmd });
+    } catch {
+      // ignore
+    }
+    transportRef.current?.sendCalibSignal(cmd);
+  }, []);
+
+  useEffect(() => {
+    const eng = audioEngineRef.current;
+    if (!eng) return;
+    eng.setOnCalibrationBeat((beatSeq) => {
+      setCalibBeatSeq(beatSeq);
+      broadcastCalibCommand({ action: 'calib-beat', beatSeq });
+    });
+    return () => {
+      eng.setOnCalibrationBeat(undefined);
+    };
+  }, [broadcastCalibCommand]);
+
+  const togglePinkNoiseSpeaker = useCallback(
+    (speakerId: SpeakerSlotId) => {
+      const next = audioEngineRef.current?.togglePinkNoiseSpeaker(speakerId) ?? [];
+      if (next.length === 0) {
+        broadcastCalibCommand({ action: 'stop' });
+      } else {
+        broadcastCalibCommand({ action: 'pink-multi', speakers: next });
       }
-      sendWsJson({ type: 'calib-signal', cmd });
     },
-    [sendWsJson]
+    [broadcastCalibCommand]
   );
+
+  const toggleDelayClickSpeaker = useCallback(
+    (speakerId: SpeakerSlotId) => {
+      const next = audioEngineRef.current?.toggleDelayClickSpeaker(speakerId) ?? [];
+      if (next.length === 0) {
+        broadcastCalibCommand({ action: 'stop' });
+      } else {
+        broadcastCalibCommand({ action: 'delay-click-multi', speakers: next, headphones: false });
+      }
+    },
+    [broadcastCalibCommand]
+  );
+
+  const toggleHeadphoneDelayClick = useCallback(() => {
+    const active = audioEngineRef.current?.toggleHeadphoneDelayClick() ?? false;
+    if (!active) {
+      broadcastCalibCommand({ action: 'stop' });
+    } else {
+      broadcastCalibCommand({ action: 'delay-click-multi', speakers: [], headphones: true });
+    }
+  }, [broadcastCalibCommand]);
 
   const startPinkNoiseSingle = useCallback(
     (speakerId: SpeakerSlotId) => {
       audioEngineRef.current?.startPinkNoiseSingle(speakerId);
-      broadcastCalibCommand({ action: 'pink-single', speakerId });
+      broadcastCalibCommand({ action: 'pink-multi', speakers: [speakerId] });
     },
     [broadcastCalibCommand]
   );
 
   const startPinkNoiseAB = useCallback(
     (targetSpeakerId: SpeakerSlotId) => {
-      audioEngineRef.current?.startPinkNoiseAB(targetSpeakerId);
-      broadcastCalibCommand({ action: 'pink-ab', targetSpeakerId });
+      const next = audioEngineRef.current
+        ? (() => {
+            audioEngineRef.current.startPinkNoiseAB(targetSpeakerId);
+            const m = audioEngineRef.current.getCalibrationTestMode();
+            return m.kind === 'pink-multi' ? m.speakers : [targetSpeakerId];
+          })()
+        : [targetSpeakerId];
+      broadcastCalibCommand({ action: 'pink-multi', speakers: next });
     },
     [broadcastCalibCommand]
   );
@@ -2143,7 +2406,11 @@ export const ExperienceProvider: React.FC<{
   const startDelayClickTest = useCallback(
     (targetSpeakerId: SpeakerSlotId) => {
       audioEngineRef.current?.startDelayClickTest(targetSpeakerId);
-      broadcastCalibCommand({ action: 'delay-click', targetSpeakerId });
+      broadcastCalibCommand({
+        action: 'delay-click-multi',
+        speakers: [targetSpeakerId],
+        headphones: false,
+      });
     },
     [broadcastCalibCommand]
   );
@@ -2162,6 +2429,149 @@ export const ExperienceProvider: React.FC<{
     audioEngineRef.current?.stopCalibrationSignal();
     broadcastCalibCommand({ action: 'stop' });
   }, [broadcastCalibCommand]);
+
+  // --- Áudio Espacial Multi-Caixa da Nave e Narração Piper nas views mestre/nós sem RightWallScene ---
+
+  useEffect(() => {
+    if (localAudioMuted) return;
+    void preloadPiperVoice(lang);
+  }, [lang, localAudioMuted]);
+
+  useEffect(() => {
+    const shouldPlayAmbient =
+      !localAudioMuted &&
+      calibTestMode.kind === 'off' &&
+      (effectiveView === 'demo' ||
+        effectiveView === 'simulator' ||
+        missionPhase !== 'idle');
+
+    if (shouldPlayAmbient) {
+      startSpaceAmbient();
+    } else {
+      stopSpaceAmbient();
+    }
+  }, [calibTestMode.kind, effectiveView, localAudioMuted, missionPhase]);
+
+  const prevMissionPhaseForAudioRef = useRef<MissionPhase>(missionPhase);
+  const headlessSpokenKeyRef = useRef<string>('');
+  const hasMountedRightWallScene =
+    effectiveView === 'demo' || effectiveView === 'simulator' || effectiveView === 'portal';
+
+  useEffect(() => {
+    const prev = prevMissionPhaseForAudioRef.current;
+    prevMissionPhaseForAudioRef.current = missionPhase;
+    if (localAudioMuted || prev === missionPhase) return;
+
+    // Decolagem 8D toca centralizada em todas as abas de áudio não-mutadas (PC 3 caixas + audio-nodes)
+    if (missionPhase === 'countdown') {
+      playLaunchThrust8D(10.0);
+    }
+
+    // Nas views sem RightWallScene montada (setup, admin, audio-node, controller não-mutado),
+    // dispara também os efeitos mecânicos sincronizados com as fases da missão
+    if (!hasMountedRightWallScene && effectiveView !== 'projector') {
+      if (missionPhase === 'boarding') {
+        playBlastDoorSlamSfx();
+      } else if (missionPhase === 'zero_g') {
+        playHatchEjectSfx();
+      } else if (prev === 'zero_g' && missionPhase === 'exploring') {
+        playCabinDissolveSfx();
+      } else if (missionPhase === 'ended' && typeof window !== 'undefined') {
+        const timer = window.setTimeout(() => {
+          if (!localAudioMutedRef.current) {
+            playLandingThudSfx();
+          }
+        }, 3200);
+        return () => window.clearTimeout(timer);
+      }
+    }
+  }, [effectiveView, hasMountedRightWallScene, localAudioMuted, missionPhase]);
+
+  useEffect(() => {
+    if (hasMountedRightWallScene || effectiveView === 'projector') return;
+
+    const setAllDucked = (ducked: boolean) => {
+      setSpaceAmbientDucked(ducked);
+      setSpatialMusicDucked(ducked);
+    };
+
+    if (localAudioMuted || missionPhase === 'idle') {
+      stopSpeech();
+      setAllDucked(false);
+      return;
+    }
+
+    const frameId = resolveActiveMissionFrameId(missionPhase, storyStep);
+    const layerLabelPtByStep: Record<number, string> = {
+      0: '',
+      1: 'Raios',
+      2: 'Vegetação',
+      3: 'Temperatura',
+      4: 'Relevo',
+      5: 'Ventos',
+    };
+    const layerLabelEnByStep: Record<number, string> = {
+      0: '',
+      1: 'Lightning',
+      2: 'Vegetation',
+      3: 'Temperature',
+      4: 'Elevation',
+      5: 'Wind',
+    };
+    const normStep = ((storyStep % 6) + 6) % 6;
+    const activeLayerLabel =
+      lang === 'pt' ? (layerLabelPtByStep[normStep] ?? '') : (layerLabelEnByStep[normStep] ?? '');
+    const countryName = country ? (lang === 'pt' ? country.namePt : country.nameEn) : 'Terra';
+
+    const prompts = resolveFramePrompts(frameId, {
+      lang,
+      countryName,
+      activeLayerLabel,
+      bpm,
+      keyRoot,
+      keyRootPt,
+      activeChord,
+      windMeanSpeed,
+    });
+
+    if (!prompts.spoken.trim()) return;
+
+    const key = `${frameId}-${country?.id ?? 'none'}-${lang}`;
+    if (headlessSpokenKeyRef.current === key) return;
+    headlessSpokenKeyRef.current = key;
+
+    stopSpeech();
+    setAllDucked(false);
+
+    const startDelayMs = missionPhase === 'briefing' ? 1400 : 180;
+    const timer = window.setTimeout(() => {
+      if (localAudioMutedRef.current) return;
+      speakText(prompts.spoken, lang, true, {
+        maleVoice: true,
+        onStart: () => setAllDucked(true),
+        onEnd: () => setAllDucked(false),
+      });
+    }, startDelayMs);
+
+    return () => {
+      window.clearTimeout(timer);
+      stopSpeech();
+      setAllDucked(false);
+    };
+  }, [
+    activeChord,
+    bpm,
+    country,
+    effectiveView,
+    hasMountedRightWallScene,
+    keyRoot,
+    keyRootPt,
+    lang,
+    localAudioMuted,
+    missionPhase,
+    storyStep,
+    windMeanSpeed,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -2315,16 +2725,24 @@ export const ExperienceProvider: React.FC<{
     () => ({
       speakerCalibration,
       calibTestMode,
+      calibBeatSeq,
+      visualDelayMs,
       outputDevices,
       outputSupportStatus,
+      speakerSinkStatuses,
       isSetSinkIdSupported: audioEngineRef.current?.isSetSinkIdSupported() ?? false,
       isolatedSpeakerSlot,
       setIsolatedSpeakerSlot,
       unlockAudioContext: unlockAudioContextLegacy,
       unlockOutputDevices,
+      retrySpeakerSink,
       updateSpeakerConfig,
+      updateAvOffsetMs,
       setReferenceSpeaker,
       resetSpeakerCalibration,
+      togglePinkNoiseSpeaker,
+      toggleDelayClickSpeaker,
+      toggleHeadphoneDelayClick,
       startPinkNoiseSingle,
       startPinkNoiseAB,
       startDelayClickTest,
@@ -2334,24 +2752,32 @@ export const ExperienceProvider: React.FC<{
       refreshOutputDevices,
     }),
     [
+      calibBeatSeq,
       calibTestMode,
       isolatedSpeakerSlot,
       outputDevices,
       outputSupportStatus,
       refreshOutputDevices,
       resetSpeakerCalibration,
+      retrySpeakerSink,
       setIsolatedSpeakerSlot,
       setReferenceSpeaker,
       speakerCalibration,
+      speakerSinkStatuses,
       startDelayClickAll,
       startDelayClickTest,
       startPinkNoiseAB,
       startPinkNoiseAll,
       startPinkNoiseSingle,
       stopCalibrationSignal,
+      toggleDelayClickSpeaker,
+      toggleHeadphoneDelayClick,
+      togglePinkNoiseSpeaker,
       unlockAudioContextLegacy,
       unlockOutputDevices,
+      updateAvOffsetMs,
       updateSpeakerConfig,
+      visualDelayMs,
     ]
   );
 
@@ -2363,6 +2789,7 @@ export const ExperienceProvider: React.FC<{
       toggleOutputSurface,
       updateOutputConfig,
       updateSurfaceQuad,
+      translateOutputMesh,
       updateEdgeMask,
       resetSingleOutputQuads,
       resetAllProjectionQuads,
@@ -2378,6 +2805,7 @@ export const ExperienceProvider: React.FC<{
       toggleGlobalBlackout,
       toggleGlobalShowGrid,
       toggleOutputSurface,
+      translateOutputMesh,
       triggerIdentifyOutputs,
       updateEdgeMask,
       updateOutputConfig,
@@ -2412,6 +2840,9 @@ export const ExperienceProvider: React.FC<{
       audioSourceKind,
       lanConnected,
       lanClients,
+      roomCode: effectiveRoomCode,
+      syncNetworkMode,
+      regenerateRoomCode,
       layers,
       playback,
       liveEvents,
@@ -2485,6 +2916,7 @@ export const ExperienceProvider: React.FC<{
       beatTimeline,
       compareCountries,
       country,
+      effectiveRoomCode,
       getLiveFrame,
       lanClients,
       lanConnected,
@@ -2505,6 +2937,7 @@ export const ExperienceProvider: React.FC<{
       pngUrls,
       prevStoryStep,
       realAudioRms01,
+      regenerateRoomCode,
       replayActiveFrame,
       reportSpeechStatus,
       resetExperienceToDefault,
@@ -2542,6 +2975,7 @@ export const ExperienceProvider: React.FC<{
       storyStep,
       studioData,
       swapCompareCountries,
+      syncNetworkMode,
       toggleEye,
       togglePauseRobotSpeech,
       togglePlay,

@@ -1,22 +1,28 @@
 /**
  * Gerador QR Code ISO/IEC 18004 nativo em TypeScript puro (Offline-First, Zero Dependências).
- * Suporta URLs de até 106 bytes (Versões 1 a 5, Nível L, Byte Mode).
+ * Suporta URLs de até 271 bytes UTF-8 (Versões 1 a 10, Nível L, Byte Mode, Multi-Block RS + Auto-Mask 0..7).
  */
 
 interface QrVersionSpec {
   version: number;
   size: number;
-  dataCodewords: number;
-  ecCodewords: number;
+  totalDataCodewords: number;
+  ecCodewordsPerBlock: number;
+  numBlocks: number;
   alignmentCenters: number[];
 }
 
 const VERSION_SPECS_L: QrVersionSpec[] = [
-  { version: 1, size: 21, dataCodewords: 19, ecCodewords: 7, alignmentCenters: [] },
-  { version: 2, size: 25, dataCodewords: 34, ecCodewords: 10, alignmentCenters: [6, 18] },
-  { version: 3, size: 29, dataCodewords: 55, ecCodewords: 15, alignmentCenters: [6, 22] },
-  { version: 4, size: 33, dataCodewords: 80, ecCodewords: 20, alignmentCenters: [6, 26] },
-  { version: 5, size: 37, dataCodewords: 108, ecCodewords: 26, alignmentCenters: [6, 30] },
+  { version: 1, size: 21, totalDataCodewords: 19, ecCodewordsPerBlock: 7, numBlocks: 1, alignmentCenters: [] },
+  { version: 2, size: 25, totalDataCodewords: 34, ecCodewordsPerBlock: 10, numBlocks: 1, alignmentCenters: [6, 18] },
+  { version: 3, size: 29, totalDataCodewords: 55, ecCodewordsPerBlock: 15, numBlocks: 1, alignmentCenters: [6, 22] },
+  { version: 4, size: 33, totalDataCodewords: 80, ecCodewordsPerBlock: 20, numBlocks: 1, alignmentCenters: [6, 26] },
+  { version: 5, size: 37, totalDataCodewords: 108, ecCodewordsPerBlock: 26, numBlocks: 1, alignmentCenters: [6, 30] },
+  { version: 6, size: 41, totalDataCodewords: 136, ecCodewordsPerBlock: 18, numBlocks: 2, alignmentCenters: [6, 34] },
+  { version: 7, size: 45, totalDataCodewords: 156, ecCodewordsPerBlock: 20, numBlocks: 2, alignmentCenters: [6, 22, 38] },
+  { version: 8, size: 49, totalDataCodewords: 194, ecCodewordsPerBlock: 24, numBlocks: 2, alignmentCenters: [6, 24, 42] },
+  { version: 9, size: 53, totalDataCodewords: 232, ecCodewordsPerBlock: 30, numBlocks: 2, alignmentCenters: [6, 26, 46] },
+  { version: 10, size: 57, totalDataCodewords: 274, ecCodewordsPerBlock: 18, numBlocks: 4, alignmentCenters: [6, 28, 50] },
 ];
 
 const GF_EXP = new Uint8Array(512);
@@ -68,69 +74,240 @@ function reedSolomonComputeRemainder(data: Uint8Array, ecCount: number): Uint8Ar
   return rem;
 }
 
-function computeFormatBits(ecLevelBits: number, maskPattern: number): number {
+export function computeFormatBits(ecLevelBits: number, maskPattern: number): number {
   const data = ((ecLevelBits & 0x3) << 3) | (maskPattern & 0x7);
   let rem = data << 10;
   for (let i = 14; i >= 10; i--) {
-    if ((rem >> i) & 1) {
+    if ((rem >>> i) & 1) {
       rem ^= 0x537 << (i - 10);
     }
   }
   return ((data << 10) | rem) ^ 0x5412;
 }
 
+function computeVersionBits(version: number): number {
+  let rem = version;
+  for (let i = 0; i < 12; i++) {
+    rem = (rem << 1) ^ ((rem >>> 11) * 0x1f25);
+  }
+  return (version << 12) | rem;
+}
+
+function getBit(val: number, idx: number): boolean {
+  return ((val >>> idx) & 1) === 1;
+}
+
+function evaluateMaskCondition(mask: number, r: number, c: number): boolean {
+  switch (mask) {
+    case 0:
+      return (r + c) % 2 === 0;
+    case 1:
+      return r % 2 === 0;
+    case 2:
+      return c % 3 === 0;
+    case 3:
+      return (r + c) % 3 === 0;
+    case 4:
+      return (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0;
+    case 5:
+      return ((r * c) % 2) + ((r * c) % 3) === 0;
+    case 6:
+      return (((r * c) % 2) + ((r * c) % 3)) % 2 === 0;
+    case 7:
+      return (((r + c) % 2) + ((r * c) % 3)) % 2 === 0;
+    default:
+      return false;
+  }
+}
+
+function writeFormatBitsToMatrix(
+  modules: boolean[][],
+  isFunction: boolean[][],
+  ecLevelBits: number,
+  mask: number
+): void {
+  const n = modules.length;
+  const formatBits = computeFormatBits(ecLevelBits, mask);
+
+  const setF = (r: number, c: number, dark: boolean) => {
+    modules[r][c] = dark;
+    isFunction[r][c] = true;
+  };
+
+  // Cópia 1 ao redor do Finder superior-esquerdo:
+  // LSB (bit 0) em (0, 8) -> MSB (bit 14) em (8, 0)
+  for (let i = 0; i <= 5; i++) setF(i, 8, getBit(formatBits, i));
+  setF(7, 8, getBit(formatBits, 6));
+  setF(8, 8, getBit(formatBits, 7));
+  setF(8, 7, getBit(formatBits, 8));
+  for (let i = 9; i < 15; i++) setF(8, 14 - i, getBit(formatBits, i));
+
+  // Cópia 2: bits 0..7 na linha 8 abaixo do Finder superior-direito;
+  // bits 8..14 na coluna 8 ao lado do Finder inferior-esquerdo (preservando Dark Module em (n - 8, 8))
+  for (let i = 0; i < 8; i++) setF(8, n - 1 - i, getBit(formatBits, i));
+  for (let i = 8; i < 15; i++) setF(n - 15 + i, 8, getBit(formatBits, i));
+  setF(n - 8, 8, true);
+}
+
+function computePenaltyScore(modules: boolean[][]): number {
+  const n = modules.length;
+  let score = 0;
+
+  // Regra 1: 5+ módulos consecutivos da mesma cor em linhas e colunas
+  for (let r = 0; r < n; r++) {
+    let runColor = modules[r][0];
+    let runLen = 1;
+    for (let c = 1; c < n; c++) {
+      if (modules[r][c] === runColor) {
+        runLen++;
+        if (runLen === 5) score += 3;
+        else if (runLen > 5) score += 1;
+      } else {
+        runColor = modules[r][c];
+        runLen = 1;
+      }
+    }
+  }
+  for (let c = 0; c < n; c++) {
+    let runColor = modules[0][c];
+    let runLen = 1;
+    for (let r = 1; r < n; r++) {
+      if (modules[r][c] === runColor) {
+        runLen++;
+        if (runLen === 5) score += 3;
+        else if (runLen > 5) score += 1;
+      } else {
+        runColor = modules[r][c];
+        runLen = 1;
+      }
+    }
+  }
+
+  // Regra 2: blocos 2x2 da mesma cor
+  for (let r = 0; r < n - 1; r++) {
+    for (let c = 0; c < n - 1; c++) {
+      const v = modules[r][c];
+      if (modules[r][c + 1] === v && modules[r + 1][c] === v && modules[r + 1][c + 1] === v) {
+        score += 3;
+      }
+    }
+  }
+
+  // Regra 4: equilíbrio entre módulos escuros e claros
+  let darkCount = 0;
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (modules[r][c]) darkCount++;
+    }
+  }
+  const total = n * n;
+  const k = Math.ceil((Math.abs(darkCount * 20 - total * 10) + total - 1) / total) - 1;
+  score += Math.max(0, k) * 10;
+
+  return score;
+}
+
+function interleaveBlocks(dataBytes: Uint8Array, spec: QrVersionSpec): Uint8Array {
+  const numBlocks = spec.numBlocks;
+  const shortBlockLen = Math.floor(spec.totalDataCodewords / numBlocks);
+  const numLongBlocks = spec.totalDataCodewords % numBlocks;
+  const numShortBlocks = numBlocks - numLongBlocks;
+
+  const dataBlocks: Uint8Array[] = [];
+  const ecBlocks: Uint8Array[] = [];
+  let offset = 0;
+
+  for (let b = 0; b < numBlocks; b++) {
+    const blockLen = shortBlockLen + (b >= numShortBlocks ? 1 : 0);
+    const blockData = dataBytes.subarray(offset, offset + blockLen);
+    offset += blockLen;
+    dataBlocks.push(blockData);
+    ecBlocks.push(reedSolomonComputeRemainder(blockData, spec.ecCodewordsPerBlock));
+  }
+
+  const totalLen = spec.totalDataCodewords + numBlocks * spec.ecCodewordsPerBlock;
+  const result = new Uint8Array(totalLen);
+  let outIdx = 0;
+
+  const maxDataLen = shortBlockLen + (numLongBlocks > 0 ? 1 : 0);
+  for (let i = 0; i < maxDataLen; i++) {
+    for (let b = 0; b < numBlocks; b++) {
+      if (i < dataBlocks[b].length) {
+        result[outIdx++] = dataBlocks[b][i];
+      }
+    }
+  }
+
+  for (let i = 0; i < spec.ecCodewordsPerBlock; i++) {
+    for (let b = 0; b < numBlocks; b++) {
+      result[outIdx++] = ecBlocks[b][i];
+    }
+  }
+
+  return result;
+}
+
 export function encodeQrMatrix(text: string): boolean[][] {
   const utf8 = new TextEncoder().encode(text);
-  // Byte mode: 4 bits mode (0100) + 8 bits length + payload + up to 4 terminator bits
-  const spec =
-    VERSION_SPECS_L.find((s) => utf8.length + 2 <= s.dataCodewords) ??
-    VERSION_SPECS_L[VERSION_SPECS_L.length - 1];
 
-  const payload = utf8.slice(0, spec.dataCodewords - 2);
+  // Versões 1..9 usam 8 bits para tamanho em Byte Mode (+2 bytes overhead); Versão 10+ usa 16 bits (+3 bytes overhead)
+  const spec =
+    VERSION_SPECS_L.find((s) => {
+      const headerOverheadBytes = s.version >= 10 ? 3 : 2;
+      return utf8.length + headerOverheadBytes <= s.totalDataCodewords;
+    }) ?? VERSION_SPECS_L[VERSION_SPECS_L.length - 1];
+
+  const countIndicatorBits = spec.version >= 10 ? 16 : 8;
+  const maxPayloadBytes = spec.totalDataCodewords - (spec.version >= 10 ? 3 : 2);
+  const payload = utf8.slice(0, maxPayloadBytes);
+
   const bits: number[] = [];
   const pushBits = (val: number, len: number) => {
     for (let i = len - 1; i >= 0; i--) {
-      bits.push((val >> i) & 1);
+      bits.push((val >>> i) & 1);
     }
   };
 
   pushBits(0b0100, 4); // Byte mode
-  pushBits(payload.length, 8);
+  pushBits(payload.length, countIndicatorBits);
   for (const byte of payload) {
     pushBits(byte, 8);
   }
 
-  const maxDataBits = spec.dataCodewords * 8;
+  const maxDataBits = spec.totalDataCodewords * 8;
   const termCount = Math.min(4, maxDataBits - bits.length);
   pushBits(0, termCount);
   while (bits.length % 8 !== 0) bits.push(0);
 
-  const dataBytes = new Uint8Array(spec.dataCodewords);
+  const dataBytes = new Uint8Array(spec.totalDataCodewords);
   for (let i = 0; i < bits.length / 8; i++) {
     let b = 0;
     for (let j = 0; j < 8; j++) b = (b << 1) | bits[i * 8 + j];
     dataBytes[i] = b;
   }
   let padIdx = 0;
-  for (let i = bits.length / 8; i < spec.dataCodewords; i++) {
+  for (let i = bits.length / 8; i < spec.totalDataCodewords; i++) {
     dataBytes[i] = padIdx % 2 === 0 ? 0xec : 0x11;
     padIdx++;
   }
 
-  const ecBytes = reedSolomonComputeRemainder(dataBytes, spec.ecCodewords);
-  const allCodewords = new Uint8Array(spec.dataCodewords + spec.ecCodewords);
-  allCodewords.set(dataBytes, 0);
-  allCodewords.set(ecBytes, spec.dataCodewords);
+  const allCodewords = interleaveBlocks(dataBytes, spec);
 
   const n = spec.size;
-  const modules: boolean[][] = Array.from({ length: n }, () => Array<boolean>(n).fill(false));
+  const baseModules: boolean[][] = Array.from({ length: n }, () => Array<boolean>(n).fill(false));
   const isFunction: boolean[][] = Array.from({ length: n }, () => Array<boolean>(n).fill(false));
 
   const setFunc = (r: number, c: number, dark: boolean) => {
     if (r < 0 || r >= n || c < 0 || c >= n) return;
-    modules[r][c] = dark;
+    baseModules[r][c] = dark;
     isFunction[r][c] = true;
   };
+
+  // Timing patterns
+  for (let i = 8; i < n - 8; i++) {
+    setFunc(6, i, i % 2 === 0);
+    setFunc(i, 6, i % 2 === 0);
+  }
 
   // Finder patterns (7x7 + 1px white separator)
   const drawFinder = (topR: number, leftC: number) => {
@@ -146,12 +323,6 @@ export function encodeQrMatrix(text: string): boolean[][] {
   drawFinder(0, 0);
   drawFinder(0, n - 7);
   drawFinder(n - 7, 0);
-
-  // Timing patterns
-  for (let i = 8; i < n - 8; i++) {
-    setFunc(6, i, i % 2 === 0);
-    setFunc(i, 6, i % 2 === 0);
-  }
 
   // Alignment patterns
   const centers = spec.alignmentCenters;
@@ -169,20 +340,22 @@ export function encodeQrMatrix(text: string): boolean[][] {
     }
   }
 
-  // Reserve format info modules + dark module
-  for (let i = 0; i <= 8; i++) {
-    if (i !== 6) {
-      isFunction[8][i] = true;
-      isFunction[i][8] = true;
+  // Version Information (Versões >= 7 possuem dois blocos 6x3)
+  if (spec.version >= 7) {
+    const vBits = computeVersionBits(spec.version);
+    for (let i = 0; i < 18; i++) {
+      const bit = getBit(vBits, i);
+      const a = n - 11 + (i % 3);
+      const b = Math.floor(i / 3);
+      setFunc(b, a, bit);
+      setFunc(a, b, bit);
     }
   }
-  for (let i = 0; i < 8; i++) {
-    isFunction[8][n - 1 - i] = true;
-    isFunction[n - 1 - i][8] = true;
-  }
-  setFunc(n - 8, 8, true); // Dark module
 
-  // Zigzag placement of data + EC bits
+  // Reserva módulos de Format Info + Dark Module antes do preenchimento em ziguezague
+  writeFormatBitsToMatrix(baseModules, isFunction, 0b01, 0);
+
+  // Preenchimento em ziguezague dos codewords (dados + EC) sem máscara inicial
   let bitIdx = 0;
   const totalBits = allCodewords.length * 8;
   let upward = true;
@@ -200,24 +373,36 @@ export function encodeQrMatrix(text: string): boolean[][] {
           dark = ((byte >> (7 - (bitIdx & 7))) & 1) === 1;
           bitIdx++;
         }
-        // Apply Mask Pattern 0: (r + c) % 2 === 0
-        if ((r + c) % 2 === 0) dark = !dark;
-        modules[r][c] = dark;
+        baseModules[r][c] = dark;
       }
     }
     upward = !upward;
   }
 
-  // Write Format Bits (Level L = 0b01, Mask = 0)
-  const formatBits = computeFormatBits(0b01, 0);
-  for (let i = 0; i <= 5; i++) setFunc(8, i, ((formatBits >> i) & 1) === 1);
-  setFunc(8, 7, ((formatBits >> 6) & 1) === 1);
-  setFunc(8, 8, ((formatBits >> 7) & 1) === 1);
-  setFunc(7, 8, ((formatBits >> 8) & 1) === 1);
-  for (let i = 9; i < 15; i++) setFunc(14 - i, 8, ((formatBits >> i) & 1) === 1);
+  // Seleciona automaticamente a melhor máscara (0..7) segundo penalidade ISO/IEC 18004
+  let bestMask = 0;
+  let bestPenalty = Number.POSITIVE_INFINITY;
+  let bestMatrix: boolean[][] = baseModules;
 
-  for (let i = 0; i < 8; i++) setFunc(n - 1 - i, 8, ((formatBits >> i) & 1) === 1);
-  for (let i = 8; i < 15; i++) setFunc(8, n - 15 + i, ((formatBits >> i) & 1) === 1);
+  for (let mask = 0; mask < 8; mask++) {
+    const candidate = baseModules.map((row) => [...row]);
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        if (!isFunction[r][c] && evaluateMaskCondition(mask, r, c)) {
+          candidate[r][c] = !candidate[r][c];
+        }
+      }
+    }
+    writeFormatBitsToMatrix(candidate, isFunction, 0b01, mask);
+    const penalty = computePenaltyScore(candidate);
+    if (penalty < bestPenalty) {
+      bestPenalty = penalty;
+      bestMask = mask;
+      bestMatrix = candidate;
+    }
+  }
 
-  return modules;
+  // Garante os format bits finais para bestMask
+  writeFormatBitsToMatrix(bestMatrix, isFunction, 0b01, bestMask);
+  return bestMatrix;
 }

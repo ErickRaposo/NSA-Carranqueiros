@@ -3,12 +3,14 @@ import { DatasetId } from '../datasets/nasaDatasets';
 export type Lang = 'pt' | 'en';
 export type ViewRole =
   | 'setup'
+  | 'admin'
   | 'simulator'
   | 'projector'
   | 'controller'
   | 'demo'
   | 'portal'
   | 'audio-node';
+export type SyncNetworkMode = 'isolated' | 'lan-ws' | 'cloud-room';
 export type ProjectorOutId = 1 | 2 | 3 | 4;
 export type SpeakerNodeIndex = 1 | 2 | 3;
 export type MissionPhase =
@@ -435,6 +437,12 @@ export interface ExperienceContextValue {
   audioContextState: AudioContextState | 'uninitialized';
   /** Nível RMS real medido pelo AnalyserNode do Web Audio [0..1] */
   realAudioRms01: number;
+  /** Código da sala ativa na URL (?room=XXXXXX) ou null quando visitante isolado */
+  roomCode: string | null;
+  /** Modo de barramento de rede ativo ('isolated' | 'lan-ws' | 'cloud-room') */
+  syncNetworkMode: SyncNetworkMode;
+  /** Gera um novo código de sala de 6 caracteres e atualiza a URL atual */
+  regenerateRoomCode: () => string;
   /** Dono do áudio na instalação física (PC Mestre, Tablet ou Ambos) */
   audioOwner: AudioOwnerRole;
 

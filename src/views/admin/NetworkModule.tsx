@@ -1,18 +1,31 @@
-import React, { useMemo } from 'react';
-import { Activity, Check, Copy, Database, QrCode, RefreshCw } from 'lucide-react';
-import { LanPeerInfo } from '../../experience/types';
-import { AdminSelect } from './AdminSelect';
+import React from 'react';
+import {
+  Activity,
+  Check,
+  Cloud,
+  Copy,
+  Database,
+  Lock,
+  QrCode,
+  RefreshCw,
+  RotateCcw,
+  Wifi,
+} from 'lucide-react';
+import { LanPeerInfo, SyncNetworkMode } from '../../experience/types';
+import { isSupabaseRealtimeConfigured } from '../../lan/roomRealtimeClient';
 import { ADMIN_FOCUS, ADMIN_PANEL_CLASS, ADMIN_WELL_CLASS, LanServerInfo } from './adminMeta';
 
 interface NetworkModuleProps {
   isPt: boolean;
   lanInfo: LanServerInfo;
-  selectedHostIp: string;
   tabletUrl: string;
   qrModules: boolean[][];
   copiedKey: string | null;
   lanClients: LanPeerInfo[];
-  onSetSelectedHostIp: (ip: string) => void;
+  roomCode?: string | null;
+  syncNetworkMode?: SyncNetworkMode;
+  lanConnected?: boolean;
+  onRegenerateRoomCode?: () => void;
   onCopyText: (key: string, text: string) => void;
   onRefreshLan: () => void;
 }
@@ -20,41 +33,104 @@ interface NetworkModuleProps {
 export const NetworkModule: React.FC<NetworkModuleProps> = ({
   isPt,
   lanInfo,
-  selectedHostIp,
   tabletUrl,
   qrModules,
   copiedKey,
   lanClients,
-  onSetSelectedHostIp,
+  roomCode,
+  syncNetworkMode = 'lan-ws',
+  lanConnected = false,
+  onRegenerateRoomCode,
   onCopyText,
   onRefreshLan,
 }) => {
-  const ipOptions = useMemo(
-    () =>
-      lanInfo.lanIps.map((ip) => ({
-        value: ip,
-        label: `${ip}:${lanInfo.port}`,
-      })),
-    [lanInfo.lanIps, lanInfo.port]
-  );
+  const cloudReady = isSupabaseRealtimeConfigured();
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-      {/* Coluna Esquerda: QR Pairing + Receptores LAN */}
+      {/* Coluna Esquerda: Código da Sala + QR Pairing */}
       <div className="flex flex-col gap-4 lg:col-span-5">
         <section className={`flex flex-col gap-3.5 p-4 ${ADMIN_PANEL_CLASS}`}>
-          <div className="flex items-center gap-2 text-sm font-semibold tracking-[-0.01em] text-slate-50">
-            <QrCode size={16} className="text-slate-300" />
-            <h2>
-              {isPt
-                ? 'Pareamento Offline do Tablet · Wi-Fi LAN'
-                : 'Offline Tablet Pairing · Wi-Fi LAN'}
-            </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-semibold tracking-[-0.01em] text-slate-50">
+              <QrCode size={16} className="text-slate-300" />
+              <h2>
+                {isPt
+                  ? 'Sala Exclusiva & Pareamento Mobile'
+                  : 'Dedicated Room & Mobile Pairing'}
+              </h2>
+            </div>
+
+            {roomCode && (
+              <span className="rounded-lg border border-[#2563eb]/55 bg-[#0c1a36] px-2.5 py-1 text-xs font-semibold tracking-wider text-[#7dd3fc] [font-variant-numeric:tabular-nums]">
+                {roomCode}
+              </span>
+            )}
+          </div>
+
+          <div className={`flex flex-wrap items-center justify-between gap-2 p-3 ${ADMIN_WELL_CLASS}`}>
+            <div className="flex items-center gap-2 text-xs">
+              {syncNetworkMode === 'cloud-room' ? (
+                <Cloud size={15} className={lanConnected ? 'text-emerald-400' : 'text-amber-300'} />
+              ) : syncNetworkMode === 'lan-ws' ? (
+                <Wifi size={15} className={lanConnected ? 'text-emerald-400' : 'text-sky-400'} />
+              ) : (
+                <Lock size={15} className="text-slate-400" />
+              )}
+              <div>
+                <div className="font-semibold text-slate-100">
+                  {syncNetworkMode === 'cloud-room'
+                    ? isPt
+                      ? `Sala Online (room=${roomCode ?? '—'})`
+                      : `Cloud Room (room=${roomCode ?? '—'})`
+                    : syncNetworkMode === 'lan-ws'
+                      ? isPt
+                        ? `LAN Local (/ws-earth-sync${roomCode ? ` · ${roomCode}` : ''})`
+                        : `Local LAN (/ws-earth-sync${roomCode ? ` · ${roomCode}` : ''})`
+                      : isPt
+                        ? 'Isolado (Sem Sala)'
+                        : 'Isolated (No Room)'}
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  {syncNetworkMode === 'cloud-room'
+                    ? cloudReady
+                      ? lanConnected
+                        ? isPt
+                          ? 'Conectado via HTTPS/WSS (Wi-Fi ou 4G/5G)'
+                          : 'Connected via HTTPS/WSS (Wi-Fi or 4G/5G)'
+                        : isPt
+                          ? 'Conectando ao canal Realtime...'
+                          : 'Connecting to Realtime channel...'
+                      : isPt
+                        ? 'Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY para sincronia na nuvem'
+                        : 'Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY for cloud sync'
+                    : syncNetworkMode === 'lan-ws'
+                      ? isPt
+                        ? 'Sincronia offline direta na rede local'
+                        : 'Direct offline sync on local network'
+                      : isPt
+                        ? 'Apenas abas locais deste navegador'
+                        : 'Local browser tabs only'}
+                </div>
+              </div>
+            </div>
+
+            {onRegenerateRoomCode && (
+              <button
+                type="button"
+                onClick={onRegenerateRoomCode}
+                className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full border border-[#1e3a66] bg-[#060c1a] px-3 text-xs font-medium text-slate-200 transition hover:border-[#2563eb] hover:text-white ${ADMIN_FOCUS}`}
+              >
+                <RotateCcw size={12} />
+                <span>{isPt ? 'Gerar nova sala' : 'New room'}</span>
+              </button>
+            )}
           </div>
 
           <div className="mx-auto flex items-center justify-center rounded-xl border border-[#1e3a66]/55 bg-white p-3.5">
             <svg
-              viewBox={`0 0 ${qrModules.length + 4} ${qrModules.length + 4}`}
+              viewBox={`0 0 ${qrModules.length + 8} ${qrModules.length + 8}`}
+              shapeRendering="crispEdges"
               className="h-40 w-40"
               role="img"
               aria-label="Tablet Controller QR Code"
@@ -62,8 +138,8 @@ export const NetworkModule: React.FC<NetworkModuleProps> = ({
               <rect
                 x={0}
                 y={0}
-                width={qrModules.length + 4}
-                height={qrModules.length + 4}
+                width={qrModules.length + 8}
+                height={qrModules.length + 8}
                 fill="#ffffff"
               />
               {qrModules.map((row, r) =>
@@ -71,29 +147,17 @@ export const NetworkModule: React.FC<NetworkModuleProps> = ({
                   dark ? (
                     <rect
                       key={`${r}-${c}`}
-                      x={c + 2}
-                      y={r + 2}
+                      x={c + 4}
+                      y={r + 4}
                       width={1}
                       height={1}
-                      fill="#060913"
+                      fill="#000000"
                     />
                   ) : null
                 )
               )}
             </svg>
           </div>
-
-          {lanInfo.lanIps.length > 0 && (
-            <div className="flex flex-col gap-1.5 text-xs text-slate-300">
-              <span>{isPt ? 'IP da Placa Wi-Fi deste PC' : 'Master PC Wi-Fi IP'}</span>
-              <AdminSelect
-                ariaLabel="Master PC Wi-Fi IP"
-                value={selectedHostIp}
-                options={ipOptions}
-                onChange={onSetSelectedHostIp}
-              />
-            </div>
-          )}
 
           <div className="flex items-center gap-2">
             <input
@@ -125,9 +189,13 @@ export const NetworkModule: React.FC<NetworkModuleProps> = ({
             <div className="flex items-center gap-2 text-sm font-semibold tracking-[-0.01em] text-slate-50">
               <Activity size={16} className="text-slate-300" />
               <h2>
-                {isPt
-                  ? 'Dispositivos no Barramento · /ws-earth-sync'
-                  : 'Connected Room Bus Nodes · /ws-earth-sync'}
+                {syncNetworkMode === 'cloud-room'
+                  ? isPt
+                    ? `Dispositivos na Sala · ${roomCode ?? 'Online'}`
+                    : `Connected Room Peers · ${roomCode ?? 'Cloud'}`
+                  : isPt
+                    ? 'Dispositivos no Barramento · /ws-earth-sync'
+                    : 'Connected Room Bus Nodes · /ws-earth-sync'}
               </h2>
             </div>
             <button
@@ -142,9 +210,13 @@ export const NetworkModule: React.FC<NetworkModuleProps> = ({
 
           {lanClients.length === 0 ? (
             <div className={`p-4 text-xs leading-relaxed text-slate-400 ${ADMIN_WELL_CLASS}`}>
-              {isPt
-                ? 'Sincronização local BroadcastChannel ativa. Quando `npm run dev` estiver rodando, os nós da rede Wi-Fi aparecem aqui.'
-                : 'Local BroadcastChannel sync active. Wi-Fi LAN nodes appear here when `npm run dev` is running.'}
+              {syncNetworkMode === 'cloud-room'
+                ? isPt
+                  ? `Sala ${roomCode ?? ''} pronta. Assim que você abrir o QR Code no celular ou um projetor com &room=${roomCode ?? ''}, os aparelhos conectados aparecem aqui em tempo real.`
+                  : `Room ${roomCode ?? ''} ready. Once a phone or projector opens with &room=${roomCode ?? ''}, active peers appear here live.`
+                : isPt
+                  ? 'Sincronização local ativa. Quando `npm run dev` ou `npm run preview` estiver rodando, os aparelhos conectados nesta sala aparecem aqui.'
+                  : 'Local sync active. Connected room devices appear here when `npm run dev` or `npm run preview` is running.'}
             </div>
           ) : (
             <div className={`divide-y divide-[#1e3a66]/45 p-2 ${ADMIN_WELL_CLASS}`}>

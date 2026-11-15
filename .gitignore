@@ -2,6 +2,11 @@ node_modules
 dist
 dist-ssr
 *.local
+
+# Variáveis de ambiente (.env, .env.production, etc. — preservando o exemplo)
+.env
+.env.*
+!.env.example
 tsconfig.tsbuildinfo
 __pycache__/
 *.pyc
