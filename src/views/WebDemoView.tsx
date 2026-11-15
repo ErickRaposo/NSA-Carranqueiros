@@ -20,6 +20,8 @@ export type DemoLayoutMode = 'split' | 'tablet' | 'room2d';
 interface WebDemoViewProps {
   onBackToHub?: () => void;
   onOpenSetup?: () => void;
+  highContrast?: boolean;
+  fontScale?: number;
 }
 
 /**
@@ -30,6 +32,8 @@ interface WebDemoViewProps {
 export const WebDemoView: React.FC<WebDemoViewProps> = ({
   onBackToHub,
   onOpenSetup,
+  highContrast = false,
+  fontScale = 1,
 }) => {
   const { lang, setLang, voiceAutoEnabled, setVoiceAutoEnabled } = useExperience();
   const isPt = lang === 'pt';
@@ -71,9 +75,23 @@ export const WebDemoView: React.FC<WebDemoViewProps> = ({
 
   return (
     <main
-      className="flex h-dvh w-screen flex-col overflow-hidden bg-[#060913] font-['Poppins',system-ui,sans-serif] text-slate-50"
+      className={`flex h-dvh w-screen flex-col overflow-hidden bg-[#060913] font-['Poppins',system-ui,sans-serif] text-slate-50${
+        highContrast ? ' high-contrast' : ''
+      }`}
+      style={
+        fontScale !== 1
+          ? ({
+              fontSize: `${Math.round(fontScale * 100)}%`,
+              '--font-scale': fontScale,
+            } as React.CSSProperties)
+          : undefined
+      }
+      data-a11y-scaled={fontScale > 1 ? 'true' : undefined}
       data-testid="web-demo-view"
     >
+      <a href="#demo-main-content" className="skip-link">
+        {isPt ? 'Pular para o conteúdo principal' : 'Skip to main content'}
+      </a>
       {/* Header único alinhado à identidade visual do Painel Técnico (CockpitHeader) */}
       <header className="flex min-h-[56px] shrink-0 flex-wrap items-center justify-between gap-2.5 border-b border-[#1e3a66]/55 bg-[#040b1a] px-3.5 py-2 lg:px-5">
         {/* Esquerda: Seta Voltar (tela intermediária do Erick / Portal) + Marca + Áudio 8D */}
@@ -120,23 +138,32 @@ export const WebDemoView: React.FC<WebDemoViewProps> = ({
               {
                 id: 'split',
                 label: isPt ? 'Dividido' : 'Split',
+                ariaLabel: isPt
+                  ? 'Visualizar Quarto 3D Projetado e Controle do Tablet divididos'
+                  : 'Show 3D Projected Room and Tablet Controller split view',
                 Icon: Columns2,
                 testId: 'demo-mode-split',
               },
               {
                 id: 'tablet',
                 label: isPt ? 'Estender Tablet' : 'Full Tablet',
+                ariaLabel: isPt
+                  ? 'Visualizar apenas Controle do Tablet'
+                  : 'Show Tablet Controller only',
                 Icon: Tablet,
                 testId: 'demo-mode-tablet',
               },
               {
                 id: 'room2d',
                 label: isPt ? 'Simulação 2D' : '2D Simulation',
+                ariaLabel: isPt
+                  ? 'Visualizar Quarto 3D Projetado em Simulação 2D das 3 telas'
+                  : 'Show 3D Projected Room in 2D 3-screen simulation',
                 Icon: Columns3,
                 testId: 'demo-mode-room2d',
               },
             ] as const
-          ).map(({ id, label, Icon, testId }) => {
+          ).map(({ id, label, ariaLabel, Icon, testId }) => {
             const active = layoutMode === id;
             return (
               <button
@@ -144,6 +171,7 @@ export const WebDemoView: React.FC<WebDemoViewProps> = ({
                 type="button"
                 data-testid={testId}
                 aria-pressed={active}
+                aria-label={ariaLabel}
                 onClick={() => handleSelectLayout(id)}
                 className={`inline-flex min-h-[34px] cursor-pointer items-center gap-1.5 rounded-full border px-3 text-xs transition ${ADMIN_FOCUS} ${
                   active
@@ -216,34 +244,42 @@ export const WebDemoView: React.FC<WebDemoViewProps> = ({
         </div>
       </header>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
+      <div id="demo-main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
         {showRoom && (
-          <div
+          <section
+            aria-label={isPt ? 'Visualização do Quarto 3D Projetado' : '3D Projected Room View'}
             className={
               layoutMode === 'room2d'
                 ? 'h-full min-h-0 w-full min-w-0 flex-1'
                 : 'h-1/2 min-h-0 w-full min-w-0 shrink-0 border-b border-[#1e3a66]/55 lg:h-full lg:w-1/2 lg:border-r lg:border-b-0'
             }
           >
+            <h2 className="sr-only">
+              {isPt ? 'Quarto 3D Projetado' : '3D Projected Room'}
+            </h2>
             <SimulatorView
               embedded={true}
               preset={roomPreset}
               onPresetChange={setRoomPreset}
               hideBrandTitle={true}
             />
-          </div>
+          </section>
         )}
 
         {showTablet && (
-          <div
+          <section
+            aria-label={isPt ? 'Controle do Tablet' : 'Tablet Controller'}
             className={
               layoutMode === 'tablet'
                 ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
                 : 'flex h-1/2 min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden lg:h-full lg:w-1/2'
             }
           >
-            <TabletControllerView embeddedInDemo={true} />
-          </div>
+            <h2 className="sr-only">
+              {isPt ? 'Controle do Tablet' : 'Tablet Controller'}
+            </h2>
+            <TabletControllerView embeddedInDemo={true} highContrast={highContrast} />
+          </section>
         )}
       </div>
     </main>

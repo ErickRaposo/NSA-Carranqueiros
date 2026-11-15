@@ -366,6 +366,7 @@ export interface SceneSurfaceProps {
   heightCm: number;
   aspectRatio: number;
   renderContext: 'projector' | 'simulator' | 'demo';
+  globeRotationPaused?: boolean;
 }
 
 export interface LanPeerInfo {

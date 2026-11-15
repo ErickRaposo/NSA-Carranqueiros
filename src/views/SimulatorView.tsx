@@ -125,6 +125,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
   const [zoomScale, setZoomScale] = useState<number>(1.32);
   const [showSeamGuides, setShowSeamGuides] = useState<boolean>(true);
   const [showControlDock, setShowControlDock] = useState<boolean>(!embedded);
+  const [globeRotationPaused, setGlobeRotationPaused] = useState<boolean>(false);
 
   const dragStateRef = useRef<{
     startX: number;
@@ -223,32 +224,68 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
         <div className="flex shrink-0 flex-nowrap items-center gap-1.5">
           {(
             [
-              ['overview', isPt ? 'Canto 3D' : '3D Corner', Box],
-              ['visitor', isPt ? 'Visão Visitante' : 'Visitor POV', Maximize2],
-              ['ceiling', isPt ? 'Olhar p/ Teto' : 'Look at Ceiling', ArrowUp],
-              ['flat', isPt ? '2D · 3 Telas' : '2D · 3 Screens', Columns3],
+              ['overview', isPt ? 'Canto 3D' : '3D Corner', isPt ? 'Visualizar Quarto 3D Projetado — Canto 3D' : 'Show 3D Projected Room — 3D Corner', Box],
+              ['visitor', isPt ? 'Visão Visitante' : 'Visitor POV', isPt ? 'Visualizar Quarto 3D Projetado — Visão do Visitante' : 'Show 3D Projected Room — Visitor POV', Maximize2],
+              ['ceiling', isPt ? 'Olhar p/ Teto' : 'Look at Ceiling', isPt ? 'Visualizar Quarto 3D Projetado — Olhar para o Teto' : 'Show 3D Projected Room — Look at Ceiling', ArrowUp],
+              ['flat', isPt ? '2D · 3 Telas' : '2D · 3 Screens', isPt ? 'Visualizar Quarto Projetado em 2D — 3 Telas' : 'Show Projected Room in 2D — 3 Screens', Columns3],
             ] as const
-          ).map(([id, label, Icon]) => (
+          ).map(([id, label, ariaLabel, Icon]) => (
             <button
               key={id}
               type="button"
               onClick={() => applyPreset(id)}
-              className={`inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-semibold tracking-tight transition ${
+              aria-pressed={preset === id}
+              aria-label={ariaLabel}
+              className={`inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-semibold tracking-tight transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
                 preset === id
                   ? 'border-[#2563eb]/75 bg-[#0c1a36] text-white'
                   : 'border-[#1e3a66]/65 bg-[#060c1a] text-slate-300 hover:border-[#2563eb]/60 hover:text-white'
               }`}
             >
-              <Icon size={12} />
+              <Icon size={12} aria-hidden="true" />
               <span>{label}</span>
             </button>
           ))}
+
+          <button
+            type="button"
+            onClick={() => setGlobeRotationPaused((v) => !v)}
+            data-testid="simulator-globe-rotation-toggle"
+            aria-pressed={globeRotationPaused}
+            aria-label={
+              globeRotationPaused
+                ? isPt
+                  ? 'Retomar rotação do globo 3D'
+                  : 'Resume 3D globe rotation'
+                : isPt
+                  ? 'Pausar rotação do globo 3D'
+                  : 'Pause 3D globe rotation'
+            }
+            title={
+              globeRotationPaused
+                ? isPt
+                  ? 'Retomar rotação do globo 3D'
+                  : 'Resume 3D globe rotation'
+                : isPt
+                  ? 'Pausar rotação do globo 3D'
+                  : 'Pause 3D globe rotation'
+            }
+            className={`inline-flex min-h-[30px] shrink-0 cursor-pointer items-center gap-1 rounded-full border px-2.5 text-[11px] font-semibold tracking-tight transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
+              globeRotationPaused
+                ? 'border-amber-400/50 bg-amber-400/15 text-amber-200'
+                : 'border-[#1e3a66]/65 bg-[#060c1a] text-slate-300 hover:border-[#2563eb]/60 hover:text-white'
+            }`}
+          >
+            {globeRotationPaused ? <Play size={11} aria-hidden="true" /> : <Pause size={11} aria-hidden="true" />}
+            <span>{isPt ? (globeRotationPaused ? 'Globo Pausado' : 'Pausar Globo') : globeRotationPaused ? 'Globe Paused' : 'Pause Globe'}</span>
+          </button>
 
           {preset !== 'flat' && (
             <button
               type="button"
               onClick={() => setShowSeamGuides((v) => !v)}
-              className={`min-h-[30px] shrink-0 cursor-pointer rounded-full border px-2.5 text-[11px] font-semibold tracking-tight transition ${
+              aria-pressed={showSeamGuides}
+              className={`min-h-[30px] shrink-0 cursor-pointer rounded-full border px-2.5 text-[11px] font-semibold tracking-tight transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
                 showSeamGuides
                   ? 'border-[#1e3a66]/65 bg-[#060c1a] text-slate-200 hover:border-[#2563eb]/60'
                   : 'border-[#1e3a66]/45 bg-transparent text-slate-400 hover:text-slate-200'
@@ -300,6 +337,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                   heightCm={roomDimensions.leftWall.heightCm}
                   aspectRatio={leftAspect}
                   renderContext={embedded ? 'demo' : 'simulator'}
+                  globeRotationPaused={globeRotationPaused}
                 />
               </LogicalSceneViewport>
             </div>
@@ -414,6 +452,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
                   heightCm={roomDimensions.leftWall.heightCm}
                   aspectRatio={leftAspect}
                   renderContext={embedded ? 'demo' : 'simulator'}
+                  globeRotationPaused={globeRotationPaused}
                 />
               </LogicalSceneViewport>
             </div>
