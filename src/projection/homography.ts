@@ -1,3 +1,10 @@
+import {
+  PROJECTOR_OUT_IDS,
+  ProjectorOutId,
+  SURFACE_IDS,
+  SurfaceId,
+} from '../experience/types';
+
 export interface Point2D {
   x: number;
   y: number;
@@ -9,19 +16,39 @@ export interface Point2D {
  */
 export type QuadCorners = [Point2D, Point2D, Point2D, Point2D];
 
-export type CalibrationSurfaceKey =
-  | 'out1-leftWall'
-  | 'out1-rightWall'
-  | 'out2-ceiling'
-  | 'out3-rightWall';
+export type CalibrationSurfaceKey = `out${ProjectorOutId}-${SurfaceId}`;
+
+export type ProjectionTopologyPreset =
+  | '3-projectors'
+  | '2-projectors'
+  | '1-projector'
+  | 'custom';
+
+export interface ProjectorOutputConfig {
+  outId: ProjectorOutId;
+  surfaces: SurfaceId[];
+  showGrid: boolean;
+  blackout: boolean;
+}
 
 export interface ProjectionCalibrationState {
+  preset: ProjectionTopologyPreset;
   showGrid: boolean;
+  globalBlackout: boolean;
+  identifyUntil: number;
+  outputs: Record<ProjectorOutId, ProjectorOutputConfig>;
   quads: Record<CalibrationSurfaceKey, QuadCorners>;
 }
 
-export const CALIBRATION_STORAGE_KEY = 'earth-jukebox-calibration-v1';
+export const CALIBRATION_STORAGE_KEY = 'earth-jukebox-calibration-v2';
 export const CALIBRATION_CHANNEL_NAME = 'earth-jukebox-calibration-sync-v1';
+
+export function makeSurfaceQuadKey(
+  outId: ProjectorOutId,
+  surfaceId: SurfaceId
+): CalibrationSurfaceKey {
+  return `out${outId}-${surfaceId}`;
+}
 
 export function createIdentityQuad(
   x0 = 0,
@@ -37,19 +64,165 @@ export function createIdentityQuad(
   ];
 }
 
-export function createDefaultCalibrationState(): ProjectionCalibrationState {
+function createAllIdentityQuads(): Record<CalibrationSurfaceKey, QuadCorners> {
+  const quads = {} as Record<CalibrationSurfaceKey, QuadCorners>;
+  for (const outId of PROJECTOR_OUT_IDS) {
+    for (const sId of SURFACE_IDS) {
+      quads[makeSurfaceQuadKey(outId, sId)] = createIdentityQuad(0, 0, 1, 1);
+    }
+  }
+  return quads;
+}
+
+/**
+ * Distribui automaticamente os quadriláteros das superfícies atribuídas a uma saída HDMI
+ * aproveitando 100% da resolução quando há 1 superfície, 50/50 quando há 2, ou layout canto quando há 3.
+ */
+export function buildAutoQuadsForSurfaces(
+  outId: ProjectorOutId,
+  surfaces: SurfaceId[],
+  baseQuads: Record<CalibrationSurfaceKey, QuadCorners>
+): Record<CalibrationSurfaceKey, QuadCorners> {
+  const next = { ...baseQuads };
+  if (surfaces.length === 1) {
+    next[makeSurfaceQuadKey(outId, surfaces[0])] = createIdentityQuad(0, 0, 1, 1);
+  } else if (surfaces.length === 2) {
+    next[makeSurfaceQuadKey(outId, surfaces[0])] = createIdentityQuad(0, 0, 0.5, 1);
+    next[makeSurfaceQuadKey(outId, surfaces[1])] = createIdentityQuad(0.5, 0, 1, 1);
+  } else if (surfaces.length >= 3) {
+    // Caso 1 Projetor Grande-Angular: Teto em cima, Parede Esq embaixo-esq, Parede Dir embaixo-dir
+    const hasCeiling = surfaces.includes('ceiling');
+    if (hasCeiling) {
+      next[makeSurfaceQuadKey(outId, 'ceiling')] = createIdentityQuad(0.15, 0, 0.85, 0.45);
+      next[makeSurfaceQuadKey(outId, 'leftWall')] = createIdentityQuad(0, 0.45, 0.5, 1);
+      next[makeSurfaceQuadKey(outId, 'rightWall')] = createIdentityQuad(0.5, 0.45, 1, 1);
+    } else {
+      surfaces.forEach((sId, idx) => {
+        const w = 1 / surfaces.length;
+        next[makeSurfaceQuadKey(outId, sId)] = createIdentityQuad(
+          Number((idx * w).toFixed(4)),
+          0,
+          Number(((idx + 1) * w).toFixed(4)),
+          1
+        );
+      });
+    }
+  }
+  return next;
+}
+
+export function applyProjectionPreset(
+  preset: Exclude<ProjectionTopologyPreset, 'custom'>,
+  prev?: ProjectionCalibrationState
+): ProjectionCalibrationState {
+  let quads = createAllIdentityQuads();
+  let outputs: Record<ProjectorOutId, ProjectorOutputConfig>;
+
+  if (preset === '3-projectors') {
+    // 1 Projetor dedicado por superfície (100% da resolução nativa em cada parede e teto)
+    outputs = {
+      1: { outId: 1, surfaces: ['leftWall'], showGrid: false, blackout: false },
+      2: { outId: 2, surfaces: ['rightWall'], showGrid: false, blackout: false },
+      3: { outId: 3, surfaces: ['ceiling'], showGrid: false, blackout: false },
+      4: { outId: 4, surfaces: [], showGrid: false, blackout: false },
+    };
+  } else if (preset === '1-projector') {
+    // 1 Projetor único grande-angular cobrindo Canto em L + Teto
+    outputs = {
+      1: {
+        outId: 1,
+        surfaces: ['leftWall', 'rightWall', 'ceiling'],
+        showGrid: false,
+        blackout: false,
+      },
+      2: { outId: 2, surfaces: [], showGrid: false, blackout: false },
+      3: { outId: 3, surfaces: [], showGrid: false, blackout: false },
+      4: { outId: 4, surfaces: [], showGrid: false, blackout: false },
+    };
+  } else {
+    // Default '2-projectors': Out 1 = Canto em L (Esq + Dir), Out 2 = Teto
+    outputs = {
+      1: { outId: 1, surfaces: ['leftWall', 'rightWall'], showGrid: false, blackout: false },
+      2: { outId: 2, surfaces: ['ceiling'], showGrid: false, blackout: false },
+      3: { outId: 3, surfaces: [], showGrid: false, blackout: false },
+      4: { outId: 4, surfaces: [], showGrid: false, blackout: false },
+    };
+  }
+
+  for (const outId of PROJECTOR_OUT_IDS) {
+    quads = buildAutoQuadsForSurfaces(outId, outputs[outId].surfaces, quads);
+  }
+
   return {
-    showGrid: false,
-    quads: {
-      // Projetor 1 (Canto em L): metade esquerda = Parede Esq, metade direita = Parede Dir
-      'out1-leftWall': createIdentityQuad(0, 0, 0.5, 1),
-      'out1-rightWall': createIdentityQuad(0.5, 0, 1, 1),
-      // Projetor 2 (Teto): tela cheia
-      'out2-ceiling': createIdentityQuad(0, 0, 1, 1),
-      // Saída Auxiliar 3: tela cheia
-      'out3-rightWall': createIdentityQuad(0, 0, 1, 1),
+    preset,
+    showGrid: prev?.showGrid ?? false,
+    globalBlackout: false,
+    identifyUntil: 0,
+    outputs,
+    quads,
+  };
+}
+
+export function createDefaultCalibrationState(): ProjectionCalibrationState {
+  return applyProjectionPreset('2-projectors');
+}
+
+const SURFACE_SORT_ORDER: Record<SurfaceId, number> = {
+  leftWall: 0,
+  rightWall: 1,
+  ceiling: 2,
+};
+
+/**
+ * Liga/desliga uma superfície em uma saída física `Out 1..4` na matriz Patchbay,
+ * redistribuindo automaticamente os quads daquela saída para ocupar 100% da área útil.
+ */
+export function toggleSurfaceOnOutput(
+  state: ProjectionCalibrationState,
+  outId: ProjectorOutId,
+  surfaceId: SurfaceId
+): ProjectionCalibrationState {
+  const current = state.outputs[outId]?.surfaces ?? [];
+  const exists = current.includes(surfaceId);
+  const nextSurfaces = exists
+    ? current.filter((s) => s !== surfaceId)
+    : [...current, surfaceId].sort((a, b) => SURFACE_SORT_ORDER[a] - SURFACE_SORT_ORDER[b]);
+
+  const nextOutputs: Record<ProjectorOutId, ProjectorOutputConfig> = {
+    ...state.outputs,
+    [outId]: {
+      ...state.outputs[outId],
+      surfaces: nextSurfaces,
     },
   };
+
+  const nextQuads = buildAutoQuadsForSurfaces(outId, nextSurfaces, state.quads);
+
+  return {
+    ...state,
+    preset: 'custom',
+    outputs: nextOutputs,
+    quads: nextQuads,
+  };
+}
+
+export function resetOutputQuads(
+  state: ProjectionCalibrationState,
+  outId: ProjectorOutId
+): ProjectionCalibrationState {
+  const surfaces = state.outputs[outId]?.surfaces ?? [];
+  return {
+    ...state,
+    quads: buildAutoQuadsForSurfaces(outId, surfaces, state.quads),
+  };
+}
+
+export function isProjectionStateValid(
+  candidate: unknown
+): candidate is ProjectionCalibrationState {
+  if (!candidate || typeof candidate !== 'object') return false;
+  const obj = candidate as Partial<ProjectionCalibrationState>;
+  return Boolean(obj.outputs && obj.quads);
 }
 
 export function loadCalibrationState(): ProjectionCalibrationState {
@@ -59,9 +232,30 @@ export function loadCalibrationState(): ProjectionCalibrationState {
     const raw = window.localStorage.getItem(CALIBRATION_STORAGE_KEY);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<ProjectionCalibrationState>;
-    if (!parsed || typeof parsed !== 'object' || !parsed.quads) return fallback;
+    if (!parsed || typeof parsed !== 'object' || !parsed.quads || !parsed.outputs) {
+      return fallback;
+    }
+
+    const mergedOutputs = { ...fallback.outputs };
+    for (const outId of PROJECTOR_OUT_IDS) {
+      if (parsed.outputs[outId]) {
+        mergedOutputs[outId] = {
+          ...fallback.outputs[outId],
+          ...parsed.outputs[outId],
+          outId,
+          surfaces: Array.isArray(parsed.outputs[outId].surfaces)
+            ? parsed.outputs[outId].surfaces
+            : fallback.outputs[outId].surfaces,
+        };
+      }
+    }
+
     return {
+      preset: parsed.preset ?? '2-projectors',
       showGrid: Boolean(parsed.showGrid),
+      globalBlackout: Boolean(parsed.globalBlackout),
+      identifyUntil: Number(parsed.identifyUntil ?? 0),
+      outputs: mergedOutputs,
       quads: {
         ...fallback.quads,
         ...parsed.quads,
@@ -167,11 +361,6 @@ export function computeHomographyMatrix3d(
 
   const [h0, h1, h2, h3, h4, h5, h6, h7] = sol;
 
-  // CSS matrix3d é column-major 4x4 inserindo o eixo Z identidade na 3ª linha/coluna:
-  // [ h0, h3, 0, h6,
-  //   h1, h4, 0, h7,
-  //    0,  0, 1,  0,
-  //   h2, h5, 0,  1 ]
   const vals = [h0, h3, 0, h6, h1, h4, 0, h7, 0, 0, 1, 0, h2, h5, 0, 1].map((v) =>
     Number(v.toFixed(12))
   );

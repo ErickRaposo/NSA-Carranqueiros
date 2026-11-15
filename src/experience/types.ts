@@ -1,8 +1,16 @@
 import { DatasetId } from '../datasets/nasaDatasets';
 
 export type Lang = 'pt' | 'en';
-export type ViewRole = 'setup' | 'simulator' | 'projector' | 'controller' | 'demo' | 'portal';
-export type ProjectorOutId = 1 | 2 | 3;
+export type ViewRole =
+  | 'setup'
+  | 'simulator'
+  | 'projector'
+  | 'controller'
+  | 'demo'
+  | 'portal'
+  | 'audio-node';
+export type ProjectorOutId = 1 | 2 | 3 | 4;
+export type SpeakerNodeIndex = 1 | 2 | 3;
 export type MissionPhase =
   | 'idle'
   | 'briefing'
@@ -11,6 +19,9 @@ export type MissionPhase =
   | 'zero_g'
   | 'exploring'
   | 'ended';
+
+export const PROJECTOR_OUT_IDS: readonly ProjectorOutId[] = [1, 2, 3, 4] as const;
+export const SURFACE_IDS: readonly SurfaceId[] = ['leftWall', 'rightWall', 'ceiling'] as const;
 
 /**
  * As 5 camadas estilo Photoshop do Earth Jukebox (1:1 com os 5 PNGs 1024x1024 por país).
@@ -24,6 +35,31 @@ export type SoloableLayerId = 'melody' | 'chords' | 'bass';
 
 export type AudioOutputMode = 'room3' | 'hrtf' | '5.1';
 export type TuningMode = 'region' | 'base';
+
+/**
+ * Modos de roteiro / final automático do Cue Player no Show Control (?view=admin):
+ * - 'free-loop': Loop contínuo livre (visitante/operador controla tudo manualmente)
+ * - 'guided-build': Construção camada a camada (Compassos 1-2 Baixo NO2 no breu -> 3-4 +Acordes CO -> 5-6 +Temp/Melodia -> 7-8 Final Tempestade 8D)
+ * - 'climate-clash': Choque Climático (Compassos 1-4 Clima Real -> 5-6 Terra Neutra 90 BPM -> 7-8 Retorno Clima Real + Clímax 8D)
+ */
+export type ShowCueMode = 'free-loop' | 'guided-build' | 'climate-clash';
+
+export interface BeatTimelineSlot {
+  beat: number;
+  bar: number;
+  beatInBar: number;
+  hasMelody: boolean;
+  hasSparkle: boolean;
+  hasChords: boolean;
+  hasBass: boolean;
+  primaryX: number | null;
+  primaryY: number | null;
+}
+
+export interface CompareCountriesState {
+  slotA: string;
+  slotB: string;
+}
 
 /**
  * Os 3 Países Piloto solicitados pela Shay (Pessoa 1) para validação no Simulador 3D:
@@ -232,8 +268,16 @@ export interface SceneSurfaceProps {
   renderContext: 'projector' | 'simulator' | 'demo';
 }
 
+export interface LanPeerInfo {
+  id: string;
+  role: string;
+  ip: string;
+  connectedAt: number;
+}
+
 export interface ExperienceContextValue {
   country: ExperienceCountry | null;
+  allCountries: ReadonlyArray<ExperienceCountry>;
   availableCountryIds: ReadonlySet<string>;
   pilotCountryIds: ReadonlySet<string>;
   loadStatus: 'idle' | 'loading' | 'ready' | 'error';
@@ -242,8 +286,25 @@ export interface ExperienceContextValue {
   storyStep: number;
   /** Fase atual da expedição espacial (idle -> boarding -> countdown -> zero_g -> exploring -> ended) */
   missionPhase: MissionPhase;
+  /** Modo de roteiro / final do Cue Player no Show Control */
+  showCueMode: ShowCueMode;
+  /** Compasso congelado em loop (0..7) para inspeção de animação/áudio, ou null para fluxo normal */
+  loopSingleBar: number | null;
+  /** Par de países configurado para comparação científica A ⇄ B na mesma batida */
+  compareCountries: CompareCountriesState;
+  /** Sequência completa de 32 batidas (8 compassos x 4 tempos) do país ativo */
+  beatTimeline: ReadonlyArray<BeatTimelineSlot>;
+  /** Energia acústica em tempo real (0..1) enviada para cada uma das 3 caixas físicas (VBAP) */
+  speakerLiveLevels: Record<'speaker1' | 'speaker2' | 'speaker3', number>;
   audioMode: AudioOutputMode;
   masterGain: number;
+  /** Silencia apenas este dispositivo/aba local (ex.: Projetores mudos por padrão ou Tablet remoto mudo) */
+  localAudioMuted: boolean;
+  /** Indica se o áudio vem dos 8 stems pré-gerados ('stems') ou da síntese 8D via meta.json ('meta-synth') */
+  audioSourceKind: 'stems' | 'meta-synth';
+  /** Estado da rede LAN WebSocket offline-first */
+  lanConnected: boolean;
+  lanClients: LanPeerInfo[];
   layers: ExperienceLayersState;
   playback: ExperiencePlaybackState;
   /** Notas/raios ativos no compasso/batida atual com `source_x` e `source_y` */
@@ -252,13 +313,19 @@ export interface ExperienceContextValue {
   audioLevels: AudioLevelsMap;
   /** URLs dos 5 PNGs 1024x1024 recortados na silhueta do país selecionado */
   pngUrls: Record<VisualLayerId, string> | null;
-  /** Dimensões físicas reais configuradas no ?view=setup */
+  /** Dimensões físicas reais configuradas no ?view=setup / ?view=admin */
   roomDimensions: RoomDimensions;
   /** Getter síncrono sem re-render para loops requestAnimationFrame (60fps) */
   getLiveFrame: () => LiveFrameSnapshot;
 
   // Ações compartilhadas (Contrato Pessoa 1 <-> Pessoa 2)
   selectCountry: (countryId: string | null) => void;
+  selectCountryPreserveBeat: (countryId: string) => void;
+  setCompareSlot: (slot: 'A' | 'B', countryId: string) => void;
+  swapCompareCountries: () => void;
+  setShowCueMode: (mode: ShowCueMode) => void;
+  setLoopSingleBar: (barIndex: number | null) => void;
+  stepBeat: (delta: number) => void;
   toggleEye: (layerId: VisualLayerId) => void;
   setAllLayersEnabled: (enabled: boolean) => void;
   toggleSparkle: () => void;
@@ -266,6 +333,7 @@ export interface ExperienceContextValue {
   setWindWetMix: (wetMix: number) => void;
   toggleSolo: (layerId: SoloableLayerId) => void;
   setMasterGain: (gain: number) => void;
+  setLocalAudioMuted: (muted: boolean) => void;
   setAudioMode: (mode: AudioOutputMode) => void;
   togglePlay: () => void;
   seekBeat: (beatIndex: number) => void;
@@ -277,4 +345,5 @@ export interface ExperienceContextValue {
   nextStoryStep: () => void;
   prevStoryStep: () => void;
   setRoomDimensions: (next: RoomDimensions) => void;
+  resetExperienceToDefault: () => void;
 }

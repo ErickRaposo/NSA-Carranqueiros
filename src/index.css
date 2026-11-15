@@ -8150,3 +8150,35 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
     transition: none !important;
   }
 }
+
+/* ============================================================================
+   SHOW CONTROL ADMIN CONSOLE — THEMED SCROLLBARS & MIXER PRIMITIVES
+   ============================================================================ */
+.admin-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.34) rgba(8, 13, 25, 0.72);
+}
+
+.admin-scroll::-webkit-scrollbar {
+  display: block;
+  width: 8px;
+  height: 8px;
+}
+
+.admin-scroll::-webkit-scrollbar-track {
+  background: rgba(8, 13, 25, 0.72);
+}
+
+.admin-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.32);
+  border-radius: 999px;
+  border: 2px solid rgba(8, 13, 25, 0.72);
+}
+
+.admin-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.52);
+}
+
