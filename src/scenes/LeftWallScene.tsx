@@ -35,14 +35,15 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =>
   );
 
   const [flyTarget, setFlyTarget] = useState<CameraViewTarget | null>(null);
+  const isCountryFocused2D =
+    missionPhase === 'exploring' && storyStep > 0 && Boolean(country);
 
   useEffect(() => {
     const isOverview =
       missionPhase === 'idle' ||
-      missionPhase === 'zero_g' ||
       missionPhase === 'ended' ||
-      (storyStep === 0 && !playback.isPlaying);
-    if (!country && !isOverview) return;
+      (missionPhase === 'exploring' && storyStep === 0 && !playback.isPlaying);
+    if (!country && !isOverview && missionPhase !== 'zero_g') return;
 
     setFlyTarget({
       lon: country?.lon ?? -47,
@@ -50,9 +51,15 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =>
       distance:
         missionPhase === 'ended'
           ? 2.65
-          : isOverview
-            ? 3.8
-            : Math.min(3.8, (country?.idealDistance ?? 2.4) + 0.55),
+          : missionPhase === 'zero_g'
+            ? country
+              ? Math.min(3.05, (country.idealDistance ?? 2.4) + 0.3)
+              : 2.85
+            : isCountryFocused2D
+              ? Math.max(1.55, country?.idealDistance ?? 2.05)
+              : isOverview
+                ? 3.8
+                : Math.min(3.8, (country?.idealDistance ?? 2.4) + 0.55),
       nonce: Date.now(),
     });
   }, [
@@ -60,6 +67,7 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =>
     country?.idealDistance,
     country?.lat,
     country?.lon,
+    isCountryFocused2D,
     missionPhase,
     playback.isPlaying,
     storyStep,
@@ -75,10 +83,10 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =>
       <EarthCanvas
         videoElements={videoElements}
         layers={globeLayerStack}
-        viewMode="3d"
+        viewMode={isCountryFocused2D ? '2d' : '3d'}
         visualStyle="bioluminescent"
         backgroundHex="#000000"
-        orbitAutoRotate={!country || missionPhase !== 'exploring' || storyStep === 0}
+        orbitAutoRotate={!isCountryFocused2D && (!country || missionPhase !== 'exploring' || storyStep === 0)}
         showBorders={true}
         showGrid={false}
         showLabels={false}

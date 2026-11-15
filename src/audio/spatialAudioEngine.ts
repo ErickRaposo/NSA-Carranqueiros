@@ -178,6 +178,14 @@ type AudioElementWithSink = HTMLAudioElement & {
   setSinkId?: (sinkId: string) => Promise<void>;
 };
 
+const activeAudioEngines = new Set<SpatialAudioEngine>();
+
+export function setSpatialMusicDucked(ducked: boolean): void {
+  for (const engine of activeAudioEngines) {
+    engine.setVoiceDucking(ducked);
+  }
+}
+
 export class SpatialAudioEngine {
   private ctx: AudioContext | null = null;
   private masterGainNode: GainNode | null = null;
@@ -191,6 +199,7 @@ export class SpatialAudioEngine {
 
   private audioMode: AudioOutputMode = 'hrtf';
   private masterGain = 0.9;
+  private voiceDuckMultiplier = 1.0;
   private calibration: AudioCalibrationState;
   private isolatedSpeakerSlot: SpeakerSlotId | null = null;
   private outputPermissionUnlocked = false;
@@ -214,6 +223,7 @@ export class SpatialAudioEngine {
 
   constructor(initialCalibration: AudioCalibrationState) {
     this.calibration = initialCalibration;
+    activeAudioEngines.add(this);
   }
 
   public setOnCalibrationModeChange(cb: ((mode: CalibrationTestMode) => void) | undefined): void {
@@ -449,14 +459,27 @@ export class SpatialAudioEngine {
 
   public setMasterGain(gain: number): void {
     this.masterGain = Math.max(0, Math.min(1.5, gain));
+    this.applyEffectiveMasterGain(0.03);
+  }
+
+  /**
+   * Abaixa suavemente a música espacial enquanto o Robô MINEIRØ fala e restaura depois.
+   */
+  public setVoiceDucking(ducked: boolean): void {
+    this.voiceDuckMultiplier = ducked ? 0.22 : 1.0;
+    this.applyEffectiveMasterGain(ducked ? 0.08 : 0.18);
+  }
+
+  private applyEffectiveMasterGain(timeConstantSec: number): void {
+    const target = this.masterGain * this.voiceDuckMultiplier;
     if (this.ctx) {
       const now = this.ctx.currentTime;
       if (this.masterGainNode) {
-        this.masterGainNode.gain.setTargetAtTime(this.masterGain, now, 0.03);
+        this.masterGainNode.gain.setTargetAtTime(target, now, timeConstantSec);
       }
       if (this.speakerChains) {
         for (const id of SPEAKER_IDS) {
-          this.speakerChains[id].masterMirrorGain.gain.setTargetAtTime(this.masterGain, now, 0.03);
+          this.speakerChains[id].masterMirrorGain.gain.setTargetAtTime(target, now, timeConstantSec);
         }
       }
     }

@@ -36,14 +36,6 @@ export type SoloableLayerId = 'melody' | 'chords' | 'bass';
 export type AudioOutputMode = 'room3' | 'hrtf' | '5.1';
 export type TuningMode = 'region' | 'base';
 
-/**
- * Modos de roteiro / final automático do Cue Player no Show Control (?view=admin):
- * - 'free-loop': Loop contínuo livre (visitante/operador controla tudo manualmente)
- * - 'guided-build': Construção camada a camada (Compassos 1-2 Baixo NO2 no breu -> 3-4 +Acordes CO -> 5-6 +Temp/Melodia -> 7-8 Final Tempestade 8D)
- * - 'climate-clash': Choque Climático (Compassos 1-4 Clima Real -> 5-6 Terra Neutra 90 BPM -> 7-8 Retorno Clima Real + Clímax 8D)
- */
-export type ShowCueMode = 'free-loop' | 'guided-build' | 'climate-clash';
-
 export interface BeatTimelineSlot {
   beat: number;
   bar: number;
@@ -285,8 +277,8 @@ export interface ExperienceContextValue {
   storyStep: number;
   /** Fase atual da expedição espacial (idle -> boarding -> countdown -> zero_g -> exploring -> ended) */
   missionPhase: MissionPhase;
-  /** Modo de roteiro / final do Cue Player no Show Control */
-  showCueMode: ShowCueMode;
+  /** Contador para reiniciar animações locais do quadro ativo (ex: contagem 5..1 ou cabine 4s) */
+  sceneReplayKey: number;
   /** Compasso congelado em loop (0..7) para inspeção de animação/áudio, ou null para fluxo normal */
   loopSingleBar: number | null;
   /** Par de países configurado para comparação científica A ⇄ B na mesma batida */
@@ -322,7 +314,8 @@ export interface ExperienceContextValue {
   selectCountryPreserveBeat: (countryId: string) => void;
   setCompareSlot: (slot: 'A' | 'B', countryId: string) => void;
   swapCompareCountries: () => void;
-  setShowCueMode: (mode: ShowCueMode) => void;
+  activateMissionFrame: (phase: MissionPhase, nextStoryStep?: number) => void;
+  replayActiveFrame: () => void;
   setLoopSingleBar: (barIndex: number | null) => void;
   stepBeat: (delta: number) => void;
   toggleEye: (layerId: VisualLayerId) => void;

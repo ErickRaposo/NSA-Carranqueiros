@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Box,
   Columns3,
@@ -27,6 +27,60 @@ interface SimulatorViewProps {
 }
 
 type CameraPresetId = 'overview' | 'visitor' | 'ceiling' | 'flat';
+
+const LOGICAL_SCENE_HEIGHT = 960;
+
+/**
+ * Monta qualquer cena na mesma resolução lógica do Projetor (960px de altura)
+ * e aplica scale uniforme para que Simulador 3D, Demo e Projetor sejam 1:1 fiéis.
+ */
+const LogicalSceneViewport: React.FC<{
+  aspectRatio: number;
+  targetWidth?: number;
+  children: React.ReactNode;
+}> = ({ aspectRatio, targetWidth, children }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [measuredWidth, setMeasuredWidth] = useState<number>(targetWidth ?? 300);
+  const logicalWidth = Math.max(1, Math.round(LOGICAL_SCENE_HEIGHT * aspectRatio));
+
+  useEffect(() => {
+    if (typeof targetWidth === 'number') {
+      setMeasuredWidth(targetWidth);
+      return;
+    }
+    const el = containerRef.current;
+    if (!el) return;
+
+    const update = () => {
+      if (el.clientWidth > 0) setMeasuredWidth(el.clientWidth);
+    };
+    update();
+
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [targetWidth]);
+
+  const effectiveWidth = typeof targetWidth === 'number' ? targetWidth : measuredWidth;
+  const scale = effectiveWidth / logicalWidth;
+
+  return (
+    <div ref={containerRef} className="relative h-full w-full overflow-hidden bg-black">
+      <div
+        style={{
+          width: `${logicalWidth}px`,
+          height: `${LOGICAL_SCENE_HEIGHT}px`,
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          position: 'relative',
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
 
 const PILOT_LABELS: Record<string, { flag: string; pt: string; en: string }> = {
   '076': { flag: '🇧🇷', pt: 'Brasil', en: 'Brazil' },
@@ -203,13 +257,15 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
               className="w-full overflow-hidden rounded-lg border border-slate-400/25 bg-black"
               style={{ aspectRatio: String(leftAspect) }}
             >
-              <LeftWallScene
-                surfaceId="leftWall"
-                widthCm={roomDimensions.leftWall.widthCm}
-                heightCm={roomDimensions.leftWall.heightCm}
-                aspectRatio={leftAspect}
-                renderContext={embedded ? 'demo' : 'simulator'}
-              />
+              <LogicalSceneViewport aspectRatio={leftAspect}>
+                <LeftWallScene
+                  surfaceId="leftWall"
+                  widthCm={roomDimensions.leftWall.widthCm}
+                  heightCm={roomDimensions.leftWall.heightCm}
+                  aspectRatio={leftAspect}
+                  renderContext={embedded ? 'demo' : 'simulator'}
+                />
+              </LogicalSceneViewport>
             </div>
           </div>
 
@@ -222,13 +278,15 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
               className="w-full overflow-hidden rounded-lg border border-slate-400/25 bg-black"
               style={{ aspectRatio: String(rightAspect) }}
             >
-              <RightWallScene
-                surfaceId="rightWall"
-                widthCm={roomDimensions.rightWall.widthCm}
-                heightCm={roomDimensions.rightWall.heightCm}
-                aspectRatio={rightAspect}
-                renderContext={embedded ? 'demo' : 'simulator'}
-              />
+              <LogicalSceneViewport aspectRatio={rightAspect}>
+                <RightWallScene
+                  surfaceId="rightWall"
+                  widthCm={roomDimensions.rightWall.widthCm}
+                  heightCm={roomDimensions.rightWall.heightCm}
+                  aspectRatio={rightAspect}
+                  renderContext={embedded ? 'demo' : 'simulator'}
+                />
+              </LogicalSceneViewport>
             </div>
           </div>
 
@@ -241,13 +299,15 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
               className="w-full overflow-hidden rounded-lg border border-slate-400/25 bg-black"
               style={{ aspectRatio: String(ceilingAspect) }}
             >
-              <CeilingScene
-                surfaceId="ceiling"
-                widthCm={roomDimensions.ceiling.widthCm}
-                heightCm={roomDimensions.ceiling.heightCm}
-                aspectRatio={ceilingAspect}
-                renderContext={embedded ? 'demo' : 'simulator'}
-              />
+              <LogicalSceneViewport aspectRatio={ceilingAspect}>
+                <CeilingScene
+                  surfaceId="ceiling"
+                  widthCm={roomDimensions.ceiling.widthCm}
+                  heightCm={roomDimensions.ceiling.heightCm}
+                  aspectRatio={ceilingAspect}
+                  renderContext={embedded ? 'demo' : 'simulator'}
+                />
+              </LogicalSceneViewport>
             </div>
           </div>
         </div>
@@ -310,13 +370,15 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
                 backgroundColor: '#000000',
               }}
             >
-              <LeftWallScene
-                surfaceId="leftWall"
-                widthCm={roomDimensions.leftWall.widthCm}
-                heightCm={roomDimensions.leftWall.heightCm}
-                aspectRatio={leftAspect}
-                renderContext={embedded ? 'demo' : 'simulator'}
-              />
+              <LogicalSceneViewport aspectRatio={leftAspect} targetWidth={leftW}>
+                <LeftWallScene
+                  surfaceId="leftWall"
+                  widthCm={roomDimensions.leftWall.widthCm}
+                  heightCm={roomDimensions.leftWall.heightCm}
+                  aspectRatio={leftAspect}
+                  renderContext={embedded ? 'demo' : 'simulator'}
+                />
+              </LogicalSceneViewport>
             </div>
 
             {/* 2. Parede Direita (z = 0, x ∈ [0, rightW], voltada para +Z dentro da sala) */}
@@ -331,13 +393,15 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
                 backgroundColor: '#000000',
               }}
             >
-              <RightWallScene
-                surfaceId="rightWall"
-                widthCm={roomDimensions.rightWall.widthCm}
-                heightCm={roomDimensions.rightWall.heightCm}
-                aspectRatio={rightAspect}
-                renderContext={embedded ? 'demo' : 'simulator'}
-              />
+              <LogicalSceneViewport aspectRatio={rightAspect} targetWidth={rightW}>
+                <RightWallScene
+                  surfaceId="rightWall"
+                  widthCm={roomDimensions.rightWall.widthCm}
+                  heightCm={roomDimensions.rightWall.heightCm}
+                  aspectRatio={rightAspect}
+                  renderContext={embedded ? 'demo' : 'simulator'}
+                />
+              </LogicalSceneViewport>
             </div>
 
             {/* 3. Teto (y = 0, x ∈ [0, ceilW], z ∈ [0, ceilD], voltado para baixo +Y para quem olha p/ cima) */}
@@ -353,13 +417,15 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
                 backgroundColor: '#000000',
               }}
             >
-              <CeilingScene
-                surfaceId="ceiling"
-                widthCm={roomDimensions.ceiling.widthCm}
-                heightCm={roomDimensions.ceiling.heightCm}
-                aspectRatio={ceilingAspect}
-                renderContext={embedded ? 'demo' : 'simulator'}
-              />
+              <LogicalSceneViewport aspectRatio={ceilingAspect} targetWidth={ceilW}>
+                <CeilingScene
+                  surfaceId="ceiling"
+                  widthCm={roomDimensions.ceiling.widthCm}
+                  heightCm={roomDimensions.ceiling.heightCm}
+                  aspectRatio={ceilingAspect}
+                  renderContext={embedded ? 'demo' : 'simulator'}
+                />
+              </LogicalSceneViewport>
             </div>
           </div>
 

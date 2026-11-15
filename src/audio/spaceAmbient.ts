@@ -389,3 +389,50 @@ export function playCabinDissolveSfx(): void {
     // ignore
   }
 }
+
+/**
+ * Efeito físico de tranco/pouso da nave ao tocar o solo terrestre no final da missão (`ended`).
+ */
+export function playLandingThudSfx(): void {
+  try {
+    const ctx = ensureAmbientContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Impacto sub-grave (tranco de pouso)
+    const sub = ctx.createOscillator();
+    const subGain = ctx.createGain();
+    sub.type = 'triangle';
+    sub.frequency.setValueAtTime(118, now);
+    sub.frequency.exponentialRampToValueAtTime(34, now + 0.38);
+    subGain.gain.setValueAtTime(0.001, now);
+    subGain.gain.exponentialRampToValueAtTime(0.32, now + 0.018);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    sub.connect(subGain);
+    subGain.connect(ctx.destination);
+    sub.start(now);
+    sub.stop(now + 0.5);
+
+    // Choque metálico curto nos trens de pouso
+    const len = Math.floor(ctx.sampleRate * 0.25);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i += 1) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = buf;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(420, now);
+    lp.frequency.exponentialRampToValueAtTime(90, now + 0.22);
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.16, now);
+    ng.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+    noise.connect(lp);
+    lp.connect(ng);
+    ng.connect(ctx.destination);
+    noise.start(now);
+    noise.stop(now + 0.25);
+  } catch {
+    // ignore
+  }
+}

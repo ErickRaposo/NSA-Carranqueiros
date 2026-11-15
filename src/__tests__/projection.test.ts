@@ -12,6 +12,7 @@ import {
   lonLatToUV,
   spherePointToLonLat,
 } from '../geo/projection';
+import { fitQuadAspectContain } from '../projection/homography';
 
 describe('geo/projection', () => {
   it('maps prime meridian equator (0, 0) to +Z on sphere and center of flat map', () => {
@@ -76,5 +77,33 @@ describe('geo/projection', () => {
   it('formats lat/lon cleanly with hemisphere letters', () => {
     expect(formatLatLon(-14.234, -51.921)).toBe('14.23° S, 51.92° W');
     expect(formatLatLon(35.68, 139.76)).toBe('35.68° N, 139.76° E');
+  });
+
+  it('fits axis-aligned projector slots without aspect distortion and preserves manual corner-pin', () => {
+    // 1200x960 wall (1.25 aspect) inside half-screen 16:9 slot (960x1080)
+    const fitted = fitQuadAspectContain(1200, 960, [
+      { x: 0, y: 0 },
+      { x: 960, y: 0 },
+      { x: 960, y: 1080 },
+      { x: 0, y: 1080 },
+    ]);
+    expect(fitted[0]).toEqual({ x: 0, y: 156 });
+    expect(fitted[1]).toEqual({ x: 960, y: 156 });
+    expect(fitted[2]).toEqual({ x: 960, y: 924 });
+    expect(fitted[3]).toEqual({ x: 0, y: 924 });
+
+    // Manually dragged corner-pin quad (tr.y !== tl.y) must pass through untouched
+    const dragged: [
+      { x: number; y: number },
+      { x: number; y: number },
+      { x: number; y: number },
+      { x: number; y: number },
+    ] = [
+      { x: 10, y: 0 },
+      { x: 950, y: 40 },
+      { x: 960, y: 1080 },
+      { x: 0, y: 1060 },
+    ];
+    expect(fitQuadAspectContain(1200, 960, dragged)).toEqual(dragged);
   });
 });

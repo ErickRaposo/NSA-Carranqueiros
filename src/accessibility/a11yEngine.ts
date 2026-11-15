@@ -232,6 +232,7 @@ export const PIPER_VOICE_IDS = {
 } as const;
 
 let activePiperAudio: HTMLAudioElement | null = null;
+let activeSpeechOnEnd: (() => void) | null = null;
 let speechRequestNonce = 0;
 const piperAudioCache = new Map<string, string>();
 const piperPreloadStarted = new Set<'pt' | 'en'>();
@@ -245,6 +246,9 @@ export function stopSpeech(): void {
   speechRequestNonce += 1;
   if (activePiperAudio) {
     try {
+      activePiperAudio.onplay = null;
+      activePiperAudio.onended = null;
+      activePiperAudio.onerror = null;
       activePiperAudio.pause();
       activePiperAudio.currentTime = 0;
     } catch {
@@ -257,6 +261,15 @@ export function stopSpeech(): void {
       window.speechSynthesis.cancel();
     } catch {
       // ignore speech engine errors
+    }
+  }
+  if (activeSpeechOnEnd) {
+    const finishCb = activeSpeechOnEnd;
+    activeSpeechOnEnd = null;
+    try {
+      finishCb();
+    } catch {
+      // ignore callback errors
     }
   }
 }
@@ -307,9 +320,11 @@ function speakWithWebSpeechFallback(
   text: string,
   lang: 'pt' | 'en',
   interrupt: boolean,
+  requestNonce: number,
   options?: { maleVoice?: boolean; onStart?: () => void; onEnd?: () => void }
 ): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window) || !text.trim()) return;
+  if (requestNonce !== speechRequestNonce) return;
   try {
     if (interrupt) window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
@@ -323,11 +338,22 @@ function speakWithWebSpeechFallback(
       utterance.voice = selectedVoice;
     }
 
-    if (options?.onStart) utterance.onstart = options.onStart;
-    if (options?.onEnd) {
-      utterance.onend = options.onEnd;
-      utterance.onerror = options.onEnd;
-    }
+    activeSpeechOnEnd = options?.onEnd ?? null;
+    utterance.onstart = () => {
+      if (requestNonce !== speechRequestNonce) {
+        window.speechSynthesis.cancel();
+        return;
+      }
+      options?.onStart?.();
+    };
+    const handleFinish = () => {
+      if (activeSpeechOnEnd === options?.onEnd) {
+        activeSpeechOnEnd = null;
+      }
+      options?.onEnd?.();
+    };
+    utterance.onend = handleFinish;
+    utterance.onerror = handleFinish;
 
     window.speechSynthesis.speak(utterance);
   } catch {
@@ -375,20 +401,28 @@ export function speakTextPt(
     try {
       const audio = new Audio(url);
       activePiperAudio = audio;
-      audio.onplay = () => options?.onStart?.();
+      activeSpeechOnEnd = options?.onEnd ?? null;
+      audio.onplay = () => {
+        if (currentNonce !== speechRequestNonce) {
+          audio.pause();
+          return;
+        }
+        options?.onStart?.();
+      };
       audio.onended = () => {
         if (activePiperAudio === audio) activePiperAudio = null;
+        if (activeSpeechOnEnd === options?.onEnd) activeSpeechOnEnd = null;
         options?.onEnd?.();
       };
       audio.onerror = () => {
         if (activePiperAudio === audio) activePiperAudio = null;
-        speakWithWebSpeechFallback(text, lang, interrupt, options);
+        speakWithWebSpeechFallback(text, lang, interrupt, currentNonce, options);
       };
       void audio.play().catch(() => {
-        speakWithWebSpeechFallback(text, lang, interrupt, options);
+        speakWithWebSpeechFallback(text, lang, interrupt, currentNonce, options);
       });
     } catch {
-      speakWithWebSpeechFallback(text, lang, interrupt, options);
+      speakWithWebSpeechFallback(text, lang, interrupt, currentNonce, options);
     }
   };
 
@@ -402,7 +436,7 @@ export function speakTextPt(
   // via Web Speech API para nunca deixar a animação muda.
   if (!piperReadyVoices.has(voiceId)) {
     preloadPiperVoice(lang);
-    speakWithWebSpeechFallback(text, lang, interrupt, options);
+    speakWithWebSpeechFallback(text, lang, interrupt, currentNonce, options);
     return;
   }
 
@@ -410,7 +444,7 @@ export function speakTextPt(
   const fallbackTimer = window.setTimeout(() => {
     if (settled || currentNonce !== speechRequestNonce) return;
     settled = true;
-    speakWithWebSpeechFallback(text, lang, interrupt, options);
+    speakWithWebSpeechFallback(text, lang, interrupt, currentNonce, options);
   }, 2500);
 
   void import('@mintplex-labs/piper-tts-web')
@@ -427,7 +461,7 @@ export function speakTextPt(
       if (settled || currentNonce !== speechRequestNonce) return;
       settled = true;
       window.clearTimeout(fallbackTimer);
-      speakWithWebSpeechFallback(text, lang, interrupt, options);
+      speakWithWebSpeechFallback(text, lang, interrupt, currentNonce, options);
     });
 }
 

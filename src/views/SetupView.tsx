@@ -44,6 +44,12 @@ import {
   useExperience,
   useProjectionAdmin,
 } from '../experience/ExperienceContext';
+import { speakTextPt } from '../accessibility/a11yEngine';
+import {
+  resolveActiveMissionFrameId,
+  resolveFramePrompts,
+  SHAY_MISSION_FRAMES,
+} from '../experience/missionFrames';
 import {
   AudioOutputMode,
   LAYER_METAS,
@@ -51,7 +57,6 @@ import {
   PROJECTOR_OUT_IDS,
   ProjectorOutId,
   RoomDimensions,
-  ShowCueMode,
   SoloableLayerId,
   SURFACE_IDS,
   SurfaceId,
@@ -115,9 +120,10 @@ export const SetupView: React.FC = () => {
     roomDimensions,
     setRoomDimensions,
     storyStep,
-    setStoryStep,
-    showCueMode,
-    setShowCueMode,
+    missionPhase,
+    sceneReplayKey,
+    activateMissionFrame,
+    replayActiveFrame,
     loopSingleBar,
     setLoopSingleBar,
     compareCountries,
@@ -182,6 +188,26 @@ export const SetupView: React.FC = () => {
 
   const isPt = lang === 'pt';
   const [activeModule, setActiveModule] = useState<AdminModuleId>('overview');
+  const [isAutoSequencePlaying, setIsAutoSequencePlaying] = useState<boolean>(false);
+
+  const activeFrameId = resolveActiveMissionFrameId(missionPhase, storyStep);
+  const activeFrameSpec =
+    SHAY_MISSION_FRAMES.find((f) => f.id === activeFrameId) ?? SHAY_MISSION_FRAMES[0];
+
+  useEffect(() => {
+    if (!isAutoSequencePlaying) return;
+    const idx = SHAY_MISSION_FRAMES.findIndex((f) => f.id === activeFrameId);
+    if (idx < 0 || idx >= SHAY_MISSION_FRAMES.length - 1) {
+      setIsAutoSequencePlaying(false);
+      return;
+    }
+    const currentSpec = SHAY_MISSION_FRAMES[idx];
+    const nextSpec = SHAY_MISSION_FRAMES[idx + 1];
+    const timer = window.setTimeout(() => {
+      activateMissionFrame(nextSpec.phase, nextSpec.storyStep);
+    }, currentSpec.autoDurationMs);
+    return () => window.clearTimeout(timer);
+  }, [activateMissionFrame, activeFrameId, isAutoSequencePlaying]);
   const [overviewStageMode, setOverviewStageMode] = useState<'mini3d' | 'stage2d'>('mini3d');
   const [selectedWarpOut, setSelectedWarpOut] = useState<ProjectorOutId>(1);
 
@@ -562,7 +588,7 @@ export const SetupView: React.FC = () => {
       <div
         className={`w-full overflow-hidden rounded-xl border border-slate-400/20 bg-[#02040a] ${heightClass}`}
       >
-        <SimulatorView embedded />
+        <SimulatorView key={sceneReplayKey} embedded />
       </div>
 
       {/* Verificador Acústico em Tempo Real por Caixa Física (C1 · C2 · C3) */}
@@ -657,9 +683,9 @@ export const SetupView: React.FC = () => {
     {
       id: 'cues',
       Icon: Film,
-      labelPt: 'Cue Player & A⇄B',
-      labelEn: 'Cue Player & A⇄B',
-      badge: `C${playback.bar + 1}.${playback.beat + 1}`,
+      labelPt: 'Quadros & A⇄B',
+      labelEn: 'Frames & A⇄B',
+      badge: `Q${activeFrameSpec.order}`,
     },
     {
       id: 'projection',
@@ -1606,291 +1632,198 @@ export const SetupView: React.FC = () => {
                     </div>
                   </section>
 
-                  {/* 2. Cue Player: Modos de Final + Transporte Quadro-a-Quadro + Matriz 32 Batidas */}
+                  {/* 2. Diretor de Quadros Reais da Shay (10 Fases/Quadros + Prompts Somente Leitura) */}
                   <section
                     className="rounded-xl border border-slate-400/15 bg-[#080d19] p-4"
-                    data-testid="cue-player-sequencer"
+                    data-testid="shay-frames-director"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-400/15 pb-3">
                       <div>
                         <h2 className="text-sm font-semibold text-slate-100">
                           {isPt
-                            ? 'Cue Player · Sequenciador de 32 Batidas & Modos de Final'
-                            : 'Cue Player · 32-Beat Sequencer & Finale Modes'}
+                            ? 'Diretor de Quadros da Shay (10 Fases Reais) & Prompts'
+                            : "Shay's Scene Frame Director (10 Real Phases) & Prompts"}
                         </h2>
                         <p className="text-xs text-slate-400">
                           {isPt
-                            ? 'Troque a dinâmica/final da sessão ou avance batida por batida para revisar cada quadro.'
-                            : 'Switch show finale dynamics or step beat-by-beat to inspect every scene frame.'}
+                            ? 'Teste cada quadro da jornada de forma independente nas 2 paredes + teto e visualize as falas reais do Robozinho.'
+                            : 'Test each mission frame independently across 2 walls + ceiling and inspect the exact robot prompts.'}
                         </p>
                       </div>
 
-                      {/* Transporte Fino Quadro-a-Quadro */}
                       <div className="flex flex-wrap items-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => seekBeat(0)}
-                          className="inline-flex min-h-[34px] items-center gap-1 rounded-lg border border-slate-400/20 bg-[#0b1222] px-2.5 text-xs font-semibold text-slate-200 hover:text-white"
-                          title={isPt ? 'Voltar ao Compasso 1.1' : 'Back to Bar 1.1'}
-                        >
-                          <SkipBack size={13} />
-                          <span>1.1</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => stepBeat(-1)}
-                          className="inline-flex min-h-[34px] items-center gap-1 rounded-lg border border-slate-400/20 bg-[#0b1222] px-2.5 text-xs font-semibold text-slate-200 hover:text-white"
-                        >
-                          <ChevronLeft size={14} />
-                          <span>-1</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={togglePlay}
-                          className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg bg-amber-400 px-3 text-xs font-bold text-slate-950 hover:bg-amber-300"
-                        >
-                          {playback.isPlaying ? <Pause size={13} /> : <Play size={13} />}
-                          <span>{playback.isPlaying ? 'Pause' : 'Play'}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => stepBeat(1)}
-                          className="inline-flex min-h-[34px] items-center gap-1 rounded-lg border border-slate-400/20 bg-[#0b1222] px-2.5 text-xs font-semibold text-slate-200 hover:text-white"
-                        >
-                          <span>+1</span>
-                          <ChevronRight size={14} />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setLoopSingleBar(
-                              loopSingleBar === playback.bar ? null : playback.bar
-                            )
-                          }
-                          className={`inline-flex min-h-[34px] items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition [font-variant-numeric:tabular-nums] ${
-                            loopSingleBar !== null
-                              ? 'border-emerald-400/60 bg-emerald-400/15 text-emerald-200'
-                              : 'border-slate-400/20 bg-[#0b1222] text-slate-300 hover:text-white'
-                          }`}
+                          onClick={replayActiveFrame}
+                          className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg border border-slate-400/20 bg-[#0b1222] px-2.5 text-xs font-semibold text-slate-200 hover:border-sky-400/50 hover:text-white"
                           title={
                             isPt
-                              ? 'Repete continuamente o compasso atual para inspecionar animações e caixas sem pressa'
-                              : 'Loops the current bar continuously for calm visual/audio inspection'
+                              ? 'Reinicia as animações deste quadro (ex.: contagem 5..1 ou cabine 4s)'
+                              : 'Restart animations for the active frame'
                           }
                         >
-                          <Repeat size={13} />
+                          <RotateCcw size={13} />
+                          <span>{isPt ? 'Reiniciar Animação' : 'Replay Frame'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isAutoSequencePlaying) {
+                              setIsAutoSequencePlaying(false);
+                            } else {
+                              if (activeFrameId === 'ended') {
+                                activateMissionFrame('idle');
+                              }
+                              setIsAutoSequencePlaying(true);
+                            }
+                          }}
+                          className={`inline-flex min-h-[34px] items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition ${
+                            isAutoSequencePlaying
+                              ? 'bg-rose-500 text-white hover:bg-rose-400'
+                              : 'bg-sky-400 text-slate-950 hover:bg-sky-300'
+                          }`}
+                        >
+                          {isAutoSequencePlaying ? <Square size={12} /> : <Play size={13} />}
                           <span>
-                            {loopSingleBar !== null
-                              ? `Loop C${loopSingleBar + 1}`
+                            {isAutoSequencePlaying
+                              ? isPt
+                                ? 'Parar Sequência'
+                                : 'Stop Sequence'
                               : isPt
-                                ? 'Loop Compasso'
-                                : 'Loop Bar'}
+                                ? 'Rodar Sequência Completa'
+                                : 'Play Full Sequence'}
                           </span>
                         </button>
                       </div>
                     </div>
 
-                    {/* Seletor dos 3 Modos de Roteiro / Final */}
-                    <div className="mt-3.5 grid grid-cols-1 gap-2 md:grid-cols-3">
-                      {(
-                        [
-                          [
-                            'free-loop',
-                            isPt ? 'Loop Livre (Jukebox)' : 'Free Loop (Jukebox)',
-                            isPt
-                              ? 'Controle 100% manual pelo Tablet ou Admin.'
-                              : '100% manual layer & scene control.',
-                          ],
-                          [
-                            'guided-build',
-                            isPt
-                              ? 'Construção + Final Tempestade 8D'
-                              : 'Layer Build + 8D Storm Finale',
-                            isPt
-                              ? 'C1–2 Baixo NO₂ → C3–4 +CO → C5–6 +Clima/Raios → C7–8 Clímax 8D.'
-                              : 'C1–2 Bass → C3–4 +Chords → C5–6 +Temp/Melody → C7–8 8D Climax.',
-                          ],
-                          [
-                            'climate-clash',
-                            isPt
-                              ? 'Final Choque Climático (90 BPM)'
-                              : 'Climate Clash Finale (90 BPM)',
-                            isPt
-                              ? 'C1–4 Clima Real → C5–6 Terra Neutra 90 BPM → C7–8 Explosão 8D.'
-                              : 'C1–4 Regional Climate → C5–6 Neutral 90 BPM → C7–8 8D Burst.',
-                          ],
-                        ] as [ShowCueMode, string, string][]
-                      ).map(([modeId, title, desc]) => {
-                        const active = showCueMode === modeId;
+                    {/* Grade dos 10 Quadros Reais */}
+                    <div className="mt-3.5 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                      {SHAY_MISSION_FRAMES.map((frame) => {
+                        const isActive = activeFrameId === frame.id;
                         return (
                           <button
-                            key={modeId}
+                            key={frame.id}
                             type="button"
-                            onClick={() => setShowCueMode(modeId)}
-                            className={`flex flex-col items-start rounded-xl border p-3 text-left transition ${
-                              active
-                                ? 'border-sky-400/65 bg-sky-400/12 text-white'
-                                : 'border-slate-400/15 bg-[#0b1222] text-slate-300 hover:border-slate-400/35'
+                            onClick={() => {
+                              setIsAutoSequencePlaying(false);
+                              activateMissionFrame(frame.phase, frame.storyStep);
+                            }}
+                            className={`flex flex-col items-start justify-between rounded-xl border p-2.5 text-left transition ${
+                              isActive
+                                ? 'border-amber-400/70 bg-amber-400/12 text-amber-100'
+                                : 'border-slate-400/15 bg-[#0b1222] text-slate-300 hover:border-sky-400/40 hover:text-white'
                             }`}
                           >
-                            <span className="text-xs font-semibold">{title}</span>
-                            <span className="mt-1 text-[11px] leading-snug text-slate-400">
-                              {desc}
+                            <span className="text-[11px] font-semibold leading-tight">
+                              {isPt ? frame.titlePt : frame.titleEn}
+                            </span>
+                            <span className="mt-1 text-[10px] text-slate-400">
+                              {frame.phase}
+                              {typeof frame.storyStep === 'number' ? ` · step ${frame.storyStep}` : ''}
                             </span>
                           </button>
                         );
                       })}
                     </div>
 
-                    {/* Matriz Sequencial de 32 Batidas (8 Compassos × 4 Tempos) */}
-                    <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-                      {Array.from({ length: 8 }, (_, barIdx) => {
-                        const isBarLooped = loopSingleBar === barIdx;
-                        const isBarCurrent = playback.bar === barIdx;
-                        const barSlots = beatTimeline.slice(barIdx * 4, barIdx * 4 + 4);
+                    {/* Visualizador Somente Leitura do Quadro Ativo & Prompts Reais */}
+                    {(() => {
+                      const firstLayer =
+                        VISUAL_LAYER_ORDER.find((id) => layers[id].enabled) ?? 'melody';
+                      const layerMeta = LAYER_METAS[firstLayer];
+                      const prompts = resolveFramePrompts(activeFrameId, {
+                        lang,
+                        countryName: country
+                          ? isPt
+                            ? country.namePt
+                            : country.nameEn
+                          : isPt
+                            ? 'a Terra'
+                            : 'Earth',
+                        activeLayerLabel: isPt ? layerMeta.labelPt : layerMeta.labelEn,
+                        bpm: playback.bpm,
+                        keyRoot: playback.keyRoot,
+                        keyRootPt: playback.keyRootPt,
+                        activeChord: playback.activeChord,
+                        windMeanSpeed: playback.windMeanSpeed,
+                      });
 
-                        return (
-                          <div
-                            key={barIdx}
-                            className={`rounded-xl border p-2 transition ${
-                              isBarLooped
-                                ? 'border-emerald-400/65 bg-emerald-400/[0.08]'
-                                : isBarCurrent
-                                  ? 'border-amber-400/50 bg-[#0d1629]'
-                                  : 'border-slate-400/15 bg-[#060a14]'
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setLoopSingleBar(isBarLooped ? null : barIdx)
-                              }
-                              className="mb-1.5 flex w-full items-center justify-between text-[10px] font-bold text-slate-300 hover:text-white [font-variant-numeric:tabular-nums]"
-                              title={
-                                isPt
-                                  ? `Clique para travar/destravar loop no Compasso ${barIdx + 1}`
-                                  : `Click to toggle loop on Bar ${barIdx + 1}`
-                              }
-                            >
-                              <span>C{barIdx + 1}</span>
-                              {isBarLooped && (
-                                <span className="text-[9px] text-emerald-300">LOOP</span>
-                              )}
-                            </button>
+                      return (
+                        <div className="mt-3.5 rounded-xl border border-slate-400/15 bg-[#060a14] p-3.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-400/15 pb-2.5">
+                            <span className="text-xs font-semibold text-slate-100">
+                              {isPt ? activeFrameSpec.titlePt : activeFrameSpec.titleEn}
+                            </span>
+                            {prompts.spoken && (
+                              <button
+                                type="button"
+                                onClick={() => speakTextPt(prompts.spoken, true, { maleVoice: true })}
+                                className="inline-flex min-h-[28px] items-center gap-1.5 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 text-[11px] font-semibold text-amber-200 hover:bg-amber-400/20"
+                              >
+                                <Volume2 size={12} />
+                                <span>{isPt ? 'Ouvir Fala (TTS)' : 'Preview Voice (TTS)'}</span>
+                              </button>
+                            )}
+                          </div>
 
-                            <div className="grid grid-cols-4 gap-1">
-                              {barSlots.map((slot) => {
-                                const isCurrentBeat = currentBeatGlobal === slot.beat;
-                                return (
-                                  <button
-                                    key={slot.beat}
-                                    type="button"
-                                    onClick={() => seekBeat(slot.beat)}
-                                    className={`flex h-11 flex-col items-center justify-between rounded-md border py-1 transition [font-variant-numeric:tabular-nums] ${
-                                      isCurrentBeat
-                                        ? 'border-amber-300 bg-amber-400/25 text-amber-100'
-                                        : 'border-slate-400/15 bg-[#0b1222] text-slate-400 hover:border-sky-400/40 hover:text-white'
-                                    }`}
-                                    title={`${isPt ? 'Batida' : 'Beat'} ${slot.beat + 1}/32 (C${barIdx + 1}.${slot.beatInBar + 1})`}
-                                  >
-                                    <span className="text-[9px] font-semibold">
-                                      {slot.beatInBar + 1}
-                                    </span>
-                                    <span className="flex items-center gap-0.5">
-                                      {slot.hasMelody && (
-                                        <span
-                                          className="h-1.5 w-1.5 rounded-full"
-                                          style={{ backgroundColor: '#fbbf24' }}
-                                        />
-                                      )}
-                                      {slot.hasChords && (
-                                        <span
-                                          className="h-1.5 w-1.5 rounded-full"
-                                          style={{ backgroundColor: '#fb923c' }}
-                                        />
-                                      )}
-                                      {slot.hasBass && (
-                                        <span
-                                          className="h-1.5 w-1.5 rounded-full"
-                                          style={{ backgroundColor: '#34d399' }}
-                                        />
-                                      )}
-                                    </span>
-                                  </button>
-                                );
-                              })}
+                          {/* O que aparece nas 3 superfícies neste quadro */}
+                          <div className="mt-2.5 grid grid-cols-1 gap-2 md:grid-cols-3">
+                            <div className="rounded-lg border border-sky-400/20 bg-[#0b1222] p-2">
+                              <div className="text-[10px] font-bold uppercase text-sky-300">
+                                {isPt ? 'Parede Esquerda' : 'Left Wall'}
+                              </div>
+                              <div className="mt-0.5 text-[11px] text-slate-300">
+                                {isPt ? activeFrameSpec.leftWallPt : activeFrameSpec.leftWallEn}
+                              </div>
+                            </div>
+                            <div className="rounded-lg border border-amber-400/20 bg-[#0b1222] p-2">
+                              <div className="text-[10px] font-bold uppercase text-amber-300">
+                                {isPt ? 'Parede Direita' : 'Right Wall'}
+                              </div>
+                              <div className="mt-0.5 text-[11px] text-slate-300">
+                                {isPt ? activeFrameSpec.rightWallPt : activeFrameSpec.rightWallEn}
+                              </div>
+                            </div>
+                            <div className="rounded-lg border border-emerald-400/20 bg-[#0b1222] p-2">
+                              <div className="text-[10px] font-bold uppercase text-emerald-300">
+                                {isPt ? 'Teto' : 'Ceiling'}
+                              </div>
+                              <div className="mt-0.5 text-[11px] text-slate-300">
+                                {isPt ? activeFrameSpec.ceilingPt : activeFrameSpec.ceilingEn}
+                              </div>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </section>
 
-                  {/* 3. Sequência de Quadros Possíveis (Storyboard 1..4 da Parede Direita + 5 Camadas Photoshop) */}
-                  <section className="rounded-xl border border-slate-400/15 bg-[#080d19] p-4">
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <h2 className="text-sm font-semibold text-slate-100">
-                          {isPt
-                            ? 'Sequência de Quadros (4 Atos da Sala) & Camadas Estilo Photoshop'
-                            : 'Scene Frame Strip (4 Room Acts) & Photoshop Layers'}
-                        </h2>
-                        <p className="text-xs text-slate-400">
-                          {isPt
-                            ? 'Salte entre os 4 quadros narrativos da Parede Direita e ligue/desligue os 5 PNGs do Teto/Globo.'
-                            : 'Jump across the 4 narrative frames on the Right Wall and toggle the 5 Ceiling/Globe PNG layers.'}
-                        </p>
-                      </div>
-                    </div>
+                          {/* Prompts Reais (Balão + TTS) */}
+                          <div className="mt-2.5 grid grid-cols-1 gap-2 md:grid-cols-2">
+                            <div className="rounded-lg border border-slate-400/15 bg-[#0b1222] p-2.5">
+                              <div className="text-[10px] font-bold uppercase text-slate-400">
+                                {isPt ? 'Prompt do Balão (phrases)' : 'Bubble Prompt (phrases)'}
+                              </div>
+                              <ul className="mt-1 space-y-1 text-[11px] text-slate-200">
+                                {prompts.phrases.map((line, idx) => (
+                                  <li key={idx} className="leading-snug">
+                                    • {line}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
 
-                    {/* 4 Quadros do Storyboard */}
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      {(
-                        [
-                          [
-                            0,
-                            isPt ? 'Quadro 1 · Chegada' : 'Frame 1 · Arrival',
-                            isPt ? ' Apresentação do país e globo' : 'Country & globe intro',
-                          ],
-                          [
-                            1,
-                            isPt ? 'Quadro 2 · Camadas' : 'Frame 2 · Layers',
-                            isPt ? 'Raios, CO e NO₂ empilhados' : 'Lightning, CO & NO₂ stack',
-                          ],
-                          [
-                            2,
-                            isPt ? 'Quadro 3 · Clima' : 'Frame 3 · Climate',
-                            isPt ? 'Temperatura rege Tom e BPM' : 'Temperature drives Key/BPM',
-                          ],
-                          [
-                            3,
-                            isPt ? 'Quadro 4 · Final 8D' : 'Frame 4 · 8D Finale',
-                            isPt ? 'Tempestade + Vento 360°' : 'Storm + 360° Wind climax',
-                          ],
-                        ] as const
-                      ).map(([idx, title, subtitle]) => {
-                        const active = storyStep === idx;
-                        return (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => setStoryStep(idx)}
-                            className={`flex flex-col items-start rounded-xl border p-2.5 text-left transition ${
-                              active
-                                ? 'border-amber-400/65 bg-amber-400/12 text-amber-100'
-                                : 'border-slate-400/15 bg-[#0b1222] text-slate-300 hover:border-slate-400/35'
-                            }`}
-                          >
-                            <span className="text-xs font-semibold">{title}</span>
-                            <span className="mt-0.5 text-[10px] text-slate-400">{subtitle}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                            <div className="rounded-lg border border-slate-400/15 bg-[#0b1222] p-2.5">
+                              <div className="text-[10px] font-bold uppercase text-slate-400">
+                                {isPt ? 'Prompt de Voz TTS (spoken)' : 'Voice Prompt TTS (spoken)'}
+                              </div>
+                              <p className="mt-1 text-[11px] leading-relaxed text-slate-300">
+                                {prompts.spoken ||
+                                  (isPt ? '(Sem fala neste quadro)' : '(No voiceover in this frame)')}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Os 5 Olhinhos estilo Photoshop + Solo (S) + Tempestade */}
                     <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-slate-400/15 pt-3">
@@ -1954,6 +1887,174 @@ export const SetupView: React.FC = () => {
                         );
                       })}
                     </div>
+                  </section>
+
+                  {/* 3. Sequenciador Real de 32 Batidas (apenas dados reais de meta.json, sem mock) */}
+                  <section
+                    className="rounded-xl border border-slate-400/15 bg-[#080d19] p-4"
+                    data-testid="cue-player-sequencer"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-400/15 pb-3">
+                      <div>
+                        <h2 className="text-sm font-semibold text-slate-100">
+                          {isPt
+                            ? 'Sequenciador Musical Real (32 Batidas · meta.json)'
+                            : 'Real Musical Sequencer (32 Beats · meta.json)'}
+                        </h2>
+                        <p className="text-xs text-slate-400">
+                          {isPt
+                            ? 'Navegue batida por batida nos eventos reais da NASA ou trave 1 compasso em loop para auditar o áudio.'
+                            : 'Step beat-by-beat through real NASA events or loop a single bar to audit audio.'}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => seekBeat(0)}
+                          className="inline-flex min-h-[34px] items-center gap-1 rounded-lg border border-slate-400/20 bg-[#0b1222] px-2.5 text-xs font-semibold text-slate-200 hover:text-white"
+                          title={isPt ? 'Voltar ao Compasso 1.1' : 'Back to Bar 1.1'}
+                        >
+                          <SkipBack size={13} />
+                          <span>1.1</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => stepBeat(-1)}
+                          className="inline-flex min-h-[34px] items-center gap-1 rounded-lg border border-slate-400/20 bg-[#0b1222] px-2.5 text-xs font-semibold text-slate-200 hover:text-white"
+                        >
+                          <ChevronLeft size={14} />
+                          <span>-1</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={togglePlay}
+                          className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg bg-amber-400 px-3 text-xs font-bold text-slate-950 hover:bg-amber-300"
+                        >
+                          {playback.isPlaying ? <Pause size={13} /> : <Play size={13} />}
+                          <span>{playback.isPlaying ? 'Pause' : 'Play'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => stepBeat(1)}
+                          className="inline-flex min-h-[34px] items-center gap-1 rounded-lg border border-slate-400/20 bg-[#0b1222] px-2.5 text-xs font-semibold text-slate-200 hover:text-white"
+                        >
+                          <span>+1</span>
+                          <ChevronRight size={14} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setLoopSingleBar(
+                              loopSingleBar === playback.bar ? null : playback.bar
+                            )
+                          }
+                          className={`inline-flex min-h-[34px] items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition [font-variant-numeric:tabular-nums] ${
+                            loopSingleBar !== null
+                              ? 'border-emerald-400/60 bg-emerald-400/15 text-emerald-200'
+                              : 'border-slate-400/20 bg-[#0b1222] text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          <Repeat size={13} />
+                          <span>
+                            {loopSingleBar !== null
+                              ? `Loop C${loopSingleBar + 1}`
+                              : isPt
+                                ? 'Loop Compasso'
+                                : 'Loop Bar'}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {beatTimeline.length === 0 ? (
+                      <div className="mt-4 rounded-xl border border-slate-400/15 bg-[#060a14] p-4 text-xs text-slate-400">
+                        {isPt
+                          ? 'Nenhum evento por batida carregado no meta.json deste país ainda (zero dados simulados).'
+                          : 'No real per-beat events found in this country meta.json yet (zero mocked data).'}
+                      </div>
+                    ) : (
+                      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+                        {Array.from({ length: 8 }, (_, barIdx) => {
+                          const isBarLooped = loopSingleBar === barIdx;
+                          const isBarCurrent = playback.bar === barIdx;
+                          const barSlots = beatTimeline.slice(barIdx * 4, barIdx * 4 + 4);
+
+                          return (
+                            <div
+                              key={barIdx}
+                              className={`rounded-xl border p-2 transition ${
+                                isBarLooped
+                                  ? 'border-emerald-400/65 bg-emerald-400/[0.08]'
+                                  : isBarCurrent
+                                    ? 'border-amber-400/50 bg-[#0d1629]'
+                                    : 'border-slate-400/15 bg-[#060a14]'
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setLoopSingleBar(isBarLooped ? null : barIdx)
+                                }
+                                className="mb-1.5 flex w-full items-center justify-between text-[10px] font-bold text-slate-300 hover:text-white [font-variant-numeric:tabular-nums]"
+                              >
+                                <span>C{barIdx + 1}</span>
+                                {isBarLooped && (
+                                  <span className="text-[9px] text-emerald-300">LOOP</span>
+                                )}
+                              </button>
+
+                              <div className="grid grid-cols-4 gap-1">
+                                {barSlots.map((slot) => {
+                                  const isCurrentBeat = currentBeatGlobal === slot.beat;
+                                  return (
+                                    <button
+                                      key={slot.beat}
+                                      type="button"
+                                      onClick={() => seekBeat(slot.beat)}
+                                      className={`flex h-11 flex-col items-center justify-between rounded-md border py-1 transition [font-variant-numeric:tabular-nums] ${
+                                        isCurrentBeat
+                                          ? 'border-amber-300 bg-amber-400/25 text-amber-100'
+                                          : 'border-slate-400/15 bg-[#0b1222] text-slate-400 hover:border-sky-400/40 hover:text-white'
+                                      }`}
+                                      title={`${isPt ? 'Batida' : 'Beat'} ${slot.beat + 1}/32 (C${barIdx + 1}.${slot.beatInBar + 1})`}
+                                    >
+                                      <span className="text-[9px] font-semibold">
+                                        {slot.beatInBar + 1}
+                                      </span>
+                                      <span className="flex items-center gap-0.5">
+                                        {slot.hasMelody && (
+                                          <span
+                                            className="h-1.5 w-1.5 rounded-full"
+                                            style={{ backgroundColor: '#fbbf24' }}
+                                          />
+                                        )}
+                                        {slot.hasChords && (
+                                          <span
+                                            className="h-1.5 w-1.5 rounded-full"
+                                            style={{ backgroundColor: '#fb923c' }}
+                                          />
+                                        )}
+                                        {slot.hasBass && (
+                                          <span
+                                            className="h-1.5 w-1.5 rounded-full"
+                                            style={{ backgroundColor: '#34d399' }}
+                                          />
+                                        )}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </section>
                 </div>
               </div>

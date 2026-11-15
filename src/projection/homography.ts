@@ -366,3 +366,48 @@ export function computeHomographyMatrix3d(
   );
   return `matrix3d(${vals.join(', ')})`;
 }
+
+/**
+ * Preserva a proporção 1:1 (`srcWidth / srcHeight`) dentro de um slot retangular padrão
+ * (evitando esmagar/esticar o Globo e o Robô em telas 16:9 ou slots 50%), mas libera
+ * a homografia livre assim que o operador arrasta qualquer pino de Corner-Pin.
+ */
+export function fitQuadAspectContain(
+  srcWidth: number,
+  srcHeight: number,
+  dstPixels: [Point2D, Point2D, Point2D, Point2D]
+): [Point2D, Point2D, Point2D, Point2D] {
+  const [tl, tr, br, bl] = dstPixels;
+  const isAxisAlignedRect =
+    Math.abs(tl.y - tr.y) < 1.5 &&
+    Math.abs(bl.y - br.y) < 1.5 &&
+    Math.abs(tl.x - bl.x) < 1.5 &&
+    Math.abs(tr.x - br.x) < 1.5;
+
+  if (!isAxisAlignedRect) {
+    return dstPixels;
+  }
+
+  const boxW = Math.max(1, tr.x - tl.x);
+  const boxH = Math.max(1, bl.y - tl.y);
+  const srcAspect = Math.max(0.1, srcWidth / Math.max(1, srcHeight));
+  const boxAspect = boxW / boxH;
+
+  let fitW = boxW;
+  let fitH = boxH;
+  if (boxAspect > srcAspect) {
+    fitW = boxH * srcAspect;
+  } else {
+    fitH = boxW / srcAspect;
+  }
+
+  const offsetX = tl.x + (boxW - fitW) / 2;
+  const offsetY = tl.y + (boxH - fitH) / 2;
+
+  return [
+    { x: offsetX, y: offsetY },
+    { x: offsetX + fitW, y: offsetY },
+    { x: offsetX + fitW, y: offsetY + fitH },
+    { x: offsetX, y: offsetY + fitH },
+  ];
+}

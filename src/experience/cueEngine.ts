@@ -8,9 +8,7 @@ import {
   AudioLevelsMap,
   BeatTimelineSlot,
   CompareCountriesState,
-  ExperienceLayersState,
   LiveNoteEvent,
-  ShowCueMode,
 } from './types';
 
 export interface RawMetaBeatEvent {
@@ -24,208 +22,69 @@ export interface RawMetaBeatEvent {
 }
 
 /**
- * Constrói a matriz sequencial de 32 batidas (8 compassos × 4 tempos) para o Cue Player.
- * Usa os eventos reais de `meta.json` quando carregados, ou a grade sintética determinística como fallback.
+ * Constrói a matriz sequencial de 32 batidas (8 compassos × 4 tempos) usando EXCLUSIVAMENTE
+ * os eventos reais de `meta.json` do país. Se não houver dados reais, retorna lista vazia (zero mock).
  */
 export function buildBeatTimeline(
   beatEvents?: ReadonlyArray<RawMetaBeatEvent> | null
 ): BeatTimelineSlot[] {
+  if (!beatEvents || beatEvents.length === 0) {
+    return [];
+  }
+
   const slots: BeatTimelineSlot[] = [];
-  const hasRealEvents = Boolean(beatEvents && beatEvents.length > 0);
 
   for (let beat = 0; beat < 32; beat += 1) {
     const bar = Math.floor(beat / 4);
     const beatInBar = beat % 4;
+    let hasMelody = false;
+    let hasSparkle = false;
+    let hasChords = false;
+    let hasBass = false;
+    let primaryX: number | null = null;
+    let primaryY: number | null = null;
 
-    if (hasRealEvents && beatEvents) {
-      let hasMelody = false;
-      let hasSparkle = false;
-      let hasChords = false;
-      let hasBass = false;
-      let primaryX: number | null = null;
-      let primaryY: number | null = null;
-
-      for (const ev of beatEvents) {
-        if (ev.beat !== beat) continue;
-        if (ev.layer === 'melody') {
-          hasMelody = true;
+    for (const ev of beatEvents) {
+      if (ev.beat !== beat) continue;
+      if (ev.layer === 'melody') {
+        hasMelody = true;
+        primaryX = ev.source_x;
+        primaryY = ev.source_y;
+      } else if (ev.layer === 'sparkle') {
+        hasSparkle = true;
+        if (primaryX === null) {
           primaryX = ev.source_x;
           primaryY = ev.source_y;
-        } else if (ev.layer === 'sparkle') {
-          hasSparkle = true;
-          if (primaryX === null) {
-            primaryX = ev.source_x;
-            primaryY = ev.source_y;
-          }
-        } else if (ev.layer === 'chords') {
-          hasChords = true;
-          if (primaryX === null) {
-            primaryX = ev.source_x;
-            primaryY = ev.source_y;
-          }
-        } else if (ev.layer === 'bass') {
-          hasBass = true;
-          if (primaryX === null) {
-            primaryX = ev.source_x;
-            primaryY = ev.source_y;
-          }
+        }
+      } else if (ev.layer === 'chords') {
+        hasChords = true;
+        if (primaryX === null) {
+          primaryX = ev.source_x;
+          primaryY = ev.source_y;
+        }
+      } else if (ev.layer === 'bass') {
+        hasBass = true;
+        if (primaryX === null) {
+          primaryX = ev.source_x;
+          primaryY = ev.source_y;
         }
       }
-
-      slots.push({
-        beat,
-        bar,
-        beatInBar,
-        hasMelody,
-        hasSparkle,
-        hasChords,
-        hasBass,
-        primaryX,
-        primaryY,
-      });
-    } else {
-      const phase = (beat / 32) * Math.PI * 2;
-      slots.push({
-        beat,
-        bar,
-        beatInBar,
-        hasMelody: true,
-        hasSparkle: beat % 2 === 1,
-        hasChords: beatInBar === 0 || beatInBar === 2,
-        hasBass: beatInBar === 0 || beatInBar === 2 || beatInBar === 3,
-        primaryX: Number((0.5 + 0.34 * Math.cos(phase * 3)).toFixed(3)),
-        primaryY: Number((0.5 + 0.3 * Math.sin(phase * 2)).toFixed(3)),
-      });
     }
+
+    slots.push({
+      beat,
+      bar,
+      beatInBar,
+      hasMelody,
+      hasSparkle,
+      hasChords,
+      hasBass,
+      primaryX,
+      primaryY,
+    });
   }
 
   return slots;
-}
-
-/**
- * Automação de cenas/camadas por compasso para os 2 modos dirigidos do Cue Player:
- * - 'guided-build': Construção Camada a Camada + Final Tempestade 8D
- * - 'climate-clash': Final Choque Climático (Clima Real Regional vs Referência Neutra 90 BPM)
- */
-export function computeShowCueStep(
-  mode: ShowCueMode,
-  bar: number,
-  prev: ExperienceLayersState
-): { storyStep: number; layers: ExperienceLayersState } | null {
-  if (mode === 'free-loop') return null;
-
-  const clampedBar = Math.max(0, Math.min(7, bar));
-
-  if (mode === 'guided-build') {
-    if (clampedBar <= 1) {
-      // Ato 1 (Compassos 1–2): Apenas Sub-Bass NO₂ emergindo do breu #000000
-      return {
-        storyStep: 0,
-        layers: {
-          ...prev,
-          melody: { ...prev.melody, enabled: false, solo: false, sparkleEnabled: false },
-          chords: { ...prev.chords, enabled: false, solo: false },
-          bass: { ...prev.bass, enabled: true, solo: false },
-          temperature: { ...prev.temperature, enabled: false, tuningMode: 'base' },
-          wind: { ...prev.wind, enabled: false, solo: false },
-        },
-      };
-    }
-    if (clampedBar <= 3) {
-      // Ato 2 (Compassos 3–4): Entra Pad Harmônico de CO sobre o Baixo NO₂
-      return {
-        storyStep: 1,
-        layers: {
-          ...prev,
-          melody: { ...prev.melody, enabled: false, solo: false, sparkleEnabled: false },
-          chords: { ...prev.chords, enabled: true, solo: false },
-          bass: { ...prev.bass, enabled: true, solo: false },
-          temperature: { ...prev.temperature, enabled: false, tuningMode: 'base' },
-          wind: { ...prev.wind, enabled: false, solo: false },
-        },
-      };
-    }
-    if (clampedBar <= 5) {
-      // Ato 3 (Compassos 5–6): Temperatura assume regência climática + Melodia de Raios ISS
-      return {
-        storyStep: 2,
-        layers: {
-          ...prev,
-          melody: { ...prev.melody, enabled: true, solo: false, sparkleEnabled: false },
-          chords: { ...prev.chords, enabled: true, solo: false },
-          bass: { ...prev.bass, enabled: true, solo: false },
-          temperature: { ...prev.temperature, enabled: true, tuningMode: 'region' },
-          wind: { ...prev.wind, enabled: false, solo: false },
-        },
-      };
-    }
-    // Ato 4 / Final (Compassos 7–8): Tempestade Completa + Vento Espacial 8D 360°
-    return {
-      storyStep: 3,
-      layers: {
-        ...prev,
-        melody: { ...prev.melody, enabled: true, solo: false, sparkleEnabled: true },
-        chords: { ...prev.chords, enabled: true, solo: false },
-        bass: { ...prev.bass, enabled: true, solo: false },
-        temperature: { ...prev.temperature, enabled: true, tuningMode: 'region' },
-        wind: {
-          ...prev.wind,
-          enabled: true,
-          solo: false,
-          gain: Math.max(0.82, prev.wind.gain),
-          wetMix: Math.max(0.82, prev.wind.wetMix),
-        },
-      },
-    };
-  }
-
-  // mode === 'climate-clash'
-  if (clampedBar <= 3) {
-    // Compassos 1–4: Clima Regional Real do país (BPM e modo reais)
-    return {
-      storyStep: 1,
-      layers: {
-        ...prev,
-        melody: { ...prev.melody, enabled: true, solo: false, sparkleEnabled: false },
-        chords: { ...prev.chords, enabled: true, solo: false },
-        bass: { ...prev.bass, enabled: true, solo: false },
-        temperature: { ...prev.temperature, enabled: true, tuningMode: 'region' },
-        wind: { ...prev.wind, enabled: true, solo: false },
-      },
-    };
-  }
-  if (clampedBar <= 5) {
-    // Compassos 5–6: Choque Científico — desliga Temperatura p/ cair na Referência Neutra (90 BPM)
-    return {
-      storyStep: 2,
-      layers: {
-        ...prev,
-        melody: { ...prev.melody, enabled: true, solo: false, sparkleEnabled: false },
-        chords: { ...prev.chords, enabled: true, solo: false },
-        bass: { ...prev.bass, enabled: true, solo: false },
-        temperature: { ...prev.temperature, enabled: false, tuningMode: 'base' },
-        wind: { ...prev.wind, enabled: false, solo: false },
-      },
-    };
-  }
-  // Compassos 7–8: Retorno explosivo ao Clima Real + Tempestade + Vento 8D
-  return {
-    storyStep: 3,
-    layers: {
-      ...prev,
-      melody: { ...prev.melody, enabled: true, solo: false, sparkleEnabled: true },
-      chords: { ...prev.chords, enabled: true, solo: false },
-      bass: { ...prev.bass, enabled: true, solo: false },
-      temperature: { ...prev.temperature, enabled: true, tuningMode: 'region' },
-      wind: {
-        ...prev.wind,
-        enabled: true,
-        solo: false,
-        gain: Math.max(0.85, prev.wind.gain),
-        wetMix: Math.max(0.85, prev.wind.wetMix),
-      },
-    },
-  };
 }
 
 /**

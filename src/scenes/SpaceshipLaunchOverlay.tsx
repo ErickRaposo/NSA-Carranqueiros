@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { MissionPhase, SurfaceId } from '../experience/types';
 
@@ -32,7 +32,21 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
   surface,
   phase,
 }) => {
-  const isSealedCabin = phase === 'boarding' || phase === 'countdown';
+  const [isReentry, setIsReentry] = useState(false);
+
+  useEffect(() => {
+    if (phase !== 'ended') {
+      setIsReentry(false);
+      return;
+    }
+    setIsReentry(true);
+    const timer = window.setTimeout(() => setIsReentry(false), 3200);
+    return () => window.clearTimeout(timer);
+  }, [phase]);
+
+  const isSealedCabin = phase === 'boarding' || phase === 'countdown' || isReentry;
+  const isOpeningZeroG = phase === 'zero_g';
+  const showShipShell = isSealedCabin || isOpeningZeroG;
   const isCountdown = phase === 'countdown';
   const isZeroGCabin =
     phase === 'zero_g' && (surface === 'leftWall' || surface === 'rightWall');
@@ -46,11 +60,11 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
           PAREDE DIREITA: Comportas metálicas fechando + fumaça espalhada
           ===================================================================== */}
       <AnimatePresence>
-        {surface === 'rightWall' && isSealedCabin && (
+        {surface === 'rightWall' && showShipShell && (
           <motion.div
             key="right-blast-doors"
             className="absolute inset-0 flex"
-            initial={{ opacity: 0.95 }}
+            initial={{ opacity: 1 }}
             animate={
               isCountdown
                 ? {
@@ -60,7 +74,7 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
                   }
                 : { opacity: 1, x: 0, y: 0 }
             }
-            exit={{ opacity: 0 }}
+            exit={{ opacity: 0, transition: { duration: 0.6 } }}
             transition={
               isCountdown
                 ? {
@@ -73,10 +87,10 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
             <motion.div
               className="relative h-full w-1/2 border-r border-slate-500/40 shadow-[inset_-14px_0_32px_rgba(0,0,0,0.75)]"
               style={BRUSHED_METAL_STYLE}
-              initial={{ x: '-100%' }}
-              animate={{ x: '0%' }}
-              exit={{ x: '-100%' }}
-              transition={{ duration: 1.45, ease: [0.22, 1, 0.36, 1] }}
+              initial={{ x: isOpeningZeroG ? '0%' : '-100%' }}
+              animate={{ x: isOpeningZeroG ? '-105%' : '0%' }}
+              exit={{ x: '-105%', transition: { duration: 1.4, ease: [0.22, 1, 0.36, 1] } }}
+              transition={{ duration: isOpeningZeroG ? 2.6 : 1.45, ease: [0.22, 1, 0.36, 1] }}
             >
               <div className="absolute inset-4 rounded-xl border border-slate-400/15 bg-black/20" />
               <div className="absolute top-5 left-5 h-2 w-2 rounded-full bg-slate-400/50" />
@@ -86,17 +100,17 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
             <motion.div
               className="relative h-full w-1/2 border-l border-slate-500/40 shadow-[inset_14px_0_32px_rgba(0,0,0,0.75)]"
               style={BRUSHED_METAL_STYLE}
-              initial={{ x: '100%' }}
-              animate={{ x: '0%' }}
-              exit={{ x: '100%' }}
-              transition={{ duration: 1.45, ease: [0.22, 1, 0.36, 1] }}
+              initial={{ x: isOpeningZeroG ? '0%' : '100%' }}
+              animate={{ x: isOpeningZeroG ? '105%' : '0%' }}
+              exit={{ x: '105%', transition: { duration: 1.4, ease: [0.22, 1, 0.36, 1] } }}
+              transition={{ duration: isOpeningZeroG ? 2.6 : 1.45, ease: [0.22, 1, 0.36, 1] }}
             >
               <div className="absolute inset-4 rounded-xl border border-slate-400/15 bg-black/20" />
               <div className="absolute top-5 right-5 h-2 w-2 rounded-full bg-slate-400/50" />
               <div className="absolute right-5 bottom-5 h-2 w-2 rounded-full bg-slate-400/50" />
             </motion.div>
 
-            {/* Fumaça espalhada ao fechar as comportas */}
+            {/* Fumaça espalhada ao fechar/abrir as comportas */}
             {SMOKE_CLOUDS.map((puff, idx) => (
               <motion.div
                 key={`right-smoke-${idx}`}
@@ -107,17 +121,21 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
                   width: puff.size,
                   height: puff.size,
                   background:
-                    'radial-gradient(circle, rgba(226,232,240,0.36) 0%, rgba(148,163,184,0.14) 55%, transparent 100%)',
+                    'radial-gradient(circle, rgba(226,232,240,0.34) 0%, rgba(148,163,184,0.12) 55%, transparent 100%)',
                 }}
-                initial={{ opacity: 0, scale: 0.5, y: 20 }}
-                animate={{
-                  opacity: [0, 0.52, 0.16],
-                  scale: [0.6, 1.3, 1.7],
-                  y: [18, -26, -62],
-                }}
+                initial={{ opacity: isOpeningZeroG ? 0.45 : 0, scale: isOpeningZeroG ? 1 : 0.5, y: 0 }}
+                animate={
+                  isOpeningZeroG
+                    ? { opacity: 0, scale: 1.6, y: -48 }
+                    : {
+                        opacity: [0, 0.52, 0.16],
+                        scale: [0.6, 1.3, 1.7],
+                        y: [18, -26, -62],
+                      }
+                }
                 transition={{
-                  duration: isCountdown ? 3.2 : 2.8,
-                  delay: puff.delay,
+                  duration: isOpeningZeroG ? 2.2 : isCountdown ? 3.2 : 2.8,
+                  delay: isOpeningZeroG ? idx * 0.08 : puff.delay,
                   repeat: isCountdown ? Infinity : 0,
                   ease: 'easeOut',
                 }}
@@ -131,12 +149,12 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
           PAREDE ESQUERDA: Chapa metálica + vigia circular responsiva para o campo de areia
           ===================================================================== */}
       <AnimatePresence>
-        {surface === 'leftWall' && isSealedCabin && (
+        {surface === 'leftWall' && showShipShell && (
           <motion.div
             key="left-metal-launchpad"
             className="absolute inset-0 flex items-center justify-center"
             style={BRUSHED_METAL_STYLE}
-            initial={{ x: '-100%', opacity: 0.9 }}
+            initial={{ x: isOpeningZeroG ? '0%' : '-100%', opacity: 1 }}
             animate={
               isCountdown
                 ? {
@@ -144,16 +162,18 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
                     y: [0, 1.5, -1.5, 1, 0],
                     opacity: 1,
                   }
-                : { x: 0, y: 0, opacity: 1 }
+                : isOpeningZeroG
+                  ? { x: '-105%', opacity: 0 }
+                  : { x: '0%', opacity: 1 }
             }
-            exit={{ opacity: 0 }}
+            exit={{ x: '-105%', opacity: 0, transition: { duration: 1.4, ease: [0.22, 1, 0.36, 1] } }}
             transition={
               isCountdown
                 ? {
                     x: { repeat: Infinity, duration: 0.22 },
                     y: { repeat: Infinity, duration: 0.19 },
                   }
-                : { duration: 1.3, ease: [0.22, 1, 0.36, 1] }
+                : { duration: isOpeningZeroG ? 2.6 : 1.3, ease: [0.22, 1, 0.36, 1] }
             }
           >
             <span className="absolute top-4 left-4 h-2 w-2 rounded-full bg-slate-400/50" />
@@ -170,23 +190,32 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
                     background:
                       'linear-gradient(to bottom, #02050d 0%, #072f4a 35%, #38bdf8 72%, #fed7aa 100%)',
                   }}
+                  initial={isReentry || isOpeningZeroG ? { y: '78%', opacity: 0.12 } : false}
                   animate={{
-                    y: isCountdown ? '78%' : '0%',
-                    opacity: isCountdown ? 0.12 : 1,
+                    y: isCountdown || isOpeningZeroG ? '78%' : '0%',
+                    opacity: isCountdown || isOpeningZeroG ? 0.12 : 1,
                   }}
-                  transition={{ duration: 9.2, ease: 'easeInOut' }}
+                  transition={{ duration: isReentry ? 3.0 : isOpeningZeroG ? 0.2 : 9.2, ease: 'easeInOut' }}
                 />
 
                 <motion.svg
                   viewBox="0 0 320 320"
                   preserveAspectRatio="xMidYMid slice"
                   className="relative z-10 h-full w-full"
+                  initial={
+                    isReentry || isOpeningZeroG
+                      ? { y: '105%', scale: 0.62, opacity: 0.06 }
+                      : false
+                  }
                   animate={{
-                    y: isCountdown ? '105%' : '0%',
-                    scale: isCountdown ? 0.62 : 1,
-                    opacity: isCountdown ? 0.06 : 1,
+                    y: isCountdown || isOpeningZeroG ? '105%' : '0%',
+                    scale: isCountdown || isOpeningZeroG ? 0.62 : 1,
+                    opacity: isCountdown || isOpeningZeroG ? 0.06 : 1,
                   }}
-                  transition={{ duration: 8.8, ease: 'easeIn' }}
+                  transition={{
+                    duration: isReentry ? 3.0 : isOpeningZeroG ? 0.2 : 8.8,
+                    ease: isReentry ? 'easeOut' : 'easeIn',
+                  }}
                 >
                   <defs>
                     <linearGradient id="sandFieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -302,11 +331,11 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
           TETO: Duas comportas do topo do foguete que se abrem devagar em Zero-G
           ===================================================================== */}
       <AnimatePresence>
-        {surface === 'ceiling' && isSealedCabin && (
+        {surface === 'ceiling' && showShipShell && (
           <motion.div
             key="ceiling-rocket-nosecone"
             className="absolute inset-0 flex overflow-hidden"
-            initial={{ opacity: 0 }}
+            initial={{ opacity: 1 }}
             animate={
               isCountdown
                 ? {
@@ -316,7 +345,7 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
                   }
                 : { opacity: 1, x: 0, y: 0 }
             }
-            exit={{ opacity: 0 }}
+            exit={{ opacity: 0, transition: { duration: 0.6 } }}
             transition={
               isCountdown
                 ? {
@@ -326,14 +355,14 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
                 : { duration: 2.4 }
             }
           >
-            {/* Metade esquerda do teto abrindo devagar para a esquerda */}
+            {/* Metade esquerda do teto abrindo devagar para cima e esquerda */}
             <motion.div
               className="relative h-full w-1/2 overflow-hidden border-r border-sky-400/30"
               style={BRUSHED_METAL_STYLE}
-              initial={{ x: '-100%' }}
-              animate={{ x: '0%' }}
-              exit={{ x: '-100%' }}
-              transition={{ duration: 2.3, ease: [0.22, 1, 0.36, 1] }}
+              initial={{ x: isOpeningZeroG ? '0%' : '-100%', y: isOpeningZeroG ? '0%' : '-18%' }}
+              animate={{ x: isOpeningZeroG ? '-42%' : '0%', y: isOpeningZeroG ? '-115%' : '0%' }}
+              exit={{ x: '-42%', y: '-115%', transition: { duration: 1.4, ease: [0.22, 1, 0.36, 1] } }}
+              transition={{ duration: isOpeningZeroG ? 2.6 : 2.3, ease: [0.22, 1, 0.36, 1] }}
             >
               <svg viewBox="0 0 200 260" className="h-full w-full opacity-80" preserveAspectRatio="none">
                 <line x1="0" y1="0" x2="200" y2="130" stroke="#475569" strokeWidth="2.5" />
@@ -354,14 +383,14 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
               </svg>
             </motion.div>
 
-            {/* Metade direita do teto abrindo devagar para a direita */}
+            {/* Metade direita do teto abrindo devagar para cima e direita */}
             <motion.div
               className="relative h-full w-1/2 overflow-hidden border-l border-sky-400/30"
               style={BRUSHED_METAL_STYLE}
-              initial={{ x: '100%' }}
-              animate={{ x: '0%' }}
-              exit={{ x: '100%' }}
-              transition={{ duration: 2.3, ease: [0.22, 1, 0.36, 1] }}
+              initial={{ x: isOpeningZeroG ? '0%' : '100%', y: isOpeningZeroG ? '0%' : '-18%' }}
+              animate={{ x: isOpeningZeroG ? '42%' : '0%', y: isOpeningZeroG ? '-115%' : '0%' }}
+              exit={{ x: '42%', y: '-115%', transition: { duration: 1.4, ease: [0.22, 1, 0.36, 1] } }}
+              transition={{ duration: isOpeningZeroG ? 2.6 : 2.3, ease: [0.22, 1, 0.36, 1] }}
             >
               <svg viewBox="0 0 200 260" className="h-full w-full opacity-80" preserveAspectRatio="none">
                 <line x1="200" y1="0" x2="0" y2="130" stroke="#475569" strokeWidth="2.5" />

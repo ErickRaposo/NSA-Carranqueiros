@@ -43,7 +43,6 @@ import {
 import {
   advanceLoopProgress,
   buildBeatTimeline,
-  computeShowCueStep,
   computeSpeakerLiveLevels,
   resolveCompareSwapTarget,
 } from './cueEngine';
@@ -63,7 +62,6 @@ import {
   PILOT_COUNTRY_IDS,
   ProjectorOutId,
   RoomDimensions,
-  ShowCueMode,
   SoloableLayerId,
   SurfaceId,
   VISUAL_LAYER_ORDER,
@@ -251,11 +249,11 @@ function loadInitialRoomDimensions(): RoomDimensions {
 }
 
 export const DEFAULT_LAYERS_STATE: ExperienceLayersState = {
-  melody: { enabled: true, gain: 0.88, solo: false, sparkleEnabled: true },
-  chords: { enabled: true, gain: 0.8, solo: false },
-  bass: { enabled: true, gain: 0.82, solo: false },
-  wind: { enabled: true, gain: 0.55, wetMix: 0.55, solo: false },
-  temperature: { enabled: true, gain: 1.0, solo: false, tuningMode: 'region' },
+  melody: { enabled: false, gain: 0.88, solo: false, sparkleEnabled: true },
+  chords: { enabled: false, gain: 0.8, solo: false },
+  bass: { enabled: false, gain: 0.82, solo: false },
+  wind: { enabled: false, gain: 0.55, wetMix: 0.55, solo: false },
+  temperature: { enabled: false, gain: 1.0, solo: false, tuningMode: 'region' },
 };
 
 function toExperienceCountry(
@@ -294,7 +292,7 @@ interface SyncPayload {
   lang: Lang;
   storyStep: number;
   missionPhase?: MissionPhase;
-  showCueMode?: ShowCueMode;
+  sceneReplayKey?: number;
   loopSingleBar?: number | null;
   compareCountries?: CompareCountriesState;
   audioMode: AudioOutputMode;
@@ -422,7 +420,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [lang, setLangState] = useState<Lang>('pt');
   const [storyStep, setStoryStepState] = useState<number>(0);
   const [missionPhase, setMissionPhaseState] = useState<MissionPhase>('idle');
-  const [showCueMode, setShowCueModeState] = useState<ShowCueMode>('free-loop');
+  const [sceneReplayKey, setSceneReplayKey] = useState<number>(0);
   const [loopSingleBar, setLoopSingleBarState] = useState<number | null>(null);
   const [compareCountries, setCompareCountriesState] = useState<CompareCountriesState>({
     slotA: '076',
@@ -599,15 +597,6 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [durationSeconds, isPlaying, loopSingleBar, totalBars, totalBeats]);
-
-  // Automação de cenas/camadas quando um modo de roteiro/final do Cue Player está selecionado
-  useEffect(() => {
-    if (showCueMode === 'free-loop') return;
-    const step = computeShowCueStep(showCueMode, bar, layersRef.current);
-    if (!step) return;
-    setStoryStepState(step.storyStep);
-    setLayers(step.layers);
-  }, [bar, showCueMode]);
 
   const layersRef = useRef(layers);
   layersRef.current = layers;
@@ -795,7 +784,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setLangState(data.lang);
     setStoryStepState(data.storyStep ?? 0);
     if (data.missionPhase) setMissionPhaseState(data.missionPhase);
-    if (data.showCueMode) setShowCueModeState(data.showCueMode);
+    if (typeof data.sceneReplayKey === 'number') setSceneReplayKey(data.sceneReplayKey);
     if (data.loopSingleBar !== undefined) setLoopSingleBarState(data.loopSingleBar);
     if (data.compareCountries) setCompareCountriesState(data.compareCountries);
     setAudioModeState(data.audioMode);
@@ -953,7 +942,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       lang,
       storyStep,
       missionPhase,
-      showCueMode,
+      sceneReplayKey,
       loopSingleBar,
       compareCountries,
       audioMode,
@@ -985,9 +974,9 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     masterGain,
     missionPhase,
     roomDimensions,
+    sceneReplayKey,
     seekSyncNonce,
     selectedCountryId,
-    showCueMode,
     storyStep,
   ]);
 
@@ -1111,17 +1100,25 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setSeekSyncNonce((n) => n + 1);
   }, [availableCountryIds, compareCountries, selectedCountryId]);
 
-  const setShowCueMode = useCallback((mode: ShowCueMode) => {
-    setShowCueModeState(mode);
-    if (mode === 'free-loop') {
-      setLayers(DEFAULT_LAYERS_STATE);
-    } else {
-      const step = computeShowCueStep(mode, playbackRef.current.bar, layersRef.current);
-      if (step) {
-        setStoryStepState(step.storyStep);
-        setLayers(step.layers);
+  const activateMissionFrame = useCallback(
+    (phase: MissionPhase, nextStoryStep?: number) => {
+      setMissionPhaseState(phase);
+      if (typeof nextStoryStep === 'number') {
+        const normalized =
+          ((Math.round(nextStoryStep) % STORY_STEP_COUNT) + STORY_STEP_COUNT) %
+          STORY_STEP_COUNT;
+        setStoryStepState(normalized);
+        if (phase === 'exploring' && normalized > 0 && !selectedCountryId) {
+          setSelectedCountryId('076');
+        }
       }
-    }
+      setSceneReplayKey((k) => k + 1);
+    },
+    [selectedCountryId]
+  );
+
+  const replayActiveFrame = useCallback(() => {
+    setSceneReplayKey((k) => k + 1);
   }, []);
 
   const toggleEye = useCallback((layerId: VisualLayerId) => {
@@ -1232,7 +1229,8 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setSelectedCountryId('076');
     setLayers(DEFAULT_LAYERS_STATE);
     setStoryStepState(0);
-    setShowCueModeState('free-loop');
+    setMissionPhaseState('idle');
+    setSceneReplayKey((k) => k + 1);
     setLoopSingleBarState(null);
     setProgress01(0);
     liveProgressRef.current = 0;
@@ -1792,7 +1790,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       lang,
       storyStep,
       missionPhase,
-      showCueMode,
+      sceneReplayKey,
       loopSingleBar,
       compareCountries,
       beatTimeline,
@@ -1814,7 +1812,8 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       selectCountryPreserveBeat,
       setCompareSlot,
       swapCompareCountries,
-      setShowCueMode,
+      activateMissionFrame,
+      replayActiveFrame,
       setLoopSingleBar,
       stepBeat,
       toggleEye,
@@ -1839,6 +1838,7 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       resetExperienceToDefault,
     }),
     [
+      activateMissionFrame,
       allCountries,
       audioLevels,
       audioMode,
@@ -1862,8 +1862,10 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       playback,
       pngUrls,
       prevStoryStep,
+      replayActiveFrame,
       resetExperienceToDefault,
       roomDimensions,
+      sceneReplayKey,
       seekBar,
       seekBeat,
       seekProgress,
@@ -1879,10 +1881,8 @@ export const ExperienceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setMasterGain,
       setMissionPhase,
       setRoomDimensions,
-      setShowCueMode,
       setStoryStep,
       setWindWetMix,
-      showCueMode,
       speakerLiveLevels,
       stepBeat,
       storyStep,

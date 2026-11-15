@@ -30,10 +30,17 @@ describe('Earth Jukebox ?view= routing & 5-layer Photoshop mixer contract', () =
     expect(VISUAL_LAYER_ORDER).toEqual(['melody', 'chords', 'temperature', 'bass', 'wind']);
   });
 
+  it('starts with all 5 NASA layers disabled by default', () => {
+    for (const id of VISUAL_LAYER_ORDER) {
+      expect(DEFAULT_LAYERS_STATE[id].enabled).toBe(false);
+    }
+  });
+
   it('isolates a soloed generator layer on the Globe stack while muting non-soloed layers', () => {
     const soloedBass = {
       ...DEFAULT_LAYERS_STATE,
-      bass: { ...DEFAULT_LAYERS_STATE.bass, solo: true },
+      melody: { ...DEFAULT_LAYERS_STATE.melody, enabled: true },
+      bass: { ...DEFAULT_LAYERS_STATE.bass, enabled: true, solo: true },
     };
     const stack = buildGlobeLayerStack(soloedBass);
     const activeIds = stack.filter((l) => l.enabled).map((l) => l.id);

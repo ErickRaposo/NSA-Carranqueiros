@@ -1,19 +1,27 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Award } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import mineiroLogo from '../assets/mineiro-logo.png';
 import erickPhoto from '../assets/team/erick.jpeg';
 import samuelPhoto from '../assets/team/samuel.png';
 import shayenePhoto from '../assets/team/shayene.png';
-import { preloadPiperVoice, speakText } from '../accessibility/a11yEngine';
+import { preloadPiperVoice, speakText, stopSpeech } from '../accessibility/a11yEngine';
 import {
   playBlastDoorSlamSfx,
   playCabinDissolveSfx,
   playHatchEjectSfx,
+  playLandingThudSfx,
   setSpaceAmbientDucked,
 } from '../audio/spaceAmbient';
+import { setSpatialMusicDucked } from '../audio/spatialAudioEngine';
 import { Mineiro3D } from '../components/Mineiro3D';
 import { useExperience } from '../experience/ExperienceContext';
-import { LAYER_METAS, SceneSurfaceProps, VISUAL_LAYER_ORDER } from '../experience/types';
+import {
+  LAYER_METAS,
+  SceneSurfaceProps,
+  VISUAL_LAYER_ORDER,
+  VisualLayerId,
+} from '../experience/types';
 import { SpaceStarfield } from './SpaceStarfield';
 import { SpaceshipLaunchOverlay } from './SpaceshipLaunchOverlay';
 
@@ -40,17 +48,75 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
       : 'Earth';
 
   const activeStep = storyStep % 4;
-  const firstActiveLayerId =
-    VISUAL_LAYER_ORDER.find((id) => layers[id].enabled) ?? 'melody';
-  const activeLayerMeta = LAYER_METAS[firstActiveLayerId];
+  const enabledLayerIds = VISUAL_LAYER_ORDER.filter((id) => layers[id].enabled);
+  const [focusedLayerId, setFocusedLayerId] = useState<VisualLayerId | null>(null);
+  const prevLayerEnabledRef = useRef<Record<VisualLayerId, boolean>>({
+    melody: layers.melody.enabled,
+    chords: layers.chords.enabled,
+    temperature: layers.temperature.enabled,
+    bass: layers.bass.enabled,
+    wind: layers.wind.enabled,
+  });
+
+  useEffect(() => {
+    const newlyEnabled = VISUAL_LAYER_ORDER.find(
+      (id) => layers[id].enabled && !prevLayerEnabledRef.current[id]
+    );
+    VISUAL_LAYER_ORDER.forEach((id) => {
+      prevLayerEnabledRef.current[id] = layers[id].enabled;
+    });
+    if (newlyEnabled) {
+      setFocusedLayerId(newlyEnabled);
+    } else if (focusedLayerId && !layers[focusedLayerId].enabled) {
+      setFocusedLayerId(enabledLayerIds[0] ?? null);
+    }
+  }, [enabledLayerIds, focusedLayerId, layers]);
+
+  const activeLayerForSpeech: VisualLayerId | null =
+    focusedLayerId && layers[focusedLayerId].enabled
+      ? focusedLayerId
+      : (enabledLayerIds[0] ?? null);
+  const activeLayerMeta = LAYER_METAS[activeLayerForSpeech ?? 'melody'];
 
   const lastSpokenKeyRef = useRef<string>('');
   const [countdownNum, setCountdownNum] = useState<number>(5);
+  const [endedStage, setEndedStage] = useState<'reentry' | 'medal' | 'credits'>('reentry');
+  const [landingBump, setLandingBump] = useState<boolean>(false);
 
   // Controle de digitação letra por letra
   const [phraseIdx, setPhraseIdx] = useState(0);
   const [charCount, setCharCount] = useState(0);
   const [isErasing, setIsErasing] = useState(false);
+
+  // Sequência automática em 3 etapas da Missão Cumprida (`ended`)
+  useEffect(() => {
+    if (missionPhase !== 'ended') {
+      setEndedStage('reentry');
+      setLandingBump(false);
+      return;
+    }
+
+    setEndedStage('reentry');
+    setLandingBump(false);
+
+    const medalTimer = window.setTimeout(() => {
+      if (renderContext !== 'projector') {
+        playLandingThudSfx();
+      }
+      setLandingBump(true);
+      setEndedStage('medal');
+      window.setTimeout(() => setLandingBump(false), 420);
+    }, 3200);
+
+    const creditsTimer = window.setTimeout(() => {
+      setEndedStage('credits');
+    }, 6700);
+
+    return () => {
+      window.clearTimeout(medalTimer);
+      window.clearTimeout(creditsTimer);
+    };
+  }, [missionPhase, renderContext]);
 
   // Contagem regressiva 5, 4, 3, 2, 1 durante a fase `countdown`
   useEffect(() => {
@@ -169,7 +235,106 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
           };
     }
 
-    // Fase `exploring`
+    // Fase `exploring`: comentário exclusivo por camada ativa (todas as 5 camadas) ou passo guiado
+    if (activeLayerForSpeech) {
+      const layerComments: Record<
+        VisualLayerId,
+        { pt: { phrases: string[]; spoken: string }; en: { phrases: string[]; spoken: string } }
+      > = {
+        melody: {
+          pt: {
+            phrases: [
+              `Raios ISS-LIS sobre ${countryName}!`,
+              'Cada relâmpago vira uma nota melódica e um flash no teto.',
+              'Experimente combinar outra camada da NASA por cima!',
+            ],
+            spoken: `Camada de Melodia ativa sobre ${countryName}. Os raios captados pela Estação Espacial estão virando notas musicais e flashes no teto!`,
+          },
+          en: {
+            phrases: [
+              `ISS-LIS Lightning over ${countryName}!`,
+              'Every flash becomes a melodic note and lights up the ceiling.',
+              'Try stacking another NASA layer on top!',
+            ],
+            spoken: `Melody layer active over ${countryName}. Lightning flashes captured from the Space Station are turning into musical notes above you!`,
+          },
+        },
+        chords: {
+          pt: {
+            phrases: [
+              `Monóxido de Carbono (CO) em ${countryName} (${playback.activeChord}).`,
+              'A pluma atmosférica molda os acordes em tempo real!',
+              'Veja os anéis harmônicos pulsando no teto.',
+            ],
+            spoken: `Camada de Acordes ativa sobre ${countryName}. A concentração de monóxido de carbono está moldando a harmonia em ${playback.activeChord}!`,
+          },
+          en: {
+            phrases: [
+              `Carbon Monoxide (CO) over ${countryName} (${playback.activeChord}).`,
+              'Atmospheric plumes shape the chords in real time!',
+              'Watch the harmonic rings pulsing overhead.',
+            ],
+            spoken: `Chords layer active over ${countryName}. Carbon monoxide levels are shaping the harmony in ${playback.activeChord}!`,
+          },
+        },
+        temperature: {
+          pt: {
+            phrases: [
+              `Temperatura na superfície de ${countryName}!`,
+              'O calor observado pela NASA aquece o timbre e o brilho do globo.',
+              `Agora soando em ${playback.keyRootPt} a ${playback.bpm} BPM.`,
+            ],
+            spoken: `Camada de Temperatura ativa sobre ${countryName}. Os dados térmicos da NASA estão aquecendo o timbre e o brilho do planeta!`,
+          },
+          en: {
+            phrases: [
+              `Surface temperature over ${countryName}!`,
+              'NASA thermal data warms the synth timbre and planet glow.',
+              `Now sounding in ${playback.keyRoot} at ${playback.bpm} BPM.`,
+            ],
+            spoken: `Temperature layer active over ${countryName}. NASA thermal observations are warming the timbre and planet glow!`,
+          },
+        },
+        bass: {
+          pt: {
+            phrases: [
+              `Dióxido de Nitrogênio (NO₂) em ${countryName}!`,
+              'As emissões urbanas viram pulso grave e gotículas no teto.',
+              'Sinta o peso espacial vibrando nas caixas!',
+            ],
+            spoken: `Camada de Base e Chuva ativa sobre ${countryName}. Os níveis de dióxido de nitrogênio estão guiando o pulso grave no quarto!`,
+          },
+          en: {
+            phrases: [
+              `Nitrogen Dioxide (NO₂) over ${countryName}!`,
+              'Urban emissions become deep bass pulses and rain streaks above.',
+              'Feel the spatial weight across the speakers!',
+            ],
+            spoken: `Bass and Rain layer active over ${countryName}. Nitrogen dioxide levels are driving the deep spatial pulse across the room!`,
+          },
+        },
+        wind: {
+          pt: {
+            phrases: [
+              `Ventos a ${playback.windMeanSpeed.toFixed(1)} m/s em ${countryName}!`,
+              'As rajadas da NASA giram o som em 8D pelas 3 caixas.',
+              'Olhe as correntes de vento cruzando o céu acima!',
+            ],
+            spoken: `Camada de Vento ativa sobre ${countryName}, soprando a ${playback.windMeanSpeed.toFixed(1)} metros por segundo nas três caixas do quarto!`,
+          },
+          en: {
+            phrases: [
+              `Winds at ${playback.windMeanSpeed.toFixed(1)} m/s over ${countryName}!`,
+              'NASA wind gusts pan 8D audio across all 3 room speakers.',
+              'Watch the wind streams sweeping across the ceiling!',
+            ],
+            spoken: `Wind layer active over ${countryName}, blowing at ${playback.windMeanSpeed.toFixed(1)} meters per second across the room speakers!`,
+          },
+        },
+      };
+      return isPt ? layerComments[activeLayerForSpeech].pt : layerComments[activeLayerForSpeech].en;
+    }
+
     const exploringSteps = isPt
       ? [
           {
@@ -238,6 +403,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
 
     return exploringSteps[activeStep] ?? exploringSteps[0];
   }, [
+    activeLayerForSpeech,
     activeLayerMeta.labelEn,
     activeLayerMeta.labelPt,
     activeStep,
@@ -257,7 +423,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
     setPhraseIdx(0);
     setCharCount(0);
     setIsErasing(false);
-  }, [missionPhase, activeStep, country?.id, lang]);
+  }, [missionPhase, activeStep, activeLayerForSpeech, country?.id, lang]);
 
   useEffect(() => {
     if (!showTypewriter) return;
@@ -312,28 +478,43 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
     preloadPiperVoice(lang);
   }, [lang, renderContext]);
 
-  // Fala no idioma selecionado sem cortar frases + música espacial abaixa enquanto o robô fala
+  // Fala no idioma selecionado interrompendo imediatamente qualquer fala anterior ao trocar país/camada/fase
+  // + abaixa suavemente TODA a música (ambiente espacial e motor 8D dos países) enquanto o robô fala
   useEffect(() => {
+    const setAllMusicDucked = (ducked: boolean) => {
+      setSpaceAmbientDucked(ducked);
+      setSpatialMusicDucked(ducked);
+    };
+
     if (missionPhase === 'idle' || renderContext === 'projector') {
-      setSpaceAmbientDucked(false);
+      stopSpeech();
+      setAllMusicDucked(false);
       return;
     }
-    const key = `${missionPhase}-${activeStep}-${country?.id ?? 'none'}-${lang}`;
+    const key = `${missionPhase}-${activeStep}-${activeLayerForSpeech ?? 'none'}-${country?.id ?? 'none'}-${lang}`;
     if (lastSpokenKeyRef.current === key) return;
     lastSpokenKeyRef.current = key;
 
+    // Corta imediatamente qualquer fala em andamento antes de iniciar a nova
+    stopSpeech();
+    setAllMusicDucked(false);
+
     // No briefing inicial, deixa a música espacial tocar antes do robô começar a falar
-    const startDelayMs = missionPhase === 'briefing' ? 1400 : 250;
+    const startDelayMs = missionPhase === 'briefing' ? 1400 : 180;
     const timer = window.setTimeout(() => {
-      speakText(phaseSpeech.spoken, lang, missionPhase === 'ended', {
+      speakText(phaseSpeech.spoken, lang, true, {
         maleVoice: true,
-        onStart: () => setSpaceAmbientDucked(true),
-        onEnd: () => setSpaceAmbientDucked(false),
+        onStart: () => setAllMusicDucked(true),
+        onEnd: () => setAllMusicDucked(false),
       });
     }, startDelayMs);
 
-    return () => window.clearTimeout(timer);
-  }, [activeStep, country?.id, lang, missionPhase, phaseSpeech.spoken, renderContext]);
+    return () => {
+      window.clearTimeout(timer);
+      stopSpeech();
+      setAllMusicDucked(false);
+    };
+  }, [activeLayerForSpeech, activeStep, country?.id, lang, missionPhase, phaseSpeech.spoken, renderContext]);
 
   const activePhrase = phaseSpeech.phrases[phraseIdx] ?? '';
   const visibleText = activePhrase.slice(0, charCount);
@@ -368,12 +549,12 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
 
       {/* Estado inicial antes de iniciar operação */}
       {missionPhase === 'idle' && (
-        <div className="pointer-events-none relative z-20 m-auto max-w-md px-5 text-center">
+        <div className="pointer-events-none relative z-20 m-auto max-w-[74%] px-8 text-center">
           <h1
-            className="font-bold tracking-[0.03em] text-slate-50 uppercase"
+            className="font-bold tracking-[0.04em] text-slate-50 uppercase"
             style={{
               fontFamily: "'Orbitron', 'Poppins', system-ui, sans-serif",
-              fontSize: 'clamp(1rem, 2.5vw, 1.55rem)',
+              fontSize: '56px',
               lineHeight: 1.2,
             }}
           >
@@ -384,15 +565,15 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
 
       {/* Contagem regressiva durante a decolagem (5, 4, 3, 2, 1) */}
       {missionPhase === 'countdown' && (
-        <div className="pointer-events-none relative z-30 mx-auto mt-6 flex flex-col items-center text-center sm:mt-8">
-          <span className="text-[9px] font-semibold tracking-[0.18em] text-amber-300 uppercase sm:text-[10px]">
+        <div className="pointer-events-none relative z-30 mx-auto mt-14 flex flex-col items-center text-center">
+          <span className="text-[18px] font-semibold tracking-[0.2em] text-amber-300 uppercase">
             {isPt ? 'Motores de Propulsão' : 'Main Engine Ignition'}
           </span>
           <div
-            className="mt-1 font-bold text-slate-50"
+            className="mt-2 font-bold text-slate-50"
             style={{
               fontFamily: "'Orbitron', 'Poppins', sans-serif",
-              fontSize: countdownNum > 0 ? 'clamp(2rem, 6vw, 3rem)' : 'clamp(1.1rem, 2.8vw, 1.45rem)',
+              fontSize: countdownNum > 0 ? '96px' : '54px',
               lineHeight: 1.05,
             }}
           >
@@ -401,82 +582,152 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         </div>
       )}
 
-      {/* Robô MINEIRØ + texto pequeno letra por letra (exceto tela final, que tem layout próprio sem conflito) */}
+      {/* Robô MINEIRØ no círculo azul + barra conectada saindo do globo */}
       {missionPhase !== 'idle' && missionPhase !== 'ended' && (
         <div
-          className="pointer-events-none absolute z-30 flex items-center gap-2 transition-all duration-1000 ease-out"
+          className="pointer-events-none absolute z-30 flex items-center transition-all duration-1000 ease-out"
           style={robotPositionStyle}
         >
-          <div className="h-12 w-12 shrink-0 sm:h-14 sm:w-14">
-            <Mineiro3D
-              stepIndex={storyStep}
-              isExplaining={true}
-              size="avatar"
-            />
+          <div className="relative z-10 flex h-[120px] w-[120px] shrink-0 items-center justify-center rounded-full border-2 border-sky-400/60 bg-sky-500/15 shadow-[0_0_48px_rgba(56,189,248,0.35)]">
+            <div className="h-[92px] w-[92px]">
+              <Mineiro3D
+                stepIndex={storyStep}
+                isExplaining={true}
+                size="avatar"
+              />
+            </div>
           </div>
 
-          <p className="max-w-[165px] text-[10px] font-medium leading-snug tracking-tight text-slate-100 sm:max-w-[195px] sm:text-[11px]">
-            {visibleText}
-            <span
-              className="ml-0.5 inline-block h-2.5 w-[1.5px] animate-pulse bg-sky-300 align-middle"
-              aria-hidden="true"
-            />
-          </p>
+          <div className="-ml-5 flex min-h-[76px] max-w-[480px] items-center rounded-r-full border border-l-0 border-sky-400/40 bg-[#050d20]/90 py-3 pr-7 pl-8 shadow-[0_0_36px_rgba(14,165,233,0.18)]">
+            <p className="text-[21px] font-medium leading-snug tracking-tight text-slate-100">
+              {visibleText}
+              <span
+                className="ml-1 inline-block h-5 w-[3px] animate-pulse bg-sky-300 align-middle"
+                aria-hidden="true"
+              />
+            </p>
+          </div>
         </div>
       )}
 
-      {/* Tela final gamificada: Retorno à Terra + Medalha + Logo MINEIRØ grande no meio + fotos pequenas no rodapé */}
+      {/* Tela final em 3 etapas: 1) Descida na nave -> 2) Tranco + Medalha animada -> 3) Logo MINEIRØ + Developed by */}
       {missionPhase === 'ended' && (
-        <div className="pointer-events-none relative z-30 flex h-full w-full flex-col items-center justify-between px-4 py-3 text-center sm:py-4">
-          {/* Topo: Mineiro + Medalha de reconhecimento da missão */}
-          <div className="flex flex-col items-center gap-1.5">
-            <div className="flex items-center gap-2">
-              <div className="h-10 w-10 shrink-0 sm:h-11 sm:w-11">
-                <Mineiro3D stepIndex={storyStep} isExplaining={true} size="avatar" />
-              </div>
-              <div className="flex items-center gap-2 rounded-full border border-amber-400/45 bg-amber-500/15 px-3 py-1 shadow-[0_0_20px_rgba(251,191,36,0.22)]">
-                <Award className="h-4 w-4 shrink-0 text-amber-300" aria-hidden="true" />
-                <span className="text-[9px] font-bold tracking-wider text-amber-200 uppercase sm:text-[10px]">
-                  {isPt
-                    ? 'Missão Reconhecida & Premiada'
-                    : 'Mission Recognized & Awarded'}
-                </span>
-              </div>
-            </div>
-            <p className="max-w-xs text-[9px] font-medium text-slate-300 sm:text-[10px]">
-              {isPt
-                ? 'Retorno à Terra concluído · Obrigado pelos seus serviços!'
-                : 'Return to Earth complete · Thank you for your service!'}
-            </p>
-          </div>
-
-          {/* Centro: Logo grande do MINEIRØ */}
-          <div className="my-auto flex flex-col items-center justify-center py-2">
-            <img
-              src={mineiroLogo}
-              alt="MINEIRØ"
-              className="h-[clamp(44px,14vh,100px)] w-auto object-contain drop-shadow-[0_0_26px_rgba(56,189,248,0.32)]"
-            />
-          </div>
-
-          {/* Rodapé bem discreto: fotos bem pequenas e somente os nomes embaixo */}
-          <footer className="w-full max-w-sm border-t border-slate-800/70 pt-2">
-            <div className="grid grid-cols-3 gap-2">
-              {TEAM_CREDITS_ALPHABETICAL.map((member) => (
-                <div key={member.name} className="flex flex-col items-center gap-1">
-                  <img
-                    src={member.photo}
-                    alt={member.name}
-                    className="h-6 w-6 rounded-full border border-slate-600/70 object-cover opacity-90 sm:h-7 sm:w-7"
-                  />
-                  <span className="truncate text-[8px] font-medium text-slate-400 sm:text-[9px]">
-                    {member.name}
-                  </span>
+        <motion.div
+          className="pointer-events-none relative z-30 flex h-full w-full flex-col items-center justify-center px-4 py-3 text-center"
+          animate={
+            landingBump
+              ? { x: [0, -5, 5, -3, 2, 0], y: [0, 6, -4, 3, -1, 0] }
+              : { x: 0, y: 0 }
+          }
+          transition={{ duration: 0.38 }}
+        >
+          <AnimatePresence mode="wait">
+            {endedStage === 'reentry' && (
+              <motion.div
+                key="ended-reentry"
+                initial={{ opacity: 0, y: -12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 12 }}
+                transition={{ duration: 0.45 }}
+                className="flex flex-col items-center gap-6"
+              >
+                <div className="flex items-center">
+                  <div className="relative z-10 flex h-[112px] w-[112px] shrink-0 items-center justify-center rounded-full border-2 border-sky-400/60 bg-sky-500/15 shadow-[0_0_48px_rgba(56,189,248,0.35)]">
+                    <div className="h-[88px] w-[88px]">
+                      <Mineiro3D stepIndex={storyStep} isExplaining={true} size="avatar" />
+                    </div>
+                  </div>
+                  <div className="-ml-5 rounded-r-full border border-l-0 border-sky-400/40 bg-[#050d20]/92 py-3.5 pr-7 pl-8 text-left">
+                    <p className="text-[21px] font-semibold text-slate-100">
+                      {isPt
+                        ? 'Missão encerrada! Descendo de volta para a Terra...'
+                        : 'Mission complete! Descending back to Earth...'}
+                    </p>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </footer>
-        </div>
+              </motion.div>
+            )}
+
+            {endedStage === 'medal' && (
+              <motion.div
+                key="ended-medal"
+                initial={{ opacity: 0, scale: 0.65 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9, y: -16 }}
+                transition={{ type: 'spring', stiffness: 220, damping: 16 }}
+                className="flex flex-col items-center gap-7"
+              >
+                {/* Medalha de Honra Animada */}
+                <motion.div
+                  animate={{ rotateY: [0, 360], scale: [1, 1.07, 1] }}
+                  transition={{
+                    rotateY: { duration: 2.6, ease: 'easeInOut' },
+                    scale: { duration: 1.8, repeat: Infinity, ease: 'easeInOut' },
+                  }}
+                  className="flex h-[180px] w-[180px] items-center justify-center rounded-full border-4 border-amber-300/80 bg-gradient-to-br from-amber-300/25 via-amber-500/20 to-amber-700/30 shadow-[0_0_75px_rgba(251,191,36,0.45)]"
+                >
+                  <Award className="h-[92px] w-[92px] text-amber-300 drop-shadow-[0_0_18px_rgba(251,191,36,0.85)]" />
+                </motion.div>
+
+                <div className="flex items-center">
+                  <div className="relative z-10 flex h-[96px] w-[96px] shrink-0 items-center justify-center rounded-full border-2 border-sky-400/60 bg-sky-500/15 shadow-[0_0_40px_rgba(56,189,248,0.35)]">
+                    <div className="h-[72px] w-[72px]">
+                      <Mineiro3D stepIndex={storyStep} isExplaining={true} size="avatar" />
+                    </div>
+                  </div>
+                  <div className="-ml-4 rounded-r-full border border-l-0 border-amber-400/45 bg-[#050d20]/92 py-3 pr-7 pl-7 text-left">
+                    <p className="text-[21px] font-semibold text-amber-200">
+                      {isPt
+                        ? 'Pouso concluído! Receba sua Medalha de Honra pela missão.'
+                        : 'Touchdown! Here is your Medal of Honor for the mission.'}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {endedStage === 'credits' && (
+              <motion.div
+                key="ended-credits"
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+                className="flex h-full w-full flex-col items-center justify-between py-10"
+              >
+                <div className="my-auto flex flex-col items-center justify-center">
+                  <motion.img
+                    src={mineiroLogo}
+                    alt="MINEIRØ"
+                    initial={{ y: 20, scale: 0.9, opacity: 0 }}
+                    animate={{ y: 0, scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                    className="h-[210px] w-auto object-contain drop-shadow-[0_0_42px_rgba(56,189,248,0.38)]"
+                  />
+                </div>
+
+                <footer className="w-full max-w-[680px] border-t border-slate-800/70 pt-5">
+                  <div className="mb-3 text-[16px] font-semibold tracking-[0.2em] text-slate-400 uppercase">
+                    Developed by
+                  </div>
+                  <div className="grid grid-cols-3 gap-6">
+                    {TEAM_CREDITS_ALPHABETICAL.map((member) => (
+                      <div key={member.name} className="flex flex-col items-center gap-2">
+                        <img
+                          src={member.photo}
+                          alt={member.name}
+                          className="h-[48px] w-[48px] rounded-full border border-slate-600/70 object-cover opacity-90"
+                        />
+                        <span className="truncate text-[16px] font-medium text-slate-300">
+                          {member.name}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </footer>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
       )}
 
       <SpaceshipLaunchOverlay surface="rightWall" phase={missionPhase} />

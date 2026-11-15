@@ -13,11 +13,14 @@ import {
 import {
   advanceLoopProgress,
   buildBeatTimeline,
-  computeShowCueStep,
   computeSpeakerLiveLevels,
   resolveCompareSwapTarget,
 } from '../experience/cueEngine';
-import { DEFAULT_LAYERS_STATE } from '../experience/ExperienceContext';
+import {
+  resolveActiveMissionFrameId,
+  resolveFramePrompts,
+  SHAY_MISSION_FRAMES,
+} from '../experience/missionFrames';
 import { encodeQrMatrix } from '../lan/qrCodeSvg';
 import {
   applyProjectionPreset,
@@ -134,33 +137,47 @@ describe('Show Control Admin (?view=admin), Matriz de Projetores Out 1..4, Nós 
     expect(timeline[5].hasMelody).toBe(true);
     expect(timeline[5].primaryX).toBe(0.12);
 
+    expect(buildBeatTimeline(null)).toEqual([]);
+    expect(buildBeatTimeline([])).toEqual([]);
+
     // Loop congelado no Compasso 3 (barIndex = 2 -> intervalo [0.25, 0.375))
     const wrapped = advanceLoopProgress(0.37, 0.2, 16, 2, 8);
     expect(wrapped).toBeGreaterThanOrEqual(0.25);
     expect(wrapped).toBeLessThan(0.375);
   });
 
-  it('executa automação dos modos de final do Cue Player (guided-build e climate-clash) e troca A ⇄ B', () => {
+  it('mapeia todos os 10 quadros reais da jornada da Shay, prompts PT/EN e troca A ⇄ B', () => {
     expect(resolveCompareSwapTarget('076', { slotA: '076', slotB: '818' })).toBe('818');
     expect(resolveCompareSwapTarget('818', { slotA: '076', slotB: '818' })).toBe('076');
     expect(resolveCompareSwapTarget('156', { slotA: '076', slotB: '818' })).toBe('076');
 
-    const act1 = computeShowCueStep('guided-build', 0, DEFAULT_LAYERS_STATE);
-    expect(act1?.storyStep).toBe(0);
-    expect(act1?.layers.bass.enabled).toBe(true);
-    expect(act1?.layers.melody.enabled).toBe(false);
-    expect(act1?.layers.wind.enabled).toBe(false);
+    expect(SHAY_MISSION_FRAMES).toHaveLength(10);
+    expect(resolveActiveMissionFrameId('countdown', 0)).toBe('countdown');
+    expect(resolveActiveMissionFrameId('exploring', 2)).toBe('exploring-2');
 
-    const finale = computeShowCueStep('guided-build', 7, DEFAULT_LAYERS_STATE);
-    expect(finale?.storyStep).toBe(3);
-    expect(finale?.layers.melody.sparkleEnabled).toBe(true);
-    expect(finale?.layers.wind.enabled).toBe(true);
-    expect(finale?.layers.wind.wetMix).toBeGreaterThanOrEqual(0.82);
+    const countdownPt = resolveFramePrompts('countdown', {
+      lang: 'pt',
+      countryName: 'Brasil',
+      activeLayerLabel: 'Melodia',
+      bpm: 102,
+      keyRoot: 'D',
+      keyRootPt: 'Ré',
+      activeChord: 'Dadd9',
+      windMeanSpeed: 6.4,
+    });
+    expect(countdownPt.spoken).toContain('Cinco, quatro, três');
 
-    const clashNeutral = computeShowCueStep('climate-clash', 4, DEFAULT_LAYERS_STATE);
-    expect(clashNeutral?.storyStep).toBe(2);
-    expect(clashNeutral?.layers.temperature.enabled).toBe(false);
-    expect(clashNeutral?.layers.temperature.tuningMode).toBe('base');
+    const exploring2En = resolveFramePrompts('exploring-2', {
+      lang: 'en',
+      countryName: 'Brazil',
+      activeLayerLabel: 'Melody',
+      bpm: 102,
+      keyRoot: 'D',
+      keyRootPt: 'Ré',
+      activeChord: 'Dadd9',
+      windMeanSpeed: 6.4,
+    });
+    expect(exploring2En.phrases[0]).toContain('102 BPM in D (Dadd9)');
   });
 
   it('calcula níveis ao vivo por caixa física (C1, C2, C3) coerentes com a posição geográfica do raio', () => {

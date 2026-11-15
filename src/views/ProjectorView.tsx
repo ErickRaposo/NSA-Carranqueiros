@@ -4,6 +4,7 @@ import { ProjectorOutId, SurfaceId } from '../experience/types';
 import {
   CalibrationSurfaceKey,
   computeHomographyMatrix3d,
+  fitQuadAspectContain,
   makeSurfaceQuadKey,
   Point2D,
   QuadCorners,
@@ -51,7 +52,7 @@ const SURFACE_META: Record<
  * - Tecla `B`: liga/desliga Blackout #000 desta saída.
  */
 export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
-  const { roomDimensions, lang } = useExperience();
+  const { roomDimensions, lang, sceneReplayKey } = useExperience();
   const {
     projectionState,
     updateOutputConfig,
@@ -209,11 +210,12 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
             { x: normQuad[2].x * viewport.w, y: normQuad[2].y * viewport.h },
             { x: normQuad[3].x * viewport.w, y: normQuad[3].y * viewport.h },
           ];
-          const matrix3d = computeHomographyMatrix3d(srcW, srcH, dstPixels);
+          const fittedPixels = fitQuadAspectContain(srcW, srcH, dstPixels);
+          const matrix3d = computeHomographyMatrix3d(srcW, srcH, fittedPixels);
 
           return (
             <div
-              key={quadKey}
+              key={`${quadKey}-${sceneReplayKey}`}
               className="absolute top-0 left-0 overflow-hidden bg-black"
               style={{
                 width: `${srcW}px`,

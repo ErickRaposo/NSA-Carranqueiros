@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { CountryFlagIcon } from '../components/CountryFlag';
 import { useExperience } from '../experience/ExperienceContext';
 import { SceneSurfaceProps, VISUAL_LAYER_ORDER } from '../experience/types';
+import {
+  CountryCultureCardData,
+  resolveCountryCultureCard,
+} from '../geo/countryCultureCard';
 import { SpaceStarfield } from './SpaceStarfield';
 import { SpaceshipLaunchOverlay } from './SpaceshipLaunchOverlay';
 
@@ -45,7 +49,7 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
     layers,
     liveEvents,
     missionPhase,
-    pngUrls,
+    playback,
     storyStep,
     selectCountry,
     setMissionPhase,
@@ -54,11 +58,28 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
   const isPt = lang === 'pt';
   const anySolo = layers.melody.solo || layers.chords.solo || layers.bass.solo;
   const [failedFlags, setFailedFlags] = useState<Record<string, boolean>>({});
+  const [cultureCard, setCultureCard] = useState<CountryCultureCardData | null>(null);
+  const [cultureImgFailed, setCultureImgFailed] = useState(false);
 
   const showCountryLayers = missionPhase === 'exploring' && Boolean(country) && storyStep > 0;
   const showMeteorsOnly = missionPhase === 'zero_g';
   const showFloatingFlags =
     missionPhase === 'idle' || missionPhase === 'exploring' || missionPhase === 'ended';
+
+  useEffect(() => {
+    if (!showCountryLayers || !country) {
+      setCultureCard(null);
+      return;
+    }
+    let cancelled = false;
+    setCultureImgFailed(false);
+    void resolveCountryCultureCard(country, lang).then((card) => {
+      if (!cancelled) setCultureCard(card);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [country, lang, showCountryLayers]);
 
   const isLayerVisible = (layerId: (typeof VISUAL_LAYER_ORDER)[number]): boolean => {
     if (!layers[layerId].enabled) return false;
@@ -77,18 +98,6 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
       data-render-context={renderContext}
     >
       <SpaceStarfield seedOffset={3} count={76} />
-
-      {/* Continuação do Globo na borda esquerda do Teto */}
-      <div
-        className="pointer-events-none absolute top-1/2 -left-[38%] h-[135%] w-[62%] -translate-y-1/2 rounded-full border-r border-sky-400/35"
-        style={{
-          background:
-            'radial-gradient(circle at 38% 50%, rgba(4, 13, 33, 0.92) 0%, rgba(7, 26, 62, 0.72) 52%, rgba(56, 189, 248, 0.22) 84%, transparent 100%)',
-          boxShadow:
-            'inset -18px 0 36px rgba(56, 189, 248, 0.22), 12px 0 48px rgba(56, 189, 248, 0.16)',
-        }}
-        aria-hidden="true"
-      />
 
       {!showCountryLayers ? (
         <div className="relative z-10 h-full w-full">
@@ -160,9 +169,9 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
                     animationDuration: `${item.durationSec}s`,
                     animationDelay: `${item.delaySec}s`,
                   }}
-                  className={`ceiling-flag-float-${item.floatVariant} group absolute flex h-11 w-11 min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-full border bg-[#060913]/80 p-1 backdrop-blur-md transition-[border-color,transform,background-color] duration-300 hover:scale-110 hover:border-sky-300/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] sm:h-12 sm:w-12 ${
+                  className={`ceiling-flag-float-${item.floatVariant} group absolute flex h-[96px] w-[96px] cursor-pointer items-center justify-center rounded-full border-2 bg-[#060913]/80 p-2 backdrop-blur-md transition-[border-color,transform,background-color] duration-300 hover:scale-110 hover:border-sky-300/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
                     isSelected
-                      ? 'border-sky-400 bg-sky-500/20 ring-2 ring-sky-400/50'
+                      ? 'border-sky-400 bg-sky-500/20 ring-4 ring-sky-400/50'
                       : 'border-slate-700/60'
                   }`}
                 >
@@ -178,7 +187,7 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
                         }
                       />
                     ) : (
-                      <span className="scale-[1.6]">
+                      <span className="scale-[3.2]">
                         <CountryFlagIcon code={item.alpha2} />
                       </span>
                     )}
@@ -188,54 +197,137 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
             })}
         </div>
       ) : (
-        <div className="relative z-10 aspect-square h-[88%] max-h-full max-w-full">
-          {pngUrls &&
-            VISUAL_LAYER_ORDER.map((layerId) => {
-              if (!isLayerVisible(layerId)) return null;
-              return (
-                <img
-                  key={layerId}
-                  src={pngUrls[layerId]}
-                  alt=""
-                  className="pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-200"
-                  style={{
-                    mixBlendMode: 'screen',
-                    opacity:
-                      layerId === 'wind'
-                        ? 0.45 + layers.wind.wetMix * 0.55
-                        : layers[layerId].gain,
-                  }}
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              );
-            })}
-
-          {liveEvents.map((ev, idx) => (
-            <span
-              key={`${ev.layer}-${idx}`}
-              className="pointer-events-none absolute rounded-full transition-all duration-150"
+        <div className="relative z-10 flex h-full w-full items-center justify-center p-4">
+          {/* Ações sutis das camadas da NASA no céu aberto do teto */}
+          {isLayerVisible('temperature') && (
+            <motion.div
+              className="pointer-events-none absolute inset-12 rounded-full blur-3xl"
               style={{
-                left: `${ev.source_x * 100}%`,
-                top: `${(1 - ev.source_y) * 100}%`,
-                width: ev.layer === 'sparkle' ? '14px' : '22px',
-                height: ev.layer === 'sparkle' ? '14px' : '22px',
-                transform: 'translate(-50%, -50%)',
-                backgroundColor:
-                  ev.layer === 'melody' || ev.layer === 'sparkle'
-                    ? '#fbbf24'
-                    : ev.layer === 'chords'
-                      ? '#fb923c'
-                      : '#34d399',
-                boxShadow:
-                  ev.layer === 'melody' || ev.layer === 'sparkle'
-                    ? '0 0 20px rgba(251, 191, 36, 0.85)'
-                    : 'none',
-                opacity: 0.85,
+                background:
+                  'radial-gradient(circle, rgba(251,113,133,0.14) 0%, transparent 70%)',
+              }}
+              animate={{ opacity: [0.35, 0.7, 0.35] }}
+              transition={{
+                duration: Math.max(1.2, 120 / Math.max(60, playback.bpm)),
+                repeat: Infinity,
+                ease: 'easeInOut',
               }}
             />
-          ))}
+          )}
+
+          {isLayerVisible('wind') &&
+            [18, 44, 74].map((topPct, idx) => (
+              <motion.div
+                key={`wind-streak-${topPct}`}
+                className="pointer-events-none absolute left-0 h-[3px] w-44 rounded-full bg-gradient-to-r from-transparent via-sky-400/70 to-cyan-200/80"
+                style={{ top: `${topPct}%` }}
+                animate={{
+                  x: ['-15%', '520%'],
+                  opacity: [0, 0.35 + layers.wind.wetMix * 0.45, 0],
+                }}
+                transition={{
+                  duration: Math.max(1.4, 3.8 - playback.windMeanSpeed * 0.14),
+                  delay: idx * 0.6,
+                  repeat: Infinity,
+                  ease: 'linear',
+                }}
+              />
+            ))}
+
+          {isLayerVisible('chords') &&
+            [0, 1].map((ringIdx) => (
+              <motion.div
+                key={`chord-ring-${ringIdx}`}
+                className="pointer-events-none absolute rounded-full border-2 border-cyan-300/35"
+                style={{
+                  width: ringIdx === 0 ? '540px' : '740px',
+                  height: ringIdx === 0 ? '540px' : '740px',
+                }}
+                animate={{
+                  scale: [0.92, 1.06, 0.92],
+                  opacity: [0.18, 0.5, 0.18],
+                }}
+                transition={{
+                  duration: Math.max(1.2, (60 / Math.max(60, playback.bpm)) * (ringIdx === 0 ? 2 : 4)),
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                }}
+              />
+            ))}
+
+          {isLayerVisible('bass') &&
+            [14, 30, 48, 66, 82].map((leftPct, idx) => (
+              <motion.div
+                key={`bass-rain-${leftPct}`}
+                className="pointer-events-none absolute top-0 h-28 w-[3px] rounded-full bg-gradient-to-b from-transparent via-emerald-400/70 to-sky-300/80"
+                style={{ left: `${leftPct}%` }}
+                animate={{
+                  y: ['-12%', '880%'],
+                  opacity: [0, 0.72, 0],
+                }}
+                transition={{
+                  duration: Math.max(1.1, 2.2 - idx * 0.15),
+                  delay: idx * 0.35,
+                  repeat: Infinity,
+                  ease: 'linear',
+                }}
+              />
+            ))}
+
+          {isLayerVisible('melody') &&
+            liveEvents
+              .filter((ev) => ev.layer === 'melody' || ev.layer === 'sparkle')
+              .map((ev, idx) => (
+                <motion.span
+                  key={`sky-flash-${idx}`}
+                  initial={{ scale: 0.4, opacity: 0.9 }}
+                  animate={{ scale: [0.8, 1.5, 0.9], opacity: [0.9, 0.25] }}
+                  transition={{ duration: 0.35 }}
+                  className="pointer-events-none absolute h-6 w-6 rounded-full bg-amber-300 shadow-[0_0_28px_rgba(251,191,36,0.9)]"
+                  style={{
+                    left: `${ev.source_x * 100}%`,
+                    top: `${(1 - ev.source_y) * 100}%`,
+                  }}
+                />
+              ))}
+
+          {/* Somente o Card Cultural / Curiosidade com Foto Livre de Direitos Autorais e Referência Discreta */}
+          {cultureCard && (
+            <motion.aside
+              key={cultureCard.countryId}
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+              className="pointer-events-none flex w-[460px] max-w-[80%] flex-col overflow-hidden rounded-3xl border border-slate-400/25 bg-[#060c1a]/88 text-left shadow-[0_0_54px_rgba(0,0,0,0.85)]"
+              data-testid="ceiling-country-culture-card"
+            >
+              {!cultureImgFailed && (
+                <div className="relative h-[210px] w-full overflow-hidden bg-slate-950">
+                  <img
+                    src={cultureCard.imageUrl}
+                    alt={isPt ? cultureCard.titlePt : cultureCard.titleEn}
+                    className="h-full w-full object-cover"
+                    onError={() => setCultureImgFailed(true)}
+                  />
+                  <span className="absolute top-3.5 left-3.5 rounded-full border border-sky-400/40 bg-[#050811]/85 px-3.5 py-1 text-[15px] font-semibold text-sky-200">
+                    {isPt ? cultureCard.categoryPt : cultureCard.categoryEn}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2.5 p-5">
+                <div className="text-[22px] font-bold leading-tight text-slate-50">
+                  {isPt ? cultureCard.titlePt : cultureCard.titleEn}
+                </div>
+                <p className="line-clamp-4 text-[17px] leading-snug text-slate-300">
+                  {isPt ? cultureCard.curiosityPt : cultureCard.curiosityEn}
+                </p>
+                <div className="mt-1 truncate border-t border-slate-400/15 pt-2 text-[12px] leading-tight text-slate-500">
+                  Ref: {cultureCard.sourceName} · {cultureCard.license} · {cultureCard.author}
+                </div>
+              </div>
+            </motion.aside>
+          )}
         </div>
       )}
 
