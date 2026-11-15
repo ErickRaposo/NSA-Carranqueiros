@@ -25,8 +25,8 @@ function applyCssMatrix3dTo2DPoint(matrixCss: string, x: number, y: number): Poi
   return { x: xp / wp, y: yp / wp };
 }
 
-describe('Passo 2 — 3 Países Piloto (1024x1024 RGBA PNGs + meta.json) & Homografia Corner-Pin', () => {
-  it('verifica que Brasil (076), Egito (818) e China (156) possuem os 5 PNGs 1024x1024 RGBA e meta.json', async () => {
+describe('Passo 2 — Países Piloto (1024x1024 RGBA PNGs + meta.json) & Homografia Corner-Pin', () => {
+  it('verifica que Brasil (076) e Egito (818) possuem os 5 PNGs 1024x1024 RGBA e meta.json', async () => {
     const fsModuleId = 'node:fs';
     const fs = (await import(/* @vite-ignore */ fsModuleId)) as unknown as MinimalNodeFs;
     const decoder = new TextDecoder('utf-8');

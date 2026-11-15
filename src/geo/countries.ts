@@ -503,7 +503,7 @@ export function loadWorldCountries(): {
     const feat = geojson.features[featIdx];
     if (!feat.geometry) continue;
     const nameEn = feat.properties?.name?.trim();
-    if (!nameEn) continue;
+    if (!nameEn || nameEn === 'China' || String(feat.id ?? '') === '156') continue;
 
     const rawPolygons = extractPolygons(feat.geometry);
     if (rawPolygons.length === 0) continue;

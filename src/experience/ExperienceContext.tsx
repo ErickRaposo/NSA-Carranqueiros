@@ -174,16 +174,6 @@ const PILOT_PROFILES: Record<string, PilotMusicalProfile> = {
     chords: ['Esus4', 'Fmaj7', 'Dm7', 'Esus2'],
     windMeanSpeed: 11.2,
   },
-  '156': {
-    // China — alta densidade urbana/industrial de NO2 e CO no leste + contrastes térmicos
-    regionBpm: 92,
-    regionKeyRoot: 'G',
-    regionKeyRootPt: 'Sol',
-    modeNamePt: 'Dórico Atmosférico',
-    modeNameEn: 'Atmospheric Dorian',
-    chords: ['Gm9', 'Csus2', 'Eb6', 'Fadd9'],
-    windMeanSpeed: 9.8,
-  },
   '840': {
     // Estados Unidos
     regionBpm: 92,

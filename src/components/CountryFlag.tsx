@@ -23,7 +23,6 @@ export const ORIGIN_COUNTRY_OPTIONS: OriginCountryOption[] = [
   { code: 'ES', namePt: 'Espanha' },
   { code: 'IT', namePt: 'Itália' },
   { code: 'JP', namePt: 'Japão' },
-  { code: 'CN', namePt: 'China' },
   { code: 'IN', namePt: 'Índia' },
   { code: 'KR', namePt: 'Coreia do Sul' },
   { code: 'AU', namePt: 'Austrália' },
@@ -35,7 +34,7 @@ export const ORIGIN_COUNTRY_OPTIONS: OriginCountryOption[] = [
 export const ALL_ISO_ALPHA2_CODES: string[] = [
   'AF', 'ZA', 'AL', 'DE', 'AD', 'AO', 'AG', 'SA', 'DZ', 'AR', 'AM', 'AU', 'AT', 'AZ',
   'BS', 'BD', 'BB', 'BH', 'BE', 'BZ', 'BJ', 'BY', 'BO', 'BA', 'BW', 'BR', 'BN', 'BG',
-  'BF', 'BI', 'BT', 'CV', 'CM', 'KH', 'CA', 'QA', 'KZ', 'TD', 'CL', 'CN', 'CY', 'SG',
+  'BF', 'BI', 'BT', 'CV', 'CM', 'KH', 'CA', 'QA', 'KZ', 'TD', 'CL', 'CY', 'SG',
   'CO', 'KM', 'CG', 'CD', 'KP', 'KR', 'CI', 'CR', 'HR', 'CU', 'DK', 'DJ', 'DM', 'EG',
   'SV', 'AE', 'EC', 'ER', 'SK', 'SI', 'ES', 'US', 'EE', 'SZ', 'ET', 'FJ', 'PH', 'FI',
   'FR', 'GA', 'GM', 'GH', 'GE', 'GD', 'GR', 'GT', 'GY', 'GN', 'GW', 'GQ', 'HT', 'HN',
@@ -195,13 +194,6 @@ function renderVectorFlagSvg(code: string): React.ReactNode {
           <rect y="4.6" width="20" height="4.8" fill="#ffffff" />
           <rect y="9.3" width="20" height="4.7" fill="#138808" />
           <circle cx="10" cy="7" r="1.5" fill="#000080" />
-        </svg>
-      );
-    case 'CN':
-      return (
-        <svg viewBox="0 0 20 14" className="country-flag-svg" aria-hidden="true">
-          <rect width="20" height="14" fill="#de2910" />
-          <circle cx="5" cy="4.8" r="2" fill="#ffde00" />
         </svg>
       );
     case 'UY':

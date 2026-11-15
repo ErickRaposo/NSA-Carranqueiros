@@ -62,12 +62,11 @@ export interface CompareCountriesState {
 }
 
 /**
- * Os 3 Países Piloto solicitados pela Shay (Pessoa 1) para validação no Simulador 3D:
+ * Os Países Piloto para validação no Simulador 3D:
  * - '076': Brasil
  * - '818': Egito
- * - '156': China
  */
-export const PILOT_COUNTRY_IDS = ['076', '818', '156'] as const;
+export const PILOT_COUNTRY_IDS = ['076', '818'] as const;
 
 export const VISUAL_LAYER_ORDER: VisualLayerId[] = [
   'melody',

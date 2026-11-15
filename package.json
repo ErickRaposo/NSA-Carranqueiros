@@ -12,6 +12,7 @@
     "gen:countries": "node scripts/generate_country_layers.mjs --all"
   },
   "dependencies": {
+    "@mintplex-labs/piper-tts-web": "^1.0.5",
     "lucide-react": "^0.460.0",
     "motion": "^14.14.0",
     "react": "^18.3.1",

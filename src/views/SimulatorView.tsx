@@ -31,7 +31,6 @@ type CameraPresetId = 'overview' | 'visitor' | 'ceiling' | 'flat';
 const PILOT_LABELS: Record<string, { flag: string; pt: string; en: string }> = {
   '076': { flag: '🇧🇷', pt: 'Brasil', en: 'Brazil' },
   '818': { flag: '🇪🇬', pt: 'Egito', en: 'Egypt' },
-  '156': { flag: '🇨🇳', pt: 'China', en: 'China' },
 };
 
 export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }) => {
@@ -380,10 +379,10 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ embedded = false }
           data-testid="simulator-pilot-dock"
         >
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
-            {/* 1. Seleção instantânea dos 3 Países Piloto (Brasil, Egito, China) */}
+            {/* 1. Seleção instantânea dos Países Piloto (Brasil, Egito) */}
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="mr-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                {isPt ? '3 Pilotos:' : '3 Pilots:'}
+                {isPt ? 'Pilotos:' : 'Pilots:'}
               </span>
               {PILOT_COUNTRY_IDS.map((pid) => {
                 const info = PILOT_LABELS[pid];

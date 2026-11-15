@@ -226,20 +226,47 @@ export function sampleVideoAtLonLat(
   }
 }
 
+export const PIPER_VOICE_IDS = {
+  en: 'en_US-bryce-medium',
+  pt: 'pt_BR-faber-medium',
+} as const;
+
+let activePiperAudio: HTMLAudioElement | null = null;
+let speechRequestNonce = 0;
+const piperAudioCache = new Map<string, string>();
+const piperPreloadStarted = new Set<'pt' | 'en'>();
+const piperReadyVoices = new Set<string>();
+
 export function isSpeechSupported(): boolean {
-  return typeof window !== 'undefined' && 'speechSynthesis' in window;
+  return typeof window !== 'undefined' && ('speechSynthesis' in window || 'Audio' in window);
 }
 
 export function stopSpeech(): void {
-  if (!isSpeechSupported()) return;
-  try {
-    window.speechSynthesis.cancel();
-  } catch {
-    // ignore speech engine errors
+  speechRequestNonce += 1;
+  if (activePiperAudio) {
+    try {
+      activePiperAudio.pause();
+      activePiperAudio.currentTime = 0;
+    } catch {
+      // ignore audio stop errors
+    }
+    activePiperAudio = null;
+  }
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      // ignore speech engine errors
+    }
   }
 }
 
 const MALE_VOICE_HINTS = [
+  'bryce',
+  'andrew',
+  'guy',
+  'brian',
+  'faber',
   'daniel',
   'antonio',
   'antônio',
@@ -257,11 +284,12 @@ const MALE_VOICE_HINTS = [
   'masculin',
 ];
 
-function pickPortugueseVoice(preferMale: boolean): SpeechSynthesisVoice | null {
-  if (!isSpeechSupported()) return null;
+function pickVoiceForLang(lang: 'pt' | 'en', preferMale: boolean): SpeechSynthesisVoice | null {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
   const voices = window.speechSynthesis.getVoices();
-  const ptVoices = voices.filter((v) => v.lang.toLowerCase().startsWith('pt'));
-  const pool = ptVoices.length > 0 ? ptVoices : voices;
+  const prefix = lang === 'en' ? 'en' : 'pt';
+  const langVoices = voices.filter((v) => v.lang.toLowerCase().startsWith(prefix));
+  const pool = langVoices.length > 0 ? langVoices : voices;
   if (pool.length === 0) return null;
 
   if (preferMale) {
@@ -271,24 +299,26 @@ function pickPortugueseVoice(preferMale: boolean): SpeechSynthesisVoice | null {
     if (maleMatch) return maleMatch;
   }
 
-  return pool.find((v) => v.lang.toLowerCase().includes('pt-br')) ?? pool[0];
+  const exactLocale = lang === 'en' ? 'en-us' : 'pt-br';
+  return pool.find((v) => v.lang.toLowerCase().includes(exactLocale)) ?? pool[0];
 }
 
-export function speakTextPt(
+function speakWithWebSpeechFallback(
   text: string,
-  interrupt = true,
+  lang: 'pt' | 'en',
+  interrupt: boolean,
   options?: { maleVoice?: boolean; onStart?: () => void; onEnd?: () => void }
 ): void {
-  if (!isSpeechSupported() || !text.trim()) return;
+  if (typeof window === 'undefined' || !('speechSynthesis' in window) || !text.trim()) return;
   try {
     if (interrupt) window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'pt-BR';
-    utterance.rate = 1.02;
+    utterance.lang = lang === 'en' ? 'en-US' : 'pt-BR';
+    utterance.rate = 1.0;
     const preferMale = options?.maleVoice ?? true;
-    utterance.pitch = preferMale ? 0.82 : 1.0;
+    utterance.pitch = preferMale ? 0.85 : 1.0;
 
-    const selectedVoice = pickPortugueseVoice(preferMale);
+    const selectedVoice = pickVoiceForLang(lang, preferMale);
     if (selectedVoice) {
       utterance.voice = selectedVoice;
     }
@@ -303,6 +333,111 @@ export function speakTextPt(
   } catch {
     // ignore speech engine errors
   }
+}
+
+/**
+ * Pré-carrega e armazena em cache OPFS a voz neural Piper (`en_US-bryce-medium` ou `pt_BR-faber-medium`).
+ */
+export function preloadPiperVoice(lang: 'pt' | 'en'): void {
+  if (typeof window === 'undefined' || piperPreloadStarted.has(lang)) return;
+  piperPreloadStarted.add(lang);
+  const voiceId = PIPER_VOICE_IDS[lang];
+  void import('@mintplex-labs/piper-tts-web')
+    .then(async (tts) => {
+      const storedVoices = await tts.stored();
+      if (!storedVoices.includes(voiceId)) {
+        await tts.download(voiceId);
+      }
+      piperReadyVoices.add(voiceId);
+    })
+    .catch(() => {
+      // Fallback silencioso para Web Speech API caso offline ou sem suporte OPFS
+    });
+}
+
+export function speakTextPt(
+  text: string,
+  interrupt = true,
+  options?: { maleVoice?: boolean; lang?: 'pt' | 'en'; onStart?: () => void; onEnd?: () => void }
+): void {
+  if (!text.trim() || typeof window === 'undefined') return;
+  const lang = options?.lang ?? 'pt';
+  const voiceId = PIPER_VOICE_IDS[lang];
+  const cacheKey = `${voiceId}:${text}`;
+
+  if (interrupt) {
+    stopSpeech();
+  }
+  const currentNonce = ++speechRequestNonce;
+
+  const playUrl = (url: string): void => {
+    if (currentNonce !== speechRequestNonce) return;
+    try {
+      const audio = new Audio(url);
+      activePiperAudio = audio;
+      audio.onplay = () => options?.onStart?.();
+      audio.onended = () => {
+        if (activePiperAudio === audio) activePiperAudio = null;
+        options?.onEnd?.();
+      };
+      audio.onerror = () => {
+        if (activePiperAudio === audio) activePiperAudio = null;
+        speakWithWebSpeechFallback(text, lang, interrupt, options);
+      };
+      void audio.play().catch(() => {
+        speakWithWebSpeechFallback(text, lang, interrupt, options);
+      });
+    } catch {
+      speakWithWebSpeechFallback(text, lang, interrupt, options);
+    }
+  };
+
+  const cachedUrl = piperAudioCache.get(cacheKey);
+  if (cachedUrl) {
+    playUrl(cachedUrl);
+    return;
+  }
+
+  // Se o modelo Piper (~60MB) ainda estiver baixando em segundo plano, fala imediatamente
+  // via Web Speech API para nunca deixar a animação muda.
+  if (!piperReadyVoices.has(voiceId)) {
+    preloadPiperVoice(lang);
+    speakWithWebSpeechFallback(text, lang, interrupt, options);
+    return;
+  }
+
+  let settled = false;
+  const fallbackTimer = window.setTimeout(() => {
+    if (settled || currentNonce !== speechRequestNonce) return;
+    settled = true;
+    speakWithWebSpeechFallback(text, lang, interrupt, options);
+  }, 2500);
+
+  void import('@mintplex-labs/piper-tts-web')
+    .then(async (tts) => {
+      const wavBlob = await tts.predict({ text, voiceId });
+      if (settled || currentNonce !== speechRequestNonce) return;
+      settled = true;
+      window.clearTimeout(fallbackTimer);
+      const url = URL.createObjectURL(wavBlob);
+      piperAudioCache.set(cacheKey, url);
+      playUrl(url);
+    })
+    .catch(() => {
+      if (settled || currentNonce !== speechRequestNonce) return;
+      settled = true;
+      window.clearTimeout(fallbackTimer);
+      speakWithWebSpeechFallback(text, lang, interrupt, options);
+    });
+}
+
+export function speakText(
+  text: string,
+  lang: 'pt' | 'en',
+  interrupt = true,
+  options?: { maleVoice?: boolean; onStart?: () => void; onEnd?: () => void }
+): void {
+  speakTextPt(text, interrupt, { ...options, lang });
 }
 
 let audioCtx: AudioContext | null = null;

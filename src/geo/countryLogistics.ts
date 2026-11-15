@@ -83,16 +83,6 @@ const CURATED_PROFILES: Record<string, Omit<CountryLogisticsProfile, 'isCurated'
     climateAndRiskImpactPt:
       'Ventos atlânticos costeiros (5148), ondas de calor estivais (5147) e episódios sazonais de CO por incêndios florestais (5153).',
   },
-  China: {
-    subregionPt: 'Ásia Oriental • Litoral do Pacífico & Rota Terrestre',
-    summaryPt:
-      'Maior polo manufatureiro e portuário global, combinando megaportos costeiros, ferrovias transcontinentais e grandes hidrovias internas.',
-    maritimePortsPt: 'Xangai, Ningbo-Zhoushan, Shenzhen, Guangzhou, Qingdao e Tianjin.',
-    airAndLandCorridorsPt:
-      'Rede ferroviária de alta capacidade e corredores Eurásia; bacia fluvial do Yangtzé e hubs aéreos em Pequim, Xangai e Hong Kong.',
-    climateAndRiskImpactPt:
-      'Concentrações marcantes de NOx (5154) e CO (5153) nas planícies industriais orientais, além de monções e ventos costeiros no Mar da China.',
-  },
   India: {
     subregionPt: 'Ásia Meridional • Subcontinente Indiano',
     summaryPt:

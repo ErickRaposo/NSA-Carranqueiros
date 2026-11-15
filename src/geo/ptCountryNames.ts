@@ -51,7 +51,6 @@ export const PT_COUNTRY_NAMES: Record<string, string> = {
   'Central African Rep.': 'Rep. Centro-Africana',
   Chad: 'Chade',
   Chile: 'Chile',
-  China: 'China',
   'Clipperton I.': 'Ilha de Clipperton',
   Colombia: 'Colômbia',
   Comoros: 'Comores',

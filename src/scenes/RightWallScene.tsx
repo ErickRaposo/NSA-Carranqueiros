@@ -4,7 +4,7 @@ import mineiroLogo from '../assets/mineiro-logo.png';
 import erickPhoto from '../assets/team/erick.jpeg';
 import samuelPhoto from '../assets/team/samuel.png';
 import shayenePhoto from '../assets/team/shayene.png';
-import { speakTextPt } from '../accessibility/a11yEngine';
+import { preloadPiperVoice, speakText } from '../accessibility/a11yEngine';
 import {
   playBlastDoorSlamSfx,
   playCabinDissolveSfx,
@@ -306,7 +306,13 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
     }
   }, [missionPhase, renderContext]);
 
-  // Fala em português sem cortar frases + música espacial abaixa enquanto o robô fala
+  // Pré-carrega a voz neural Piper do idioma ativo (en_US-bryce-medium / pt_BR-faber-medium)
+  useEffect(() => {
+    if (renderContext === 'projector') return;
+    preloadPiperVoice(lang);
+  }, [lang, renderContext]);
+
+  // Fala no idioma selecionado sem cortar frases + música espacial abaixa enquanto o robô fala
   useEffect(() => {
     if (missionPhase === 'idle' || renderContext === 'projector') {
       setSpaceAmbientDucked(false);
@@ -319,7 +325,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
     // No briefing inicial, deixa a música espacial tocar antes do robô começar a falar
     const startDelayMs = missionPhase === 'briefing' ? 1400 : 250;
     const timer = window.setTimeout(() => {
-      speakTextPt(phaseSpeech.spoken, missionPhase === 'ended', {
+      speakText(phaseSpeech.spoken, lang, missionPhase === 'ended', {
         maleVoice: true,
         onStart: () => setSpaceAmbientDucked(true),
         onEnd: () => setSpaceAmbientDucked(false),

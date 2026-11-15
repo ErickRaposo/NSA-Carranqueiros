@@ -25,7 +25,6 @@ const CEILING_FLAG_OPTIONS: CeilingFlagOption[] = [
   { id: '392', alpha2: 'JP', namePt: 'Japão', nameEn: 'Japan', xPct: 81, yPct: 21, floatVariant: 'a', durationSec: 21, delaySec: -3 },
   { id: '276', alpha2: 'DE', namePt: 'Alemanha', nameEn: 'Germany', xPct: 14, yPct: 43, floatVariant: 'b', durationSec: 18, delaySec: -11 },
   { id: '818', alpha2: 'EG', namePt: 'Egito', nameEn: 'Egypt', xPct: 33, yPct: 37, floatVariant: 'c', durationSec: 19, delaySec: -6 },
-  { id: '156', alpha2: 'CN', namePt: 'China', nameEn: 'China', xPct: 54, yPct: 39, floatVariant: 'a', durationSec: 16, delaySec: -9 },
   { id: '356', alpha2: 'IN', namePt: 'Índia', nameEn: 'India', xPct: 75, yPct: 44, floatVariant: 'b', durationSec: 22, delaySec: -4 },
   { id: '484', alpha2: 'MX', namePt: 'México', nameEn: 'Mexico', xPct: 26, yPct: 65, floatVariant: 'a', durationSec: 20, delaySec: -7 },
   { id: '036', alpha2: 'AU', namePt: 'Austrália', nameEn: 'Australia', xPct: 49, yPct: 62, floatVariant: 'c', durationSec: 17, delaySec: -1 },

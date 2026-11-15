@@ -17,6 +17,7 @@ import {
   ALL_ISO_ALPHA2_CODES,
   CountryFlagIcon,
 } from '../components/CountryFlag';
+import { preloadPiperVoice } from '../accessibility/a11yEngine';
 import { playLaunchThrust8D } from '../audio/spaceAmbient';
 import { NasaDatasetCard } from '../components/NasaDatasetCard';
 import { DatasetId } from '../datasets/nasaDatasets';
@@ -38,7 +39,6 @@ const PILOT_ID_SET = new Set<string>(PILOT_COUNTRY_IDS);
 const NUMERIC_TO_ALPHA2_OVERRIDES: Record<string, string> = {
   '076': 'BR',
   '818': 'EG',
-  '156': 'CN',
   '840': 'US',
   '826': 'GB',
   '643': 'RU',
@@ -138,6 +138,16 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
   }, [missionPhase, setMissionPhase, setStoryStep]);
 
   const handleStartOperation = useCallback(() => {
+    preloadPiperVoice(lang);
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        const unlock = new SpeechSynthesisUtterance(' ');
+        unlock.volume = 0;
+        window.speechSynthesis.speak(unlock);
+      } catch {
+        // ignore
+      }
+    }
     if (!playback.isPlaying) {
       togglePlay();
     }
@@ -145,7 +155,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
     setStoryStep(0);
     setHasSelectedCountry(false);
     setMissionPhase('briefing');
-  }, [playback.isPlaying, setAllLayersEnabled, setMissionPhase, setStoryStep, togglePlay]);
+  }, [lang, playback.isPlaying, setAllLayersEnabled, setMissionPhase, setStoryStep, togglePlay]);
 
   const handleBoardSpaceship = useCallback(() => {
     setMissionPhase('boarding');

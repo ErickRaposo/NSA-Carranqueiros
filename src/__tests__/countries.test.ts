@@ -136,20 +136,18 @@ describe('geo/countries (v2.3 cartographic integrity)', () => {
     expect(searchCountries('Germany', countries)[0]?.namePt).toBe('Alemanha');
   });
 
-  it('uses canonical world-atlas M49 IDs for the pilot countries (076 Brazil, 818 Egypt, 156 China, 840 USA, 484 Mexico) and computes bbox', () => {
+  it('uses canonical world-atlas M49 IDs for the pilot countries (076 Brazil, 818 Egypt, 840 USA, 484 Mexico) and computes bbox', () => {
     const brazil = countries.find((c) => c.id === '076');
     const egypt = countries.find((c) => c.id === '818');
-    const china = countries.find((c) => c.id === '156');
     const usa = countries.find((c) => c.id === '840');
     const mexico = countries.find((c) => c.id === '484');
 
     expect(brazil?.namePt).toBe('Brasil');
     expect(egypt?.namePt).toBe('Egito');
-    expect(china?.namePt).toBe('China');
     expect(usa?.nameEn).toBe('United States of America');
     expect(mexico?.namePt).toBe('México');
 
-    for (const pilot of [brazil!, egypt!, china!, usa!, mexico!]) {
+    for (const pilot of [brazil!, egypt!, usa!, mexico!]) {
       expect(pilot.bbox).toHaveLength(4);
       expect(pilot.bbox[1]).toBeLessThan(pilot.bbox[3]);
       expect(pilot.regionEn.length).toBeGreaterThan(2);
