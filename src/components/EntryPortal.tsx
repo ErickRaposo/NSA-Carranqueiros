@@ -15,10 +15,25 @@ import symbollLogo from '../assets/symboll.png';
 import erickPhoto from '../assets/team/erick.jpeg';
 import samuelPhoto from '../assets/team/samuel.png';
 import shayenePhoto from '../assets/team/shayene.png';
+import momentVideo1 from '../assets/moments/IMG_0312.MOV';
+import momentVideo2 from '../assets/moments/IMG_0314.MOV';
+import momentVideo3 from '../assets/moments/IMG_0316.MOV';
+import momentVideo4 from '../assets/moments/IMG_0317.MOV';
+import momentVideo5 from '../assets/moments/IMG_0319.MOV';
+import momentVideo6 from '../assets/moments/IMG_0322.MOV';
 import { speakTextPt, stopSpeech } from '../accessibility/a11yEngine';
 import { LAYER_METAS, VISUAL_LAYER_ORDER } from '../experience/types';
 import { Mineiro3D } from './Mineiro3D';
 import { StarfieldBackground } from './StarfieldBackground';
+
+const MOMENT_VIDEOS = [
+  { id: 'moment-1', src: momentVideo1, label: 'Momento da projeção imersiva 1' },
+  { id: 'moment-2', src: momentVideo2, label: 'Momento da projeção imersiva 2' },
+  { id: 'moment-3', src: momentVideo3, label: 'Momento da projeção imersiva 3' },
+  { id: 'moment-4', src: momentVideo4, label: 'Momento da projeção imersiva 4' },
+  { id: 'moment-5', src: momentVideo5, label: 'Momento da projeção imersiva 5' },
+  { id: 'moment-6', src: momentVideo6, label: 'Momento da projeção imersiva 6' },
+] as const;
 
 const TEAM_MEMBERS = [
   {
@@ -577,6 +592,41 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
               loading="lazy"
               referrerPolicy="strict-origin-when-cross-origin"
             />
+          </div>
+        </section>
+
+        <section
+          id="portal-moments"
+          data-testid="portal-moments-section"
+          aria-labelledby="portal-moments-heading"
+          className="relative z-[3] w-full bg-[#040b1a] px-4 py-6 sm:px-8 sm:py-9"
+        >
+          <div className="mx-auto max-w-6xl">
+            <h2 id="portal-moments-heading" className="sr-only">
+              Reproduza a experiência em qualquer lugar
+            </h2>
+            <p className="mb-4 px-2 text-center text-xs leading-relaxed font-normal italic text-slate-300 sm:mb-5 sm:text-sm">
+              Dois projetores, um navegador e qualquer parede: é só disso que você precisa para viver essa imersão em qualquer lugar do mundo.
+            </p>
+            <div className="flex snap-x snap-mandatory gap-2.5 overflow-x-auto pb-1 sm:grid sm:grid-cols-3 sm:gap-3 sm:overflow-visible sm:pb-0 md:grid-cols-6">
+              {MOMENT_VIDEOS.map((video) => (
+                <div
+                  key={video.id}
+                  className="w-32 shrink-0 snap-start overflow-hidden rounded-xl border border-slate-700/40 bg-[#020612] shadow-lg sm:w-auto"
+                >
+                  <video
+                    src={video.src}
+                    aria-label={video.label}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    preload="auto"
+                    className="h-40 w-full bg-transparent object-cover sm:h-44"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 

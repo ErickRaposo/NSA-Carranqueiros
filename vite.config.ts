@@ -451,6 +451,7 @@ function earthJukeboxLanPlugin(): Plugin {
 
 export default defineConfig({
   base: process.env.VITE_BASE_PATH || '/',
+  assetsInclude: ['**/*.MOV', '**/*.mov'],
   plugins: [react(), tailwindcss(), earthJukeboxLanPlugin()],
   server: {
     host: true,
