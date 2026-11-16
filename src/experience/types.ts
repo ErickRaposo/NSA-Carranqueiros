@@ -52,6 +52,12 @@ export interface BeatTimelineSlot {
   primaryY: number | null;
 }
 
+export interface GlobeCameraPose {
+  lon: number;
+  lat: number;
+  distance: number;
+}
+
 export interface CompareCountriesState {
   slotA: string;
   slotB: string;
@@ -291,6 +297,14 @@ export interface CountryWindProfile {
   turbulence: number[];
 }
 
+export interface CountryTelemetrySummary {
+  lightningHotspotCount: number;
+  meanTemperature01: number;
+  meanCo01: number;
+  meanNox01: number;
+  windMeanSpeedMs: number;
+}
+
 export interface CountryStudioPayload {
   numFrames: number;
   yellowCounts: number[];
@@ -393,6 +407,8 @@ export interface ExperienceContextValue {
   storyStep: number;
   /** Fase atual da expedição espacial (idle -> boarding -> countdown -> zero_g -> exploring -> ended) */
   missionPhase: MissionPhase;
+  /** Verdadeiro quando o console Tablet está na aba do Globo escolhendo/trocando país */
+  isPickingCountry: boolean;
   /** Contador para reiniciar animações locais do quadro ativo (ex: contagem 5..1 ou cabine 4s) */
   sceneReplayKey: number;
   /** Compasso congelado em loop (0..7) para inspeção de animação/áudio, ou null para fluxo normal */
@@ -407,6 +423,8 @@ export interface ExperienceContextValue {
   studioData: CountryStudioPayload | null;
   /** Sessão ativa (`region` ou `base`) da partitura MIDI */
   activeStudioSession: StudioSessionData | null;
+  /** Telemetria oficial NASA extraída por camada do meta.json do país ativo */
+  telemetrySummary: CountryTelemetrySummary | null;
   /** Energia acústica em tempo real (0..1) enviada para cada uma das 3 caixas físicas (VBAP) */
   speakerLiveLevels: Record<'speaker1' | 'speaker2' | 'speaker3', number>;
   audioMode: AudioOutputMode;
@@ -484,6 +502,9 @@ export interface ExperienceContextValue {
   setLang: (lang: Lang) => void;
   setStoryStep: (step: number) => void;
   setMissionPhase: (phase: MissionPhase) => void;
+  setIsPickingCountry: (picking: boolean) => void;
+  sendGlobeCameraPose: (pose: GlobeCameraPose) => void;
+  subscribeGlobeCameraPose: (listener: (pose: GlobeCameraPose) => void) => () => void;
   nextStoryStep: () => void;
   prevStoryStep: () => void;
   setRoomDimensions: (next: RoomDimensions) => void;

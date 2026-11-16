@@ -2,6 +2,12 @@ import { Globe2, Play, Rocket, RotateCcw } from 'lucide-react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { MissionGameButton } from '../components/MissionGameButton';
+import { NasaDatasetCard } from '../components/NasaDatasetCard';
+import { buildCountryNasaReport } from '../datasets/countryNasaReport';
+import {
+  resolveCountryAssetUrl,
+  setRemoteCountryAssetConfig,
+} from '../datasets/nasaDatasets';
 import { advanceLoopProgress, buildBeatTimeline } from '../experience/cueEngine';
 import { DEFAULT_LAYERS_STATE, ExperienceProvider } from '../experience/ExperienceContext';
 import { resolveActiveMissionFrameId, resolveFramePrompts } from '../experience/missionFrames';
@@ -11,14 +17,21 @@ import {
   VISUAL_LAYER_ORDER,
 } from '../experience/types';
 import { buildGlobeLayerStack } from '../hooks/useNasaVideoPool';
+import { CeilingScene } from '../scenes/CeilingScene';
 import { IdleStageRightWall } from '../scenes/IdleStageRightWall';
 import { JukeboxStudioStage } from '../scenes/JukeboxStudioStage';
+import { LeftWallScene } from '../scenes/LeftWallScene';
 import { RightWallScene } from '../scenes/RightWallScene';
 import {
   computeCountryPngFrameMetrics,
   midiToNoteName,
   projectBboxNormToCountryPng01,
 } from '../scenes/studioGeometry';
+import {
+  CONSOLE_HAPTIC_PATTERNS,
+  stopConsoleHaptic,
+  triggerConsoleHaptic,
+} from '../utils/haptics';
 import { TabletControllerView } from '../views/TabletControllerView';
 import { WebDemoView } from '../views/WebDemoView';
 
@@ -326,7 +339,8 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
     );
     expect(tabletFrame6Html).toContain('Escolher País');
     expect(tabletFrame6Html).toContain('Sugestões para explorar');
-    expect(tabletFrame6Html).toContain('Gire o globo, pesquise pelo nome ou escolha um destaque para começar.');
+    expect(tabletFrame6Html).toContain('Gire o globo para mirar na parede, pesquise pelo nome ou escolha um destaque.');
+    expect(tabletFrame6Html).toContain('@[740px]:grid-cols-[1.15fr_1fr]');
     expect(tabletFrame6Html).not.toContain('Pacotes reais NASA pré-gerados');
     expect(tabletFrame6Html).not.toContain('data-testid="tablet-switch-country-btn"');
 
@@ -352,5 +366,197 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
     expect(tabletStudioSilentHtml).toContain('data-testid="tablet-switch-country-btn"');
     expect(tabletStudioSilentHtml).toContain('Ir para outro país');
     expect(tabletStudioSilentHtml).toContain('data-testid="tablet-mixer-silence-banner"');
+    expect(tabletStudioSilentHtml).toContain('@[740px]:grid-cols-5');
+    expect(tabletStudioSilentHtml).toContain('data-testid="tablet-layer-pad-melody"');
+    expect(tabletStudioSilentHtml).toContain('data-testid="tablet-layer-adjust-melody"');
+    expect(tabletStudioSilentHtml).toContain('data-testid="tablet-pad-sparkle-toggle"');
+  });
+
+  it('posiciona botão discreto no canto inferior da Parede Direita e ativa Globo na Parede Esquerda no Quadro 6', () => {
+    const wallBriefingHtml = renderToStaticMarkup(
+      <ExperienceProvider initialMissionPhase="briefing">
+        <RightWallScene
+          renderContext="simulator"
+          surfaceId="rightWall"
+          widthCm={400}
+          heightCm={300}
+          aspectRatio={4 / 3}
+        />
+      </ExperienceProvider>
+    );
+    expect(wallBriefingHtml).toContain('right-8 bottom-6');
+    expect(wallBriefingHtml).toContain('scale-[0.88] opacity-70');
+
+    const leftWallPickingHtml = renderToStaticMarkup(
+      <ExperienceProvider initialMissionPhase="exploring" initialStoryStep={0}>
+        <LeftWallScene
+          renderContext="simulator"
+          surfaceId="leftWall"
+          widthCm={400}
+          heightCm={300}
+          aspectRatio={4 / 3}
+        />
+      </ExperienceProvider>
+    );
+    expect(leftWallPickingHtml).toContain('data-globe-mirror="true"');
+    expect(leftWallPickingHtml).toContain('data-view-mode="3d"');
+
+    const leftWallFocusedHtml = renderToStaticMarkup(
+      <ExperienceProvider initialMissionPhase="exploring" initialStoryStep={1}>
+        <LeftWallScene
+          renderContext="simulator"
+          surfaceId="leftWall"
+          widthCm={400}
+          heightCm={300}
+          aspectRatio={4 / 3}
+        />
+      </ExperienceProvider>
+    );
+    expect(leftWallFocusedHtml).toContain('data-globe-mirror="false"');
+    expect(leftWallFocusedHtml).toContain('data-view-mode="2d"');
+  });
+
+  it('roteia assets híbridos local/Supabase Storage e executa haptic de botões/impactos seguro', () => {
+    expect(() => triggerConsoleHaptic(12)).not.toThrow();
+    expect(() => triggerConsoleHaptic(CONSOLE_HAPTIC_PATTERNS.launchSequence)).not.toThrow();
+    expect(() => stopConsoleHaptic()).not.toThrow();
+
+    // 5 ticks de contagem (5..1 a cada 1100ms) somam 5500ms antes da ignição dos motores 8D
+    const countdownMs = CONSOLE_HAPTIC_PATTERNS.launchSequence
+      .slice(0, 10)
+      .reduce((acc, val) => acc + val, 0);
+    expect(countdownMs).toBe(5500);
+    expect(CONSOLE_HAPTIC_PATTERNS.launchSequence.length).toBeGreaterThan(15);
+
+    const calls: Array<number | number[]> = [];
+    const originalNav = globalThis.navigator;
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: {
+        vibrate: (pattern: number | number[]) => {
+          calls.push(pattern);
+          return true;
+        },
+      },
+    });
+    try {
+      triggerConsoleHaptic(CONSOLE_HAPTIC_PATTERNS.boardingSlam);
+      triggerConsoleHaptic(CONSOLE_HAPTIC_PATTERNS.launchSequence);
+      triggerConsoleHaptic(CONSOLE_HAPTIC_PATTERNS.zeroGEject);
+      triggerConsoleHaptic(CONSOLE_HAPTIC_PATTERNS.landingThud);
+      stopConsoleHaptic();
+      expect(calls).toEqual([
+        CONSOLE_HAPTIC_PATTERNS.boardingSlam,
+        CONSOLE_HAPTIC_PATTERNS.launchSequence,
+        CONSOLE_HAPTIC_PATTERNS.zeroGEject,
+        CONSOLE_HAPTIC_PATTERNS.landingThud,
+        0,
+      ]);
+    } finally {
+      Object.defineProperty(globalThis, 'navigator', {
+        configurable: true,
+        value: originalNav,
+      });
+    }
+
+    setRemoteCountryAssetConfig(
+      'https://proj.supabase.co/storage/v1/object/public/nasa-countries',
+      ['840', '276']
+    );
+    expect(resolveCountryAssetUrl('076', 'meta.json')).toBe('/countries/076/meta.json');
+    expect(resolveCountryAssetUrl('840', 'stems/melody.ogg')).toBe(
+      'https://proj.supabase.co/storage/v1/object/public/nasa-countries/countries/840/stems/melody.ogg'
+    );
+
+    setRemoteCountryAssetConfig('', []);
+    expect(resolveCountryAssetUrl('840', 'meta.json')).toBe('/countries/840/meta.json');
+  });
+
+  it('substitui informações culturais por telemetria oficial NASA de cada layer no Teto e nos cards', async () => {
+    const fs = (await import('node:fs')) as unknown as MinimalNodeFs;
+    const decoder = new TextDecoder();
+    const brazilMeta = JSON.parse(
+      decoder.decode(fs.readFileSync(new URL('../../public/countries/076/meta.json', import.meta.url)))
+    );
+
+    const report = buildCountryNasaReport({
+      country: {
+        id: '076',
+        namePt: 'Brasil',
+        nameEn: 'Brazil',
+        regionPt: 'América do Sul',
+        regionEn: 'South America',
+        hemispherePt: 'Sul',
+        hemisphereEn: 'South',
+        lon: -51.9,
+        lat: -14.2,
+        lonSpan: 41.6,
+        latSpan: 39.0,
+        idealDistance: 2.2,
+        bbox: brazilMeta.bbox,
+        isPilot: true,
+      },
+      telemetrySummary: brazilMeta.telemetrySummary,
+      studioData: brazilMeta.studio,
+      playback: { bpm: 101, keyRoot: 'Eb', keyRootPt: 'Mi bemol', windMeanSpeed: 2.9 },
+      layers: DEFAULT_LAYERS_STATE,
+      lang: 'pt',
+    });
+
+    expect(report).not.toBeNull();
+    expect(report!.alpha2).toBe('BR');
+    expect(report!.curiosityText).toContain('891');
+    expect(report!.layers).toHaveLength(5);
+    expect(report!.byLayerId.melody.metricHeadline).toContain('891 focos elétricos');
+    expect(report!.byLayerId.chords.metricHeadline).toContain('CO médio: 64%');
+    expect(report!.byLayerId.bass.metricHeadline).toContain('NO₂ médio: 66%');
+    expect(report!.byLayerId.wind.metricHeadline).toContain('7.7 m/s');
+    expect(report!.byLayerId.temperature.metricHeadline).toContain('76% T2M · 101 BPM');
+
+    const ceilingExploringHtml = renderToStaticMarkup(
+      <ExperienceProvider initialMissionPhase="exploring" initialStoryStep={1}>
+        <CeilingScene
+          renderContext="simulator"
+          surfaceId="ceiling"
+          widthCm={400}
+          heightCm={400}
+          aspectRatio={1}
+        />
+      </ExperienceProvider>
+    );
+    expect(ceilingExploringHtml).toContain('data-testid="ceiling-country-nasa-card"');
+    expect(ceilingExploringHtml).toContain('data-testid="ceiling-card-flag"');
+    expect(ceilingExploringHtml).toContain('h-[152px] w-full');
+    expect(ceilingExploringHtml).toContain('Curiosidades da Órbita');
+    expect(ceilingExploringHtml).toContain('#facc15');
+    expect(ceilingExploringHtml).toContain('#fb7185');
+    expect(ceilingExploringHtml).toContain('SVS 5011');
+    expect(ceilingExploringHtml).toContain('SVS 5147');
+    expect(ceilingExploringHtml).not.toContain('Cristo Redentor');
+    expect(ceilingExploringHtml).not.toContain('fi-cn');
+
+    const tabletHtml = renderToStaticMarkup(
+      <ExperienceProvider initialMissionPhase="exploring" initialStoryStep={1}>
+        <TabletControllerView />
+      </ExperienceProvider>
+    );
+    expect(tabletHtml).toContain('data-testid="tablet-nasa-report-btn"');
+    expect(tabletHtml).toContain('Curiosidades NASA');
+
+    const datasetCardHtml = renderToStaticMarkup(
+      <NasaDatasetCard
+        open={true}
+        datasetId="svs5011"
+        enabledDatasetIds={['svs5011']}
+        lang="pt"
+        countryName={report!.countryName}
+        countryCoordinates={report!.coordinatesLabel}
+        countryLayerMetric={report!.byDatasetId.svs5011}
+        onSelectDataset={() => {}}
+        onCloseOnce={() => {}}
+      />
+    );
+    expect(datasetCardHtml).toContain('data-testid="nasa-card-country-reading"');
+    expect(datasetCardHtml).toContain('891 focos elétricos');
   });
 });

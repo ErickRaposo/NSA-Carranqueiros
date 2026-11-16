@@ -36,6 +36,45 @@ export function resolveAssetUrl(relativePath: string): string {
   return cleanBase ? `${cleanBase}${cleanPath}` : cleanPath;
 }
 
+let remoteCountriesBaseUrl = '';
+let remoteCountryIdSet: ReadonlySet<string> = new Set<string>();
+
+/**
+ * Configura roteamento híbrido de países: ~100 países locais no bundle (`/countries/<id>/...`)
+ * e países excedentes servidos via bucket externo (ex.: Supabase Storage / Cloudflare R2).
+ */
+export function setRemoteCountryAssetConfig(
+  baseUrl: string | undefined | null,
+  remoteIds: Iterable<string> | undefined | null
+): void {
+  const clean = (baseUrl ?? '').trim().replace(/\/+$/, '');
+  remoteCountriesBaseUrl = clean;
+  remoteCountryIdSet = remoteIds ? new Set(remoteIds) : new Set<string>();
+}
+
+export function resolveCountryAssetUrl(countryId: string, subPath: string): string {
+  const cleanSub = subPath.replace(/^\/+/, '');
+  const relPath = `/countries/${countryId}/${cleanSub}`;
+  if (remoteCountryIdSet.has(countryId)) {
+    const env =
+      typeof import.meta !== 'undefined'
+        ? ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {})
+        : {};
+    const fallbackRemote = (
+      env.VITE_REMOTE_COUNTRIES_BASE_URL ||
+      env.VITE_SUPABASE_COUNTRIES_BASE_URL ||
+      ''
+    )
+      .trim()
+      .replace(/\/+$/, '');
+    const activeRemote = remoteCountriesBaseUrl || fallbackRemote;
+    if (activeRemote) {
+      return `${activeRemote}${relPath}`;
+    }
+  }
+  return resolveAssetUrl(relPath);
+}
+
 export interface NasaDatasetMeta {
   id: DatasetId;
   svsId: string;

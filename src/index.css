@@ -8245,4 +8245,43 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   background-color: rgba(148, 163, 184, 0.52);
 }
 
+/* ============================================================================
+   GUIDED SETUP — CONTINUITY FADE TEASER & ACTIVE SLOT ENTRANCE
+   ============================================================================ */
+.setup-next-teaser {
+  opacity: 0.46;
+  max-height: 196px;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.94) 0%,
+    rgba(0, 0, 0, 0.42) 48%,
+    transparent 96%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.94) 0%,
+    rgba(0, 0, 0, 0.42) 48%,
+    transparent 96%
+  );
+}
+
+@keyframes setupBlockEnter {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.setup-block-enter {
+  animation: setupBlockEnter 200ms var(--ease-out-quint) both;
+}
+
+
 

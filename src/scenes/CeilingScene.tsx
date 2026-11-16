@@ -1,11 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { motion } from 'motion/react';
+import { buildCountryNasaReport } from '../datasets/countryNasaReport';
 import { useExperience } from '../experience/ExperienceContext';
 import { SceneSurfaceProps, VISUAL_LAYER_ORDER } from '../experience/types';
-import {
-  CountryCultureCardData,
-  resolveCountryCultureCard,
-} from '../geo/countryCultureCard';
 import { SpaceStarfield } from './SpaceStarfield';
 import { SpaceshipLaunchOverlay } from './SpaceshipLaunchOverlay';
 
@@ -50,7 +47,6 @@ const CEILING_FLAG_OPTIONS: CeilingFlagOption[] = [
   { id: '826', alpha2: 'GB', namePt: 'Reino Unido', nameEn: 'United Kingdom', orbitRing: 2 },
   { id: '380', alpha2: 'IT', namePt: 'Itália', nameEn: 'Italy', orbitRing: 2 },
   { id: '724', alpha2: 'ES', namePt: 'Espanha', nameEn: 'Spain', orbitRing: 2 },
-  { id: '156', alpha2: 'CN', namePt: 'China', nameEn: 'China', orbitRing: 2 },
   { id: '410', alpha2: 'KR', namePt: 'Coreia do Sul', nameEn: 'South Korea', orbitRing: 2 },
   { id: '566', alpha2: 'NG', namePt: 'Nigéria', nameEn: 'Nigeria', orbitRing: 2 },
 ];
@@ -146,11 +142,11 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
     missionPhase,
     playback,
     storyStep,
+    studioData,
+    telemetrySummary,
   } = useExperience();
   const isPt = lang === 'pt';
   const anySolo = layers.melody.solo || layers.chords.solo || layers.bass.solo;
-  const [cultureCard, setCultureCard] = useState<CountryCultureCardData | null>(null);
-  const [cultureImgFailed, setCultureImgFailed] = useState(false);
 
   const showCountryLayers = missionPhase === 'exploring' && Boolean(country) && storyStep > 0;
   const showFloatingFlags = missionPhase === 'exploring' || missionPhase === 'ended';
@@ -162,20 +158,17 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
     missionPhase === 'exploring' ||
     missionPhase === 'ended';
 
-  useEffect(() => {
-    if (!showCountryLayers || !country) {
-      setCultureCard(null);
-      return;
-    }
-    let cancelled = false;
-    setCultureImgFailed(false);
-    void resolveCountryCultureCard(country, lang).then((card) => {
-      if (!cancelled) setCultureCard(card);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [country, lang, showCountryLayers]);
+  const nasaReport =
+    showCountryLayers && country
+      ? buildCountryNasaReport({
+          country,
+          telemetrySummary,
+          studioData,
+          playback,
+          layers,
+          lang,
+        })
+      : null;
 
   const isLayerVisible = (layerId: (typeof VISUAL_LAYER_ORDER)[number]): boolean => {
     if (!layers[layerId].enabled) return false;
@@ -520,39 +513,154 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
                 />
               ))}
 
-          {/* Somente o Card Cultural / Curiosidade com Foto Livre de Direitos Autorais e Referência Discreta */}
-          {cultureCard && (
+          {/* Card Colorido de Curiosidades & Hero Banner da Bandeira no Teto */}
+          {nasaReport && (
             <motion.aside
-              key={cultureCard.countryId}
+              key={nasaReport.countryId}
               initial={{ opacity: 0, y: 16, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-              className="pointer-events-none flex w-[460px] max-w-[80%] flex-col overflow-hidden rounded-3xl border border-slate-400/25 bg-[#060c1a]/88 text-left shadow-[0_0_54px_rgba(0,0,0,0.85)]"
-              data-testid="ceiling-country-culture-card"
+              className="pointer-events-none flex w-[490px] max-w-[84%] flex-col overflow-hidden rounded-[22px] border border-white/15 bg-[#060b19]/94 text-left shadow-[0_0_64px_rgba(0,0,0,0.92)]"
+              data-testid="ceiling-country-nasa-card"
             >
-              {!cultureImgFailed && (
-                <div className="relative h-[210px] w-full overflow-hidden bg-slate-950">
-                  <img
-                    src={cultureCard.imageUrl}
-                    alt={isPt ? cultureCard.titlePt : cultureCard.titleEn}
-                    className="h-full w-full object-cover"
-                    onError={() => setCultureImgFailed(true)}
+              {/* Capa Hero Full-Width da Bandeira (100% limpa sem texto em cima + vinheta sutil nas bordas) */}
+              {nasaReport.alpha2 && (
+                <div
+                  className="relative h-[152px] w-full shrink-0 overflow-hidden bg-slate-950"
+                  data-testid="ceiling-card-flag"
+                >
+                  <span
+                    className={`fi fi-${nasaReport.alpha2.toLowerCase()} block h-full w-full`}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      backgroundRepeat: 'no-repeat',
+                    }}
+                    aria-hidden="true"
                   />
-                  <span className="absolute top-3.5 left-3.5 rounded-full border border-sky-400/40 bg-[#050811]/85 px-3.5 py-1 text-[15px] font-semibold text-sky-200">
-                    {isPt ? cultureCard.categoryPt : cultureCard.categoryEn}
-                  </span>
+                  <div
+                    className="pointer-events-none absolute inset-0"
+                    style={{
+                      boxShadow: 'inset 0 0 36px rgba(5, 10, 24, 0.52)',
+                    }}
+                    aria-hidden="true"
+                  />
                 </div>
               )}
 
-              <div className="flex flex-col gap-2.5 p-5">
-                <div className="text-[22px] font-bold leading-tight text-slate-50">
-                  {isPt ? cultureCard.titlePt : cultureCard.titleEn}
+              {/* Faixa nas cores dos 5 mapas da NASA logo abaixo da bandeira */}
+              <div
+                className="h-1 w-full shrink-0"
+                style={{
+                  background:
+                    'linear-gradient(90deg, #facc15 0%, #22d3ee 25%, #4ade80 50%, #38bdf8 75%, #fb7185 100%)',
+                }}
+              />
+
+              <div className="flex flex-col gap-2.5 p-4">
+                {/* Bloco de Títulos separado abaixo da bandeira */}
+                <div className="flex flex-col gap-1 border-b border-white/10 pb-2.5">
+                  <div className="flex items-center justify-between gap-2.5">
+                    <span className="inline-flex items-center rounded-full border border-sky-400/35 bg-sky-500/12 px-2.5 py-0.5 text-[10px] font-bold tracking-[0.12em] text-sky-300 uppercase">
+                      {isPt ? 'Curiosidades da Órbita · NASA' : 'Orbital Curiosities · NASA'}
+                    </span>
+
+                    <span className="shrink-0 rounded-full border border-white/15 bg-white/[0.05] px-2.5 py-0.5 text-[11px] font-semibold text-slate-200 [font-variant-numeric:tabular-nums]">
+                      {nasaReport.coordinatesLabel} · {playback.bpm} BPM
+                    </span>
+                  </div>
+
+                  <div className="flex w-full items-baseline justify-between gap-2">
+                    <h2 className="truncate text-[24px] font-extrabold tracking-tight leading-tight text-white">
+                      {nasaReport.countryName}
+                    </h2>
+                    <span className="shrink-0 text-[12px] font-medium text-slate-300">
+                      {isPt ? `Tom: ${playback.keyRootPt}` : `Key: ${playback.keyRoot}`}
+                    </span>
+                  </div>
                 </div>
-                <p className="line-clamp-4 text-[17px] leading-snug text-slate-300">
-                  {isPt ? cultureCard.curiosityPt : cultureCard.curiosityEn}
-                </p>
-                <div className="mt-1 truncate border-t border-slate-400/15 pt-2 text-[12px] leading-tight text-slate-500">
-                  Ref: {cultureCard.sourceName} · {cultureCard.license} · {cultureCard.author}
+
+                {/* Curiosidade Divertida Baseada nos Dados Reais */}
+                <div className="rounded-xl border border-amber-300/25 bg-white/[0.04] px-3.5 py-2">
+                  <div className="text-[10px] font-bold tracking-[0.08em] text-amber-200 uppercase">
+                    {nasaReport.curiosityTitle}
+                  </div>
+                  <p className="mt-0.5 text-[13.5px] font-medium leading-snug text-slate-100">
+                    {nasaReport.curiosityText}
+                  </p>
+                </div>
+
+                {/* 5 Cards Coloridos com as Cores dos Mapas */}
+                <div className="grid grid-cols-2 gap-2">
+                  {nasaReport.layers.map((row, idx) => (
+                    <div
+                      key={row.layerId}
+                      className={`flex flex-col justify-between gap-1 rounded-xl border px-3 py-2 transition-colors ${
+                        idx === 4 ? 'col-span-2' : ''
+                      }`}
+                      style={{
+                        borderColor: row.enabled
+                          ? `color-mix(in srgb, ${row.accentHex} 75%, transparent)`
+                          : `color-mix(in srgb, ${row.accentHex} 38%, transparent)`,
+                        background: row.enabled
+                          ? `color-mix(in srgb, ${row.accentHex} 18%, rgba(8, 14, 32, 0.94))`
+                          : `color-mix(in srgb, ${row.accentHex} 9%, rgba(8, 14, 32, 0.9))`,
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{
+                              backgroundColor: row.accentHex,
+                              boxShadow: row.enabled ? `0 0 10px ${row.accentHex}` : 'none',
+                            }}
+                          />
+                          <span className="truncate text-[12px] font-bold text-slate-100">
+                            {row.funLabel}
+                          </span>
+                        </div>
+                        <span
+                          className="shrink-0 rounded-md px-1.5 py-0.5 text-[9.5px] font-bold"
+                          style={{
+                            color: row.accentHex,
+                            backgroundColor: `color-mix(in srgb, ${row.accentHex} 16%, rgba(4, 9, 22, 0.9))`,
+                          }}
+                        >
+                          {row.svsId}
+                        </span>
+                      </div>
+
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-[14.5px] font-extrabold text-white [font-variant-numeric:tabular-nums]">
+                          {row.metricHeadline}
+                        </span>
+                        <span className="truncate text-[10.5px] text-slate-300">
+                          {row.funHint}
+                        </span>
+                      </div>
+
+                      {row.normalized01 !== null && (
+                        <div className="h-1 w-full overflow-hidden rounded-full bg-black/45">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.max(6, Math.min(100, Math.round(row.normalized01 * 100)))}%`,
+                              backgroundColor: row.accentHex,
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="truncate text-center text-[10px] font-medium tracking-wide text-slate-400">
+                  {isPt
+                    ? 'Dados reais NASA SVS 5011 · 5147 · 5148 · 5153 · 5154'
+                    : 'Official NASA SVS data 5011 · 5147 · 5148 · 5153 · 5154'}
                 </div>
               </div>
             </motion.aside>

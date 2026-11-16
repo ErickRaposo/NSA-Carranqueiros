@@ -1,4 +1,4 @@
-import { resolveAssetUrl } from '../datasets/nasaDatasets';
+import { resolveCountryAssetUrl } from '../datasets/nasaDatasets';
 import {
   AudioLevelsMap,
   AudioOutputMode,
@@ -1208,7 +1208,7 @@ export class SpatialAudioEngine {
       try {
         const entries = await Promise.all(
           STEM_KEYS.map(async (stem) => {
-            const url = resolveAssetUrl(`/countries/${countryId}/${tuningMode}/${stem}.${audioExt}`);
+            const url = resolveCountryAssetUrl(countryId, `${tuningMode}/${stem}.${audioExt}`);
             const res = await window.fetch(url);
             if (!res.ok) throw new Error(`Missing stem ${url}`);
             const arr = await res.arrayBuffer();

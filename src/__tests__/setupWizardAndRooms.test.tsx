@@ -30,6 +30,7 @@ import { SetupWizardView } from '../views/SetupWizardView';
 import { presetToScenario } from '../views/setup/setupTypes';
 import { StepAudioSetup } from '../views/setup/StepAudioSetup';
 import { StepControllerPairing } from '../views/setup/StepControllerPairing';
+import { StepLanguageAndRoom } from '../views/setup/StepLanguageAndRoom';
 import { StepReadySummary } from '../views/setup/StepReadySummary';
 
 describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atraso A/V e Toggles Independentes', () => {
@@ -362,6 +363,8 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     );
     expect(wizardHtml).toContain('setup-wizard-view');
     expect(wizardHtml).toContain('AB34CD');
+    expect(wizardHtml).not.toContain('<aside');
+    expect(wizardHtml).not.toContain('Orbitron');
 
     // Modo Fone de Ouvido (hrtf) exibe Atraso Vídeo × Som + Luz de Batida, sem configuração de 3 caixas
     const headphonesHtml = renderToStaticMarkup(
@@ -589,5 +592,74 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     expect(readySingleHtml).toContain('btn-launch-demo');
     expect(readySingleHtml).toContain('btn-open-admin');
     expect(readySingleHtml).not.toContain('Simulador 3D');
+  });
+
+  it('revela sub-blocos do Passo 1 gradualmente com Rack Bars confirmadas', () => {
+    const step1LangHtml = renderToStaticMarkup(
+      <StepLanguageAndRoom
+        lang="pt"
+        roomCode="4285QV"
+        syncNetworkMode="lan-ws"
+        lanConnected={false}
+        scenario={2}
+        welcomeConfirmed={{ lang: false, room: false, scenario: false }}
+        activeWelcomeSubStep="lang"
+        onConfirmLang={() => {}}
+        onRegenerateRoomCode={() => {}}
+        onConfirmRoom={() => {}}
+        onSelectScenario={() => {}}
+        onEditSubStep={() => {}}
+      />
+    );
+    expect(step1LangHtml).toContain('substep-lang-active');
+    expect(step1LangHtml).toContain('next-block-teaser');
+    expect(step1LangHtml).not.toContain('substep-room-active');
+    expect(step1LangHtml).not.toContain('substep-scenario-active');
+
+    const step1RoomHtml = renderToStaticMarkup(
+      <StepLanguageAndRoom
+        lang="pt"
+        roomCode="4285QV"
+        syncNetworkMode="lan-ws"
+        lanConnected={false}
+        scenario={2}
+        welcomeConfirmed={{ lang: true, room: false, scenario: false }}
+        activeWelcomeSubStep="room"
+        onConfirmLang={() => {}}
+        onRegenerateRoomCode={() => {}}
+        onConfirmRoom={() => {}}
+        onSelectScenario={() => {}}
+        onEditSubStep={() => {}}
+      />
+    );
+    expect(step1RoomHtml).toContain('rack-bar-lang');
+    expect(step1RoomHtml).toContain('substep-room-active');
+    expect(step1RoomHtml).toContain('4285QV');
+    expect(step1RoomHtml).toContain('btn-regenerate-room');
+    expect(step1RoomHtml).toContain('btn-confirm-room');
+    expect(step1RoomHtml).not.toContain('substep-scenario-active');
+
+    const step1ScenarioHtml = renderToStaticMarkup(
+      <StepLanguageAndRoom
+        lang="pt"
+        roomCode="4285QV"
+        syncNetworkMode="lan-ws"
+        lanConnected={false}
+        scenario={2}
+        welcomeConfirmed={{ lang: true, room: true, scenario: false }}
+        activeWelcomeSubStep="scenario"
+        onConfirmLang={() => {}}
+        onRegenerateRoomCode={() => {}}
+        onConfirmRoom={() => {}}
+        onSelectScenario={() => {}}
+        onEditSubStep={() => {}}
+      />
+    );
+    expect(step1ScenarioHtml).toContain('rack-bar-lang');
+    expect(step1ScenarioHtml).toContain('rack-bar-room');
+    expect(step1ScenarioHtml).toContain('substep-scenario-active');
+    expect(step1ScenarioHtml).toContain('scenario-card-2');
+    expect(step1ScenarioHtml).not.toContain('Recomendado p/ Sala');
+    expect(step1ScenarioHtml).not.toContain('Tela Única');
   });
 });

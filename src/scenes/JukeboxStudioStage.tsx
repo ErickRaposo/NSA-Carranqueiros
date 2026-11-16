@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CountryFlagIcon } from '../components/CountryFlag';
 import { Mineiro3D } from '../components/Mineiro3D';
-import { resolveAssetUrl } from '../datasets/nasaDatasets';
+import { resolveCountryAssetUrl } from '../datasets/nasaDatasets';
 import { useExperience } from '../experience/ExperienceContext';
 import {
   LAYER_METAS,
@@ -185,7 +185,7 @@ export const JukeboxStudioStage: React.FC<JukeboxStudioStageProps> = ({
     for (const lid of VISUAL_LAYER_ORDER) {
       const sheetImg = new Image();
       sheetImg.decoding = 'async';
-      sheetImg.src = resolveAssetUrl(`/countries/${country.id}/video/${lid}_sheet.jpg`);
+      sheetImg.src = resolveCountryAssetUrl(country.id, `video/${lid}_sheet.jpg`);
       nextSheets[lid] = sheetImg;
     }
     videoSheetsRef.current = nextSheets;
@@ -1234,29 +1234,29 @@ export const JukeboxStudioStage: React.FC<JukeboxStudioStageProps> = ({
         </div>
       )}
 
-      {/* Top-Right Mineiro3D + Typewriter Pill Overlay (transform: scale(u) -> immune to min-font-size & overflow) */}
+      {/* Top-Right Mineiro3D + Typewriter Pill Overlay (transform: scale(u) -> cabendo exatamente na barra superior sem cobrir os mapas) */}
       {showTopHeader && !hideRobot && (
         <div
-          className="pointer-events-none absolute top-0 right-0 flex h-[30px] w-[274px] flex-nowrap items-center gap-1.5 overflow-hidden rounded-full border border-slate-700/65 bg-[#060c1a]/92 pr-3 pl-1"
+          className="pointer-events-none absolute top-0 right-0 flex h-[34px] w-[328px] flex-nowrap items-center gap-2 overflow-hidden rounded-full border border-sky-400/35 bg-[#050d20]/94 pr-3.5 pl-1 shadow-[0_0_24px_rgba(14,165,233,0.18)]"
           style={{
             transformOrigin: 'top right',
-            transform: `translate(${(-10 * u).toFixed(2)}px, ${(5 * u).toFixed(2)}px) scale(${u.toFixed(4)})`,
+            transform: `translate(${(-10 * u).toFixed(2)}px, ${(3 * u).toFixed(2)}px) scale(${u.toFixed(4)})`,
           }}
         >
-          <div className="relative h-[26px] w-[26px] shrink-0 overflow-hidden">
+          <div className="relative h-[30px] w-[30px] shrink-0 overflow-hidden rounded-full border border-sky-400/40 bg-sky-500/15">
             <div
               style={{
                 width: '62px',
                 height: '62px',
                 transformOrigin: 'top left',
-                transform: 'scale(0.419)',
+                transform: 'scale(0.483)',
               }}
             >
               <Mineiro3D stepIndex={storyStep} isExplaining={speechStatus === 'speaking'} size="avatar" />
             </div>
           </div>
 
-          <p className="min-w-0 flex-1 truncate text-[10px] font-medium leading-none text-slate-200 whitespace-nowrap">
+          <p className="min-w-0 flex-1 truncate text-[11px] font-semibold leading-none text-slate-100 whitespace-nowrap">
             {robotText}
             {speechStatus !== 'stopped' && speechStatus !== 'paused' && (
               <span

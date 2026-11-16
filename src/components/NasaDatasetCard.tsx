@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { ExternalLink, Layers, X } from 'lucide-react';
+import { CountryNasaLayerMetric } from '../datasets/countryNasaReport';
 import { DatasetId, NASA_DATASETS, resolveAssetUrl } from '../datasets/nasaDatasets';
+import { triggerConsoleHaptic } from '../utils/haptics';
 import {
   DATASET_TO_LAYER,
   LAYER_METAS,
@@ -13,6 +15,9 @@ interface NasaDatasetCardProps {
   datasetId: DatasetId;
   enabledDatasetIds: DatasetId[];
   lang?: Lang;
+  countryName?: string;
+  countryCoordinates?: string;
+  countryLayerMetric?: CountryNasaLayerMetric | null;
   onSelectDataset: (id: DatasetId) => void;
   onCloseOnce: () => void;
 }
@@ -22,6 +27,9 @@ export const NasaDatasetCard: React.FC<NasaDatasetCardProps> = ({
   datasetId,
   enabledDatasetIds,
   lang = 'pt',
+  countryName,
+  countryCoordinates,
+  countryLayerMetric,
   onSelectDataset,
   onCloseOnce,
 }) => {
@@ -87,7 +95,10 @@ export const NasaDatasetCard: React.FC<NasaDatasetCardProps> = ({
                 isEnabledOnGlobe ? 'is-globe-active' : ''
               }`}
               style={{ '--tab-accent': meta.accentHex, minHeight: '44px' } as React.CSSProperties}
-              onClick={() => onSelectDataset(meta.datasetId)}
+              onClick={() => {
+                triggerConsoleHaptic(10);
+                onSelectDataset(meta.datasetId);
+              }}
               title={`${tabLabel} — ${itemTitle} (${itemDs.svsId})`}
               data-testid={`nasa-card-tab-${meta.datasetId}`}
             >
@@ -129,7 +140,10 @@ export const NasaDatasetCard: React.FC<NasaDatasetCardProps> = ({
           type="button"
           className="icon-btn-sm"
           style={{ minWidth: '44px', minHeight: '44px' }}
-          onClick={onCloseOnce}
+          onClick={() => {
+            triggerConsoleHaptic(10);
+            onCloseOnce();
+          }}
           title={isPt ? 'Fechar card da base NASA' : 'Close NASA dataset card'}
           aria-label={isPt ? 'Fechar card da base NASA' : 'Close NASA dataset card'}
         >
@@ -138,6 +152,43 @@ export const NasaDatasetCard: React.FC<NasaDatasetCardProps> = ({
       </div>
 
       <div className="nasa-scale-box" data-testid="nasa-scale-box">
+        {countryName && countryLayerMetric && (
+          <div
+            className="mb-3 rounded-xl border border-[#2563eb]/45 bg-[#060c1a]/95 p-3"
+            data-testid="nasa-card-country-reading"
+          >
+            <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-sky-300">
+              <span>
+                {isPt
+                  ? `Telemetria extraída em ${countryName}`
+                  : `Extracted NASA reading for ${countryName}`}
+              </span>
+              {countryCoordinates && (
+                <span className="text-slate-400 [font-variant-numeric:tabular-nums]">
+                  {countryCoordinates}
+                </span>
+              )}
+            </div>
+            <div className="mt-1 text-sm font-bold text-slate-50 [font-variant-numeric:tabular-nums]">
+              {countryLayerMetric.metricHeadline}
+            </div>
+            <div className="mt-0.5 text-[11px] text-slate-300">
+              {countryLayerMetric.metricSubline}
+            </div>
+            {countryLayerMetric.normalized01 !== null && (
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800/90">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.max(4, Math.min(100, Math.round(countryLayerMetric.normalized01 * 100)))}%`,
+                    backgroundColor: layerMeta.accentHex,
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="nasa-scale-header">
           <strong className="nasa-scale-title">
             {ds.representationType === 'colorbar'
@@ -244,7 +295,10 @@ export const NasaDatasetCard: React.FC<NasaDatasetCardProps> = ({
           type="button"
           className="nasa-btn-primary"
           style={{ minHeight: '44px' }}
-          onClick={onCloseOnce}
+          onClick={() => {
+            triggerConsoleHaptic(10);
+            onCloseOnce();
+          }}
           data-testid="nasa-card-close-btn"
         >
           {isPt ? 'Fechar' : 'Close'}

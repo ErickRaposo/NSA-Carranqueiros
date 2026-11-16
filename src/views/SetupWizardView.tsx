@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Sliders } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Radio,
+  Sliders,
+  Square,
+} from 'lucide-react';
 import symbollLogo from '../assets/symboll.png';
 import {
   useAudioAdmin,
@@ -7,6 +14,7 @@ import {
   useProjectionAdmin,
 } from '../experience/ExperienceContext';
 import {
+  Lang,
   PROJECTOR_OUT_IDS,
   SurfaceId,
   ViewRole,
@@ -19,9 +27,13 @@ import {
 } from './admin/adminMeta';
 import {
   loadInitialScreenScenario,
+  loadWelcomeConfirmedState,
   saveScreenScenario,
+  saveWelcomeConfirmedState,
   ScreenScenario,
   SetupStepId,
+  WelcomeConfirmedState,
+  WelcomeSubStep,
 } from './setup/setupTypes';
 import { StepAudioSetup } from './setup/StepAudioSetup';
 import { StepControllerPairing } from './setup/StepControllerPairing';
@@ -33,6 +45,9 @@ interface SetupWizardViewProps {
   onOpenAdmin: () => void;
   onNavigate: (view: ViewRole) => void;
 }
+
+const PRESS_TRANSITION =
+  'transition-[transform,background-color,border-color,color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]';
 
 export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
   onOpenAdmin,
@@ -99,6 +114,16 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
   const [scenario, setScenario] = useState<ScreenScenario>(() =>
     loadInitialScreenScenario(projectionState.preset)
   );
+  const [welcomeConfirmed, setWelcomeConfirmed] = useState<WelcomeConfirmedState>(() =>
+    loadWelcomeConfirmedState()
+  );
+  const [activeWelcomeSubStep, setActiveWelcomeSubStep] = useState<WelcomeSubStep>(() => {
+    const initial = loadWelcomeConfirmedState();
+    if (!initial.lang) return 'lang';
+    if (!initial.room) return 'room';
+    return 'scenario';
+  });
+
   const [activeStep, setActiveStep] = useState<SetupStepId>('welcome');
   const [manualBypassConfirmed, setManualBypassConfirmed] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -128,9 +153,34 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
     };
   }, [stopCalibrationSignal]);
 
+  const updateWelcomeConfirmed = (patch: Partial<WelcomeConfirmedState>) => {
+    setWelcomeConfirmed((prev) => {
+      const next = { ...prev, ...patch };
+      saveWelcomeConfirmedState(next);
+      return next;
+    });
+  };
+
+  const handleConfirmLang = (nextLang: Lang) => {
+    setLang(nextLang);
+    updateWelcomeConfirmed({ lang: true });
+    setActiveWelcomeSubStep((prev) => {
+      if (prev === 'lang') {
+        return welcomeConfirmed.room ? 'scenario' : 'room';
+      }
+      return prev;
+    });
+  };
+
+  const handleConfirmRoom = () => {
+    updateWelcomeConfirmed({ room: true });
+    setActiveWelcomeSubStep('scenario');
+  };
+
   const handleSelectScenario = (next: ScreenScenario) => {
     setScenario(next);
     saveScreenScenario(next);
+    updateWelcomeConfirmed({ scenario: true });
     if (next === 1) {
       selectProjectionPreset('1-projector');
     } else if (next === 2) {
@@ -186,10 +236,51 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
 
   const controllerConnected = lanClients.some((c) => c.role === 'controller');
   const currentStepIndex = Math.max(0, steps.indexOf(activeStep));
-  const canGoBack = currentStepIndex > 0;
+  const hasActiveTestsOrGrids = calibTestMode.kind !== 'off' || projectionState.showGrid;
+
+  const canGoBack =
+    activeStep === 'welcome' ? activeWelcomeSubStep !== 'lang' : currentStepIndex > 0;
   const canGoNext =
-    currentStepIndex < steps.length - 1 &&
-    (activeStep !== 'controller' || scenario === 0 || controllerConnected || manualBypassConfirmed);
+    activeStep === 'welcome'
+      ? true
+      : currentStepIndex < steps.length - 1 &&
+        (activeStep !== 'controller' || scenario === 0 || controllerConnected || manualBypassConfirmed);
+
+  const handleBackClick = () => {
+    if (activeStep === 'welcome') {
+      if (activeWelcomeSubStep === 'scenario') {
+        setActiveWelcomeSubStep('room');
+      } else if (activeWelcomeSubStep === 'room') {
+        setActiveWelcomeSubStep('lang');
+      }
+      return;
+    }
+    if (currentStepIndex > 0) {
+      goToStep(steps[currentStepIndex - 1]);
+    }
+  };
+
+  const handleNextClick = () => {
+    if (activeStep === 'welcome') {
+      if (activeWelcomeSubStep === 'lang') {
+        handleConfirmLang(lang);
+        return;
+      }
+      if (activeWelcomeSubStep === 'room') {
+        handleConfirmRoom();
+        return;
+      }
+      updateWelcomeConfirmed({ lang: true, room: true, scenario: true });
+    }
+    if (currentStepIndex < steps.length - 1) {
+      goToStep(steps[currentStepIndex + 1]);
+    }
+  };
+
+  const handleCutTests = () => {
+    stopCalibrationSignal();
+    if (projectionState.showGrid) toggleGlobalShowGrid();
+  };
 
   const stepLabels: Record<SetupStepId, { pt: string; en: string }> = {
     welcome: { pt: 'Ambiente', en: 'Space' },
@@ -224,57 +315,75 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
 
   return (
     <div
-      className="flex h-dvh w-screen flex-col overflow-hidden bg-[#060913] font-sans text-slate-100"
+      className="flex h-dvh w-screen flex-col overflow-hidden bg-[#060913] font-['Poppins',system-ui,sans-serif] text-slate-100"
       data-testid="setup-wizard-view"
     >
-      {/* Cabeçalho Guiado */}
-      <header className="flex min-h-[60px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#1e3a66]/55 bg-[#040b1a] px-4 py-2.5 lg:px-6">
-        <div className="flex items-center gap-3">
+      {/* Cabeçalho superior alinhado ao Painel (100% Poppins) */}
+      <header className="flex min-h-[58px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#1e3a66]/55 bg-[#040b1a] px-4 py-2 lg:px-6">
+        <div className="flex items-center gap-2.5">
           <img src={symbollLogo} alt="" className="h-7 w-7 object-contain" aria-hidden="true" />
-          <div>
-            <h1 className="text-sm font-semibold tracking-[-0.01em] text-slate-50">
-              {isPt ? 'Configuração Guiada · Earth Jukebox' : 'Guided Setup · Earth Jukebox'}
-            </h1>
-            <p className="hidden text-xs text-slate-400 sm:block">
-              {isPt
-                ? 'Passo a passo intuitivo para preparar telas, áudio espacial 8D e controle'
-                : 'Step-by-step setup for screens, 8D spatial audio, and remote control'}
-            </p>
-          </div>
+          <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-slate-50">
+            {isPt ? 'Setup Guiado' : 'Guided Setup'}
+          </h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex min-h-[38px] items-center gap-2 rounded-full border border-[#1e3a66] bg-[#060c1a] px-3.5 text-xs">
+            <Radio
+              size={13}
+              className={lanConnected ? 'text-emerald-400' : 'text-[#7dd3fc]'}
+              aria-hidden="true"
+            />
+            <span className="hidden text-slate-400 sm:inline">
+              {isPt ? 'Sala' : 'Room'}
+            </span>
+            <span className="font-mono font-semibold tracking-wider text-[#7dd3fc] [font-variant-numeric:tabular-nums]">
+              {roomCode ?? 'LOCAL'}
+            </span>
+          </div>
+
+          {hasActiveTestsOrGrids && (
+            <button
+              type="button"
+              onClick={handleCutTests}
+              className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-full bg-rose-500 px-3.5 text-xs font-semibold text-white hover:bg-rose-400 ${PRESS_TRANSITION} ${ADMIN_FOCUS}`}
+            >
+              <Square size={12} />
+              <span>{isPt ? 'Cortar Testes' : 'Stop Tests'}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onOpenAdmin}
             data-testid="header-open-admin"
-            className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-full border border-[#1e3a66] bg-[#060c1a] px-3.5 text-xs font-medium text-slate-300 transition hover:border-[#2563eb] hover:text-white ${ADMIN_FOCUS}`}
+            className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-full border border-[#1e3a66] bg-[#060c1a] px-3.5 text-xs font-medium text-slate-200 hover:border-[#2563eb] hover:text-white ${PRESS_TRANSITION} ${ADMIN_FOCUS}`}
             title={
               isPt
-                ? 'Abrir Painel Técnico completo para desenvolvedores (?view=admin)'
-                : 'Open full developer Control Desk (?view=admin)'
+                ? 'Abrir Painel Técnico completo (?view=admin)'
+                : 'Open full Control Desk (?view=admin)'
             }
           >
-            <Sliders size={13} />
+            <Sliders size={13} className="text-[#7dd3fc]" />
             <span>{isPt ? 'Painel Técnico' : 'Control Desk'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setLang(isPt ? 'en' : 'pt')}
-            className={`inline-flex min-h-[38px] min-w-[68px] items-center justify-center rounded-full border border-[#1e3a66] bg-[#060c1a] px-3 text-xs font-semibold text-slate-200 transition hover:border-[#2563eb] hover:text-white ${ADMIN_FOCUS}`}
+            className={`inline-flex min-h-[38px] min-w-[78px] items-center justify-center rounded-full border border-[#1e3a66] bg-[#060c1a] px-3.5 text-xs font-medium text-slate-200 hover:border-[#2563eb] hover:text-white ${PRESS_TRANSITION} ${ADMIN_FOCUS}`}
           >
-            {isPt ? 'PT · BR' : 'EN · US'}
+            {isPt ? 'Português' : 'English'}
           </button>
         </div>
       </header>
 
-      {/* Barra de Progresso dos Passos */}
+      {/* Trilho Horizontal Limpo de Etapas */}
       <nav
         aria-label={isPt ? 'Etapas da configuração' : 'Setup steps'}
-        className="shrink-0 border-b border-[#1e3a66]/40 bg-[#050916] px-4 py-2.5 lg:px-6"
+        className="shrink-0 border-b border-[#1e3a66]/45 bg-[#040b1a]/80 px-4 py-3 sm:px-8"
       >
-        <ol className="mx-auto flex max-w-5xl items-center gap-2 overflow-x-auto [font-variant-numeric:tabular-nums]">
+        <ol className="mx-auto flex max-w-5xl items-center justify-between gap-2 overflow-x-auto [font-variant-numeric:tabular-nums]">
           {steps.map((stepId, idx) => {
             const isCurrent = stepId === activeStep;
             const isCompleted = idx < currentStepIndex;
@@ -287,36 +396,40 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
               !manualBypassConfirmed;
 
             return (
-              <li key={stepId} className="flex shrink-0 items-center gap-2">
+              <li key={stepId} className="flex shrink-0 items-center gap-2 sm:flex-1 sm:last:flex-none">
                 <button
                   type="button"
                   disabled={locked}
                   onClick={() => goToStep(stepId)}
                   aria-current={isCurrent ? 'step' : undefined}
-                  className={`inline-flex min-h-[38px] items-center gap-2 rounded-full border px-3.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${ADMIN_FOCUS} ${
+                  className={`inline-flex min-h-[36px] shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-45 ${PRESS_TRANSITION} ${ADMIN_FOCUS} ${
                     isCurrent
-                      ? 'border-[#2563eb] bg-[#0c1a36] font-semibold text-white'
+                      ? 'border-[#2563eb]/65 bg-[#0c1a36] font-semibold text-slate-50'
                       : isCompleted
-                        ? 'border-[#1e3a66] bg-[#060c1a] text-[#7dd3fc] hover:border-[#2563eb]'
-                        : 'border-transparent bg-transparent text-slate-400 hover:text-slate-200'
+                        ? 'border-[#1e3a66]/55 bg-[#040b1a] text-slate-200 hover:border-[#2563eb]/60 hover:text-white'
+                        : 'border-transparent text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <span
-                    className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold ${
-                      isCurrent
-                        ? 'bg-[#2563eb] text-white'
-                        : isCompleted
-                          ? 'bg-emerald-500/20 text-emerald-300'
-                          : 'bg-white/10 text-slate-300'
-                    }`}
-                  >
-                    {isCompleted ? <Check size={11} /> : idx + 1}
-                  </span>
+                  {isCompleted ? (
+                    <Check size={12} className="shrink-0 text-emerald-400" />
+                  ) : (
+                    <span
+                      className={`h-2 w-2 shrink-0 rounded-full ${
+                        isCurrent ? 'bg-[#7dd3fc]' : 'bg-slate-400 opacity-25'
+                      }`}
+                      aria-hidden="true"
+                    />
+                  )}
                   <span>{isPt ? stepLabels[stepId].pt : stepLabels[stepId].en}</span>
                 </button>
 
                 {idx < steps.length - 1 && (
-                  <span className="h-px w-4 bg-[#1e3a66]/70" aria-hidden="true" />
+                  <span
+                    className={`hidden h-px flex-1 sm:block ${
+                      isCompleted ? 'bg-[#2563eb]/60' : 'bg-[#1e3a66]/50'
+                    }`}
+                    aria-hidden="true"
+                  />
                 )}
               </li>
             );
@@ -324,8 +437,8 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
         </ol>
       </nav>
 
-      {/* Conteúdo Principal da Etapa */}
-      <main className="admin-scroll min-h-0 flex-1 px-4 py-5 lg:px-6">
+      {/* Conteúdo Principal Ampliado (max-w-5xl) */}
+      <main className="admin-scroll min-h-0 flex-1 px-4 py-6 sm:px-8 lg:py-9">
         <div className="mx-auto w-full max-w-5xl">
           {activeStep === 'welcome' && (
             <StepLanguageAndRoom
@@ -334,11 +447,15 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
               syncNetworkMode={syncNetworkMode}
               lanConnected={lanConnected}
               scenario={scenario}
-              onSetLang={setLang}
+              welcomeConfirmed={welcomeConfirmed}
+              activeWelcomeSubStep={activeWelcomeSubStep}
+              onConfirmLang={handleConfirmLang}
               onRegenerateRoomCode={() => {
                 regenerateRoomCode();
               }}
+              onConfirmRoom={handleConfirmRoom}
               onSelectScenario={handleSelectScenario}
+              onEditSubStep={(sub) => setActiveWelcomeSubStep(sub)}
             />
           )}
 
@@ -437,25 +554,21 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
         </div>
       </main>
 
-      {/* Rodapé Fixo de Navegação Voltar / Continuar */}
-      <footer className="shrink-0 border-t border-[#1e3a66]/55 bg-[#040b1a] px-4 py-3 lg:px-6">
+      {/* Rodapé Fixo de Transporte Voltar / Continuar */}
+      <footer className="shrink-0 border-t border-[#1e3a66]/55 bg-[#040b1a] px-4 py-3.5 sm:px-8">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <button
             type="button"
             disabled={!canGoBack}
-            onClick={() => {
-              if (canGoBack) {
-                goToStep(steps[currentStepIndex - 1]);
-              }
-            }}
+            onClick={handleBackClick}
             data-testid="setup-btn-back"
-            className={`inline-flex min-h-[44px] items-center gap-2 rounded-full border border-[#1e3a66] bg-[#060c1a] px-5 text-xs font-semibold text-slate-200 transition hover:border-[#2563eb] hover:text-white disabled:cursor-not-allowed disabled:opacity-35 ${ADMIN_FOCUS}`}
+            className={`inline-flex min-h-[44px] items-center gap-2 whitespace-nowrap rounded-full border border-[#1e3a66] bg-[#060c1a] px-5 text-xs font-semibold text-slate-200 hover:border-[#2563eb] hover:text-white disabled:cursor-not-allowed disabled:opacity-35 ${PRESS_TRANSITION} ${ADMIN_FOCUS}`}
           >
-            <ArrowLeft size={14} />
+            <ArrowLeft size={13} />
             <span>{isPt ? 'Voltar' : 'Back'}</span>
           </button>
 
-          <div className="text-xs text-slate-400 [font-variant-numeric:tabular-nums]">
+          <div className="whitespace-nowrap text-xs font-medium text-slate-400 [font-variant-numeric:tabular-nums]">
             {isPt
               ? `Etapa ${currentStepIndex + 1} de ${steps.length}`
               : `Step ${currentStepIndex + 1} of ${steps.length}`}
@@ -465,19 +578,15 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
             <button
               type="button"
               disabled={!canGoNext}
-              onClick={() => {
-                if (canGoNext) {
-                  goToStep(steps[currentStepIndex + 1]);
-                }
-              }}
+              onClick={handleNextClick}
               data-testid="setup-btn-next"
-              className={`inline-flex min-h-[44px] items-center gap-2 px-6 text-xs disabled:cursor-not-allowed disabled:opacity-40 ${ADMIN_PRIMARY_PILL_CLASS} ${ADMIN_FOCUS}`}
+              className={`inline-flex min-h-[44px] items-center gap-2 whitespace-nowrap px-6 text-[13px] disabled:cursor-not-allowed disabled:opacity-40 ${PRESS_TRANSITION} ${ADMIN_PRIMARY_PILL_CLASS} ${ADMIN_FOCUS}`}
             >
               <span>{isPt ? 'Continuar' : 'Continue'}</span>
-              <ArrowRight size={14} />
+              <ArrowRight size={13} />
             </button>
           ) : (
-            <div className="w-[116px]" aria-hidden="true" />
+            <div className="w-[108px]" aria-hidden="true" />
           )}
         </div>
       </footer>

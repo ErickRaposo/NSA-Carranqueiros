@@ -47,7 +47,11 @@ import {
   SpeakerSlotConfig,
   SpeakerSlotId,
 } from '../audio/speakerCalibration';
-import { resolveAssetUrl } from '../datasets/nasaDatasets';
+import {
+  resolveAssetUrl,
+  resolveCountryAssetUrl,
+  setRemoteCountryAssetConfig,
+} from '../datasets/nasaDatasets';
 import { CountryEntry, loadWorldCountries } from '../geo/countries';
 import {
   generateRoomCode,
@@ -60,7 +64,9 @@ import { isSupabaseRealtimeConfigured } from '../lan/roomRealtimeClient';
 import { registerActiveRoom } from '../lan/roomRegistry';
 import {
   createRoomSyncTransport,
+  createTrailingThrottle,
   RoomSyncTransportHandle,
+  ThrottledSender,
 } from '../lan/roomSyncTransport';
 import {
   applyProjectionPreset,
@@ -98,11 +104,13 @@ import {
   BarLoopRange,
   CompareCountriesState,
   CountryStudioPayload,
+  CountryTelemetrySummary,
   ExperienceContextValue,
   ExperienceCountry,
   ExperienceLayersState,
   ExperiencePlaybackState,
   GENERATED_COUNTRY_IDS,
+  GlobeCameraPose,
   Lang,
   LanPeerInfo,
   LiveFrameSnapshot,
@@ -203,9 +211,7 @@ interface CountryMetaJson {
     base: CountryMetaTuning;
   };
   studio?: CountryStudioPayload;
-  telemetrySummary?: {
-    lightningHotspotCount?: number;
-  };
+  telemetrySummary?: Partial<CountryTelemetrySummary>;
   beatEvents?: CountryMetaBeatEvent[];
 }
 
@@ -298,7 +304,7 @@ function toExperienceCountry(
 function buildCountryPngUrls(countryId: string): Record<VisualLayerId, string> {
   const urls = {} as Record<VisualLayerId, string>;
   for (const layerId of VISUAL_LAYER_ORDER) {
-    urls[layerId] = resolveAssetUrl(`/countries/${countryId}/${layerId}.png`);
+    urls[layerId] = resolveCountryAssetUrl(countryId, `${layerId}.png`);
   }
   return urls;
 }
@@ -309,6 +315,7 @@ interface SyncPayload {
   lang: Lang;
   storyStep: number;
   missionPhase?: MissionPhase;
+  isPickingCountry?: boolean;
   sceneReplayKey?: number;
   loopSingleBar?: number | null;
   barLoop?: BarLoopRange;
@@ -336,6 +343,7 @@ type RemoteCalibSignalCommand =
   | { action: 'pink-multi'; speakers: SpeakerSlotId[] }
   | { action: 'delay-click-multi'; speakers: SpeakerSlotId[]; headphones?: boolean }
   | { action: 'calib-beat'; beatSeq: number }
+  | { action: 'globe-camera'; lon: number; lat: number; distance: number }
   | { action: 'pink-single'; speakerId: SpeakerSlotId }
   | { action: 'pink-ab'; targetSpeakerId: SpeakerSlotId }
   | { action: 'delay-click'; targetSpeakerId: SpeakerSlotId }
@@ -582,12 +590,25 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     let cancelled = false;
     window
       .fetch(resolveAssetUrl('/countries/index.json'))
-      .then((res) => (res.ok ? (res.json() as Promise<{ generatedIds?: string[] }>) : null))
+      .then((res) =>
+        res.ok
+          ? (res.json() as Promise<{
+              generatedIds?: string[];
+              remoteIds?: string[];
+              remoteBaseUrl?: string;
+            }>)
+          : null
+      )
       .then((json) => {
-        if (cancelled || !json || !Array.isArray(json.generatedIds) || json.generatedIds.length === 0) {
-          return;
+        if (cancelled || !json) return;
+        setRemoteCountryAssetConfig(json.remoteBaseUrl, json.remoteIds);
+        const combined = [
+          ...(Array.isArray(json.generatedIds) ? json.generatedIds : []),
+          ...(Array.isArray(json.remoteIds) ? json.remoteIds : []),
+        ];
+        if (combined.length > 0) {
+          setGeneratedIdsList(Array.from(new Set(combined)));
         }
-        setGeneratedIdsList(json.generatedIds);
       })
       .catch(() => {
         // Mantém GENERATED_COUNTRY_IDS estático quando offline/sem index.json extra
@@ -628,6 +649,9 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   const [lang, setLangState] = useState<Lang>('pt');
   const [storyStep, setStoryStepState] = useState<number>(initialStoryStep);
   const [missionPhase, setMissionPhaseState] = useState<MissionPhase>(initialMissionPhase);
+  const [isPickingCountry, setIsPickingCountryState] = useState<boolean>(false);
+  const globeCameraListenersRef = useRef<Set<(pose: GlobeCameraPose) => void>>(new Set());
+  const globeCameraThrottledRef = useRef<ThrottledSender<GlobeCameraPose> | null>(null);
   const [sceneReplayKey, setSceneReplayKey] = useState<number>(0);
   const [barLoop, setBarLoopState] = useState<BarLoopRange>(null);
   const [compareCountries, setCompareCountriesState] = useState<CompareCountriesState>({
@@ -696,7 +720,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
 
     let cancelled = false;
     setMetaLoadStatus('loading');
-    const url = resolveAssetUrl(`/countries/${country.id}/meta.json`);
+    const url = resolveCountryAssetUrl(country.id, 'meta.json');
     window
       .fetch(url)
       .then((res) => (res.ok ? (res.json() as Promise<CountryMetaJson>) : null))
@@ -727,6 +751,20 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     : null;
 
   const studioData: CountryStudioPayload | null = countryMeta?.studio ?? null;
+  const telemetrySummary: CountryTelemetrySummary | null = useMemo(() => {
+    const raw = countryMeta?.telemetrySummary;
+    if (!raw) return null;
+    return {
+      lightningHotspotCount:
+        typeof raw.lightningHotspotCount === 'number' ? raw.lightningHotspotCount : 0,
+      meanTemperature01:
+        typeof raw.meanTemperature01 === 'number' ? raw.meanTemperature01 : 0,
+      meanCo01: typeof raw.meanCo01 === 'number' ? raw.meanCo01 : 0,
+      meanNox01: typeof raw.meanNox01 === 'number' ? raw.meanNox01 : 0,
+      windMeanSpeedMs:
+        typeof raw.windMeanSpeedMs === 'number' ? raw.windMeanSpeedMs : 0,
+    };
+  }, [countryMeta]);
   const activeStudioSession: StudioSessionData | null = studioData
     ? isRegionTuning
       ? studioData.sessions.region
@@ -1232,6 +1270,9 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     setLangState(data.lang);
     setStoryStepState(data.storyStep ?? 0);
     if (data.missionPhase) setMissionPhaseState(data.missionPhase);
+    if (typeof data.isPickingCountry === 'boolean') {
+      setIsPickingCountryState(data.isPickingCountry);
+    }
     if (typeof data.sceneReplayKey === 'number') setSceneReplayKey(data.sceneReplayKey);
     if (data.barLoop !== undefined) {
       setBarLoopState(data.barLoop);
@@ -1305,6 +1346,17 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   const applyRemoteCalibSignal = useCallback((cmd: RemoteCalibSignalCommand) => {
     if (cmd.action === 'calib-beat') {
       setCalibBeatSeq(cmd.beatSeq);
+      return;
+    }
+    if (cmd.action === 'globe-camera') {
+      const pose: GlobeCameraPose = {
+        lon: cmd.lon,
+        lat: cmd.lat,
+        distance: cmd.distance,
+      };
+      for (const listener of globeCameraListenersRef.current) {
+        listener(pose);
+      }
       return;
     }
 
@@ -1475,6 +1527,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       lang,
       storyStep,
       missionPhase,
+      isPickingCountry,
       sceneReplayKey,
       loopSingleBar,
       barLoop,
@@ -1504,6 +1557,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     audioOwner,
     barLoop,
     compareCountries,
+    isPickingCountry,
     isPlaying,
     isUnifiedDemoMode,
     lang,
@@ -1938,6 +1992,51 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       }
       return status;
     });
+  }, []);
+
+  const setIsPickingCountry = useCallback((picking: boolean) => {
+    setIsPickingCountryState(picking);
+  }, []);
+
+  useEffect(() => {
+    const throttler = createTrailingThrottle<GlobeCameraPose>(40, (pose) => {
+      const cmd: RemoteCalibSignalCommand = {
+        action: 'globe-camera',
+        lon: pose.lon,
+        lat: pose.lat,
+        distance: pose.distance,
+      };
+      try {
+        calibBroadcastRef.current?.postMessage({ type: 'calib-signal', cmd });
+      } catch {
+        // ignore closed channel errors
+      }
+      transportRef.current?.sendCalibSignal(cmd);
+    });
+    globeCameraThrottledRef.current = throttler;
+    return () => {
+      throttler.cancel();
+      globeCameraThrottledRef.current = null;
+    };
+  }, []);
+
+  const sendGlobeCameraPose = useCallback(
+    (pose: GlobeCameraPose) => {
+      for (const listener of globeCameraListenersRef.current) {
+        listener(pose);
+      }
+      if (!isUnifiedDemoMode) {
+        globeCameraThrottledRef.current?.send(pose);
+      }
+    },
+    [isUnifiedDemoMode]
+  );
+
+  const subscribeGlobeCameraPose = useCallback((listener: (pose: GlobeCameraPose) => void) => {
+    globeCameraListenersRef.current.add(listener);
+    return () => {
+      globeCameraListenersRef.current.delete(listener);
+    };
   }, []);
 
   const unlockAudioContext = useCallback(async (): Promise<
@@ -2824,6 +2923,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       lang,
       storyStep,
       missionPhase,
+      isPickingCountry,
       sceneReplayKey,
       loopSingleBar,
       barLoop,
@@ -2831,6 +2931,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       beatTimeline,
       studioData,
       activeStudioSession,
+      telemetrySummary,
       speakerLiveLevels,
       audioMode,
       masterGain,
@@ -2886,6 +2987,9 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       setLang,
       setStoryStep,
       setMissionPhase,
+      setIsPickingCountry,
+      sendGlobeCameraPose,
+      subscribeGlobeCameraPose,
       nextStoryStep,
       prevStoryStep,
       setRoomDimensions,
@@ -2918,6 +3022,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       country,
       effectiveRoomCode,
       getLiveFrame,
+      isPickingCountry,
       lanClients,
       lanConnected,
       lang,
@@ -2950,11 +3055,13 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       seekProgress,
       selectCountry,
       selectCountryPreserveBeat,
+      sendGlobeCameraPose,
       setAllLayersEnabled,
       setAudioMode,
       setAudioOwner,
       setBarLoop,
       setCompareSlot,
+      setIsPickingCountry,
       setLang,
       setLayerGain,
       setLocalAudioMuted,
@@ -2974,8 +3081,10 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       stopRobotSpeech,
       storyStep,
       studioData,
+      subscribeGlobeCameraPose,
       swapCompareCountries,
       syncNetworkMode,
+      telemetrySummary,
       toggleEye,
       togglePauseRobotSpeech,
       togglePlay,

@@ -1,6 +1,7 @@
 import React from 'react';
 import { type LucideIcon } from 'lucide-react';
 import { motion } from 'motion/react';
+import { HapticPattern, triggerConsoleHaptic } from '../utils/haptics';
 
 export interface MissionGameButtonProps {
   label: string;
@@ -9,6 +10,7 @@ export interface MissionGameButtonProps {
   interactive?: boolean;
   size?: 'sm' | 'md' | 'lg';
   floating?: boolean;
+  hapticPattern?: HapticPattern;
   ariaLabel?: string;
   className?: string;
   testId?: string;
@@ -37,6 +39,7 @@ export const MissionGameButton: React.FC<MissionGameButtonProps> = ({
   interactive = true,
   size = 'md',
   floating = false,
+  hapticPattern = 14,
   ariaLabel,
   className = '',
   testId,
@@ -70,7 +73,10 @@ export const MissionGameButton: React.FC<MissionGameButtonProps> = ({
     return (
       <motion.button
         type="button"
-        onClick={onClick}
+        onClick={() => {
+          triggerConsoleHaptic(hapticPattern);
+          onClick?.();
+        }}
         aria-label={ariaLabel ?? label}
         data-testid={testId}
         animate={floating ? { y: [0, -2, 0] } : undefined}

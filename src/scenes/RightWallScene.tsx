@@ -711,31 +711,31 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-          className="pointer-events-none relative z-30 flex h-full w-full items-center justify-center gap-10 px-14"
+          className="pointer-events-none relative z-30 flex h-full w-full items-center justify-center gap-12 px-14"
         >
-          {/* Robô 3D gigante solto no espaço #000000 com aura azul suave */}
+          {/* Robô 3D grande no espaço #000000 com casinha/aura azul ampla */}
           <div className="relative flex shrink-0 items-center justify-center">
             <motion.div
-              className="pointer-events-none absolute h-[420px] w-[420px] rounded-full blur-3xl mix-blend-screen"
+              className="pointer-events-none absolute h-[480px] w-[480px] rounded-full blur-3xl mix-blend-screen"
               style={{
                 background:
-                  'radial-gradient(circle, rgba(56,189,248,0.28) 0%, rgba(14,165,233,0.12) 45%, transparent 72%)',
+                  'radial-gradient(circle, rgba(56,189,248,0.34) 0%, rgba(14,165,233,0.16) 45%, transparent 72%)',
               }}
-              animate={{ scale: [0.95, 1.06, 0.95], opacity: [0.7, 0.95, 0.7] }}
+              animate={{ scale: [0.95, 1.06, 0.95], opacity: [0.75, 0.98, 0.75] }}
               transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
               aria-hidden="true"
             />
-            <div className="relative z-10">
+            <div className="relative z-10 scale-[1.12]">
               <Mineiro3D stepIndex={0} isExplaining={isRobotSpeaking} size="spotlight" />
             </div>
           </div>
 
-          {/* Painel de conversa amplo e legível ao lado */}
-          <div className="relative flex max-w-[600px] flex-1 flex-col gap-6 rounded-3xl border border-sky-400/35 bg-[#050d20]/84 px-10 py-8 shadow-[0_0_54px_rgba(14,165,233,0.18)] backdrop-blur-md">
+          {/* Bloco azul amplo e legível ao lado */}
+          <div className="relative flex max-w-[660px] flex-1 flex-col gap-6 rounded-3xl border border-sky-400/40 bg-[#050d20]/88 px-11 py-9 shadow-[0_0_64px_rgba(14,165,233,0.22)] backdrop-blur-md">
             {/* Cabeçalho + Barrinhas/Ondas de Voz Animadas */}
             <div className="flex items-center justify-between gap-4 border-b border-sky-400/15 pb-4">
               <span
-                className="text-[13px] font-semibold tracking-[0.22em] text-sky-300/85 uppercase"
+                className="text-[14px] font-semibold tracking-[0.22em] text-sky-300/90 uppercase"
                 style={{ fontFamily: "'Orbitron', 'Poppins', system-ui, sans-serif" }}
               >
                 {isPt ? 'MINEIRØ · BOAS-VINDAS' : 'MINEIRØ · MISSION BRIEFING'}
@@ -772,7 +772,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
             </div>
 
             {/* Texto de conversa bem grande */}
-            <p className="min-h-[145px] text-[34px] font-semibold leading-[1.32] tracking-tight text-slate-50">
+            <p className="min-h-[155px] text-[36px] font-semibold leading-[1.3] tracking-tight text-slate-50">
               {visibleText}
               {speechStatus !== 'stopped' && speechStatus !== 'paused' && (
                 <span
@@ -782,26 +782,27 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
               )}
             </p>
 
-            {/* Indicador das frases + Placa visual Embarcar (controlada pelo Tablet) */}
-            <div className="flex items-center justify-between gap-4 pt-2">
-              <div className="flex items-center gap-2" aria-hidden="true">
-                {phaseSpeech.phrases.map((_, idx) => (
-                  <span
-                    key={`phrase-dot-${idx}`}
-                    className={`h-1.5 rounded-full transition-all duration-300 ${
-                      idx === phraseIdx ? 'w-7 bg-sky-300' : 'w-2 bg-slate-600/70'
-                    }`}
-                  />
-                ))}
-              </div>
-
-              <MissionGameButton
-                label={isPt ? 'Embarcar na Nave' : 'Board Ship'}
-                icon={Rocket}
-                interactive={false}
-                size="md"
-              />
+            {/* Indicador das frases sem botão dentro do balão */}
+            <div className="flex items-center justify-start gap-2 pt-1" aria-hidden="true">
+              {phaseSpeech.phrases.map((_, idx) => (
+                <span
+                  key={`phrase-dot-${idx}`}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    idx === phraseIdx ? 'w-7 bg-sky-300' : 'w-2 bg-slate-600/70'
+                  }`}
+                />
+              ))}
             </div>
+          </div>
+
+          {/* Botão discreto no canto inferior direito */}
+          <div className="pointer-events-none absolute right-8 bottom-6 z-40 origin-bottom-right scale-[0.88] opacity-70">
+            <MissionGameButton
+              label={isPt ? 'Embarcar na Nave' : 'Board Ship'}
+              icon={Rocket}
+              interactive={false}
+              size="sm"
+            />
           </div>
         </motion.div>
       )}
@@ -832,28 +833,28 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-          className="pointer-events-none relative z-30 flex h-full w-full items-center justify-center gap-10 px-14"
+          className="pointer-events-none relative z-30 flex h-full w-full items-center justify-center gap-12 px-14"
         >
           <div className="relative flex shrink-0 items-center justify-center">
             <motion.div
-              className="pointer-events-none absolute h-[420px] w-[420px] rounded-full blur-3xl mix-blend-screen"
+              className="pointer-events-none absolute h-[480px] w-[480px] rounded-full blur-3xl mix-blend-screen"
               style={{
                 background:
-                  'radial-gradient(circle, rgba(56,189,248,0.28) 0%, rgba(14,165,233,0.12) 45%, transparent 72%)',
+                  'radial-gradient(circle, rgba(56,189,248,0.34) 0%, rgba(14,165,233,0.16) 45%, transparent 72%)',
               }}
-              animate={{ scale: [0.95, 1.06, 0.95], opacity: [0.7, 0.95, 0.7] }}
+              animate={{ scale: [0.95, 1.06, 0.95], opacity: [0.75, 0.98, 0.75] }}
               transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
               aria-hidden="true"
             />
-            <div className="relative z-10">
+            <div className="relative z-10 scale-[1.12]">
               <Mineiro3D stepIndex={0} isExplaining={isRobotSpeaking} size="spotlight" />
             </div>
           </div>
 
-          <div className="relative flex max-w-[600px] flex-1 flex-col gap-6 rounded-3xl border border-sky-400/35 bg-[#050d20]/84 px-10 py-8 shadow-[0_0_54px_rgba(14,165,233,0.18)] backdrop-blur-md">
+          <div className="relative flex max-w-[660px] flex-1 flex-col gap-6 rounded-3xl border border-sky-400/40 bg-[#050d20]/88 px-11 py-9 shadow-[0_0_64px_rgba(14,165,233,0.22)] backdrop-blur-md">
             <div className="flex items-center justify-between gap-4 border-b border-sky-400/15 pb-4">
               <span
-                className="text-[13px] font-semibold tracking-[0.22em] text-sky-300/85 uppercase"
+                className="text-[14px] font-semibold tracking-[0.22em] text-sky-300/90 uppercase"
                 style={{ fontFamily: "'Orbitron', 'Poppins', system-ui, sans-serif" }}
               >
                 {isPt ? 'MINEIRØ · ESCOLHA SEU DESTINO' : 'MINEIRØ · CHOOSE DESTINATION'}
@@ -889,7 +890,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
               </div>
             </div>
 
-            <p className="min-h-[145px] text-[34px] font-semibold leading-[1.32] tracking-tight text-slate-50">
+            <p className="min-h-[155px] text-[36px] font-semibold leading-[1.3] tracking-tight text-slate-50">
               {visibleText}
               {speechStatus !== 'stopped' && speechStatus !== 'paused' && (
                 <span
@@ -899,23 +900,21 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
               )}
             </p>
 
-            <div className="flex items-center justify-between gap-4 pt-2">
-              <div className="flex items-center gap-2" aria-hidden="true">
-                {phaseSpeech.phrases.map((_, idx) => (
-                  <span
-                    key={`pick-phrase-dot-${idx}`}
-                    className={`h-1.5 rounded-full transition-all duration-300 ${
-                      idx === phraseIdx ? 'w-7 bg-sky-300' : 'w-2 bg-slate-600/70'
-                    }`}
-                  />
-                ))}
-              </div>
-
-              <div className="inline-flex items-center gap-2 rounded-full border border-sky-400/35 bg-[#060c1a]/90 px-4 py-2 text-xs font-semibold tracking-[0.12em] text-sky-200 uppercase">
-                <Globe2 size={15} className="text-sky-300" aria-hidden="true" />
-                <span>{isPt ? 'Globo no Tablet · Bandeiras no Teto' : 'Tablet Globe · Ceiling Flags'}</span>
-              </div>
+            <div className="flex items-center justify-start gap-2 pt-1" aria-hidden="true">
+              {phaseSpeech.phrases.map((_, idx) => (
+                <span
+                  key={`pick-phrase-dot-${idx}`}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    idx === phraseIdx ? 'w-7 bg-sky-300' : 'w-2 bg-slate-600/70'
+                  }`}
+                />
+              ))}
             </div>
+          </div>
+
+          <div className="pointer-events-none absolute right-8 bottom-6 z-40 inline-flex items-center gap-2 rounded-xl border border-sky-400/30 bg-[#050d20]/80 px-3.5 py-2 text-[11px] font-semibold tracking-[0.12em] text-sky-200/80 uppercase opacity-75">
+            <Globe2 size={14} className="text-sky-300" aria-hidden="true" />
+            <span>{isPt ? 'Globo no Tablet · Bandeiras no Teto' : 'Tablet Globe · Ceiling Flags'}</span>
           </div>
         </motion.div>
       )}
@@ -929,17 +928,17 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         />
       )}
 
-      {/* Robô MINEIRØ no círculo azul + barra conectada nas fases com cabine/contagem (boarding, countdown, zero_g) */}
+      {/* Robô MINEIRØ ampliado + bloco azul amplo nas fases com cabine/contagem (boarding, countdown, zero_g) */}
       {(missionPhase === 'boarding' ||
         missionPhase === 'countdown' ||
         missionPhase === 'zero_g') && (
-        <div
-          className="pointer-events-none absolute z-30 flex flex-col items-start gap-4 transition-all duration-1000 ease-out"
-          style={robotPositionStyle}
-        >
-          <div className="flex items-center">
-            <div className="relative z-10 flex h-[120px] w-[120px] shrink-0 items-center justify-center rounded-full border-2 border-sky-400/60 bg-sky-500/15 shadow-[0_0_48px_rgba(56,189,248,0.35)]">
-              <div className="h-[92px] w-[92px]">
+        <>
+          <div
+            className="pointer-events-none absolute z-30 flex items-center transition-all duration-1000 ease-out"
+            style={robotPositionStyle}
+          >
+            <div className="relative z-10 flex h-[168px] w-[168px] shrink-0 items-center justify-center rounded-full border-2 border-sky-400/65 bg-sky-500/18 shadow-[0_0_58px_rgba(56,189,248,0.42)]">
+              <div className="flex h-[136px] w-[136px] items-center justify-center scale-[1.28]">
                 <Mineiro3D
                   stepIndex={storyStep}
                   isExplaining={isRobotSpeaking}
@@ -948,12 +947,12 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
               </div>
             </div>
 
-            <div className="-ml-5 flex min-h-[76px] max-w-[480px] items-center rounded-r-full border border-l-0 border-sky-400/40 bg-[#050d20]/90 py-3 pr-7 pl-8 shadow-[0_0_36px_rgba(14,165,233,0.18)]">
-              <p className="text-[21px] font-medium leading-snug tracking-tight text-slate-100">
+            <div className="-ml-7 flex min-h-[118px] max-w-[590px] items-center rounded-r-3xl border border-l-0 border-sky-400/45 bg-[#050d20]/90 py-5 pr-9 pl-11 shadow-[0_0_48px_rgba(14,165,233,0.22)] backdrop-blur-md">
+              <p className="text-[27px] font-semibold leading-snug tracking-tight text-slate-50">
                 {visibleText}
                 {speechStatus !== 'stopped' && speechStatus !== 'paused' && (
                   <span
-                    className="ml-1 inline-block h-5 w-[3px] animate-pulse bg-sky-300 align-middle"
+                    className="ml-1.5 inline-block h-6 w-[3px] animate-pulse bg-sky-300 align-middle"
                     aria-hidden="true"
                   />
                 )}
@@ -962,27 +961,27 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
           </div>
 
           {missionPhase === 'boarding' && (
-            <div className="pl-28">
+            <div className="pointer-events-none absolute right-8 bottom-6 z-40 origin-bottom-right scale-[0.88] opacity-70">
               <MissionGameButton
                 label={isPt ? 'Autorizar Decolagem' : 'Authorize Liftoff'}
                 icon={Rocket}
                 interactive={false}
-                size="md"
+                size="sm"
               />
             </div>
           )}
 
           {missionPhase === 'zero_g' && (
-            <div className="pl-28">
+            <div className="pointer-events-none absolute right-8 bottom-6 z-40 origin-bottom-right scale-[0.88] opacity-70">
               <MissionGameButton
                 label={isPt ? 'Escolher País' : 'Choose Country'}
                 icon={Globe2}
                 interactive={false}
-                size="md"
+                size="sm"
               />
             </div>
           )}
-        </div>
+        </>
       )}
 
       {/* Tela final em 3 etapas: 1) Descida na nave -> 2) Tranco + Medalha animada -> 3) Logo MINEIRØ + Developed by */}
@@ -1007,13 +1006,13 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
                 className="flex flex-col items-center gap-6"
               >
                 <div className="flex items-center">
-                  <div className="relative z-10 flex h-[112px] w-[112px] shrink-0 items-center justify-center rounded-full border-2 border-sky-400/60 bg-sky-500/15 shadow-[0_0_48px_rgba(56,189,248,0.35)]">
-                    <div className="h-[88px] w-[88px]">
+                  <div className="relative z-10 flex h-[156px] w-[156px] shrink-0 items-center justify-center rounded-full border-2 border-sky-400/65 bg-sky-500/18 shadow-[0_0_54px_rgba(56,189,248,0.4)]">
+                    <div className="flex h-[124px] w-[124px] items-center justify-center scale-[1.22]">
                       <Mineiro3D stepIndex={storyStep} isExplaining={isRobotSpeaking} size="avatar" />
                     </div>
                   </div>
-                  <div className="-ml-5 rounded-r-full border border-l-0 border-sky-400/40 bg-[#050d20]/92 py-3.5 pr-7 pl-8 text-left">
-                    <p className="text-[21px] font-semibold text-slate-100">
+                  <div className="-ml-6 max-w-[580px] rounded-r-3xl border border-l-0 border-sky-400/45 bg-[#050d20]/92 py-5 pr-9 pl-10 text-left shadow-[0_0_44px_rgba(14,165,233,0.2)]">
+                    <p className="text-[27px] font-semibold leading-snug text-slate-50">
                       {isPt
                         ? 'Missão encerrada! Descendo de volta para a Terra...'
                         : 'Mission complete! Descending back to Earth...'}
@@ -1045,13 +1044,13 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
                 </motion.div>
 
                 <div className="flex items-center">
-                  <div className="relative z-10 flex h-[96px] w-[96px] shrink-0 items-center justify-center rounded-full border-2 border-sky-400/60 bg-sky-500/15 shadow-[0_0_40px_rgba(56,189,248,0.35)]">
-                    <div className="h-[72px] w-[72px]">
+                  <div className="relative z-10 flex h-[140px] w-[140px] shrink-0 items-center justify-center rounded-full border-2 border-sky-400/65 bg-sky-500/18 shadow-[0_0_48px_rgba(56,189,248,0.4)]">
+                    <div className="flex h-[108px] w-[108px] items-center justify-center scale-[1.16]">
                       <Mineiro3D stepIndex={storyStep} isExplaining={isRobotSpeaking} size="avatar" />
                     </div>
                   </div>
-                  <div className="-ml-4 rounded-r-full border border-l-0 border-amber-400/45 bg-[#050d20]/92 py-3 pr-7 pl-7 text-left">
-                    <p className="text-[21px] font-semibold text-amber-200">
+                  <div className="-ml-6 max-w-[560px] rounded-r-3xl border border-l-0 border-amber-400/45 bg-[#050d20]/92 py-4.5 pr-8 pl-9 text-left shadow-[0_0_40px_rgba(251,191,36,0.18)]">
+                    <p className="text-[25px] font-semibold leading-snug text-amber-200">
                       {isPt
                         ? 'Pouso concluído! Receba sua Medalha de Honra pela missão.'
                         : 'Touchdown! Here is your Medal of Honor for the mission.'}
@@ -1067,7 +1066,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-                className="flex h-full w-full flex-col items-center justify-between py-6"
+                className="relative flex h-full w-full flex-col items-center justify-between py-6"
               >
                 <div className="my-auto flex flex-col items-center justify-center gap-5">
                   <motion.img
@@ -1078,11 +1077,14 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
                     transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
                     className="h-[165px] w-auto object-contain drop-shadow-[0_0_42px_rgba(56,189,248,0.38)]"
                   />
+                </div>
+
+                <div className="pointer-events-none absolute right-8 bottom-6 z-40 origin-bottom-right scale-[0.88] opacity-70">
                   <MissionGameButton
                     label={isPt ? 'Nova Missão' : 'New Mission'}
                     icon={RotateCcw}
                     interactive={false}
-                    size="md"
+                    size="sm"
                   />
                 </div>
 

@@ -22,6 +22,7 @@ export interface CameraViewTarget {
   lat: number;
   distance: number;
   nonce: number;
+  fromRemoteSync?: boolean;
 }
 
 export interface HoverInfo {
@@ -65,6 +66,7 @@ interface EarthCanvasProps {
   onHoverChange: (info: HoverInfo | null) => void;
   onCameraDistanceChange: (distance: number) => void;
   onCameraCenterChange?: (lon: number, lat: number) => void;
+  onUserCameraChange?: (pose: { lon: number; lat: number; distance: number }) => void;
   onSelectCountry: (country: CountryEntry | null) => void;
   onRegisterPosterCapture?: (
     fn: (() => { glCanvas: HTMLCanvasElement; fxCanvas: HTMLCanvasElement | null } | null) | null
@@ -397,6 +399,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   onHoverChange,
   onCameraDistanceChange,
   onCameraCenterChange,
+  onUserCameraChange,
   onSelectCountry,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -429,6 +432,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     onHoverChange,
     onCameraDistanceChange,
     onCameraCenterChange,
+    onUserCameraChange,
     onSelectCountry,
   });
   propsRef.current = {
@@ -456,6 +460,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     onHoverChange,
     onCameraDistanceChange,
     onCameraCenterChange,
+    onUserCameraChange,
     onSelectCountry,
   };
 
@@ -475,6 +480,11 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     lastReportedDist: 2.98,
     lastReportedLon: -35,
     lastReportedLat: 4,
+    userActionUntilMs: 0,
+    remoteHoldUntilMs: 0,
+    lastEmittedUserLon: -35,
+    lastEmittedUserLat: 4,
+    lastEmittedUserDist: 2.98,
   });
 
   const uniformsRef = useRef<{
@@ -503,6 +513,9 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     nav.targetLon = nav.lon + dLon;
     nav.targetLat = THREE.MathUtils.clamp(flyTarget.lat, -84, 84);
     nav.targetDistance = THREE.MathUtils.clamp(flyTarget.distance, 1.07, 3.8);
+    if (flyTarget.fromRemoteSync && typeof performance !== 'undefined') {
+      nav.remoteHoldUntilMs = performance.now() + 2600;
+    }
   }, [flyTarget]);
 
   useEffect(() => {
@@ -902,12 +915,14 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       navRef.current.dragMoved = false;
       navRef.current.lastX = e.clientX;
       navRef.current.lastY = e.clientY;
+      navRef.current.userActionUntilMs = performance.now() + 900;
       renderer.domElement.setPointerCapture(e.pointerId);
     };
 
     const onPointerMove = (e: PointerEvent) => {
       const nav = navRef.current;
       if (nav.isDragging) {
+        nav.userActionUntilMs = performance.now() + 900;
         const dx = e.clientX - nav.lastX;
         const dy = e.clientY - nav.lastY;
         if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
@@ -978,6 +993,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const nav = navRef.current;
+      nav.userActionUntilMs = performance.now() + 950;
       const zoomStep = e.deltaY * 0.0014 * Math.max(0.18, nav.targetDistance - 0.94);
       nav.targetDistance = THREE.MathUtils.clamp(nav.targetDistance + zoomStep, 1.07, 3.8);
     };
@@ -986,6 +1002,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       const coords = computeLonLatFromPointer(e.clientX, e.clientY);
       if (!coords) return;
       const nav = navRef.current;
+      nav.userActionUntilMs = performance.now() + 1100;
       const dLon = shortestLonDelta(nav.lon, coords.lon);
       nav.targetLon = nav.lon + dLon;
       nav.targetLat = THREE.MathUtils.clamp(coords.lat, -84, 84);
@@ -1021,6 +1038,13 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       dom.addEventListener('dblclick', onDoubleClick);
     }
     window.addEventListener('resize', onResize);
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            onResize();
+          })
+        : null;
+    resizeObserver?.observe(container);
 
     (window as unknown as Record<string, unknown>).__NASA_EARTH_DEBUG__ = {
       getCameraState: () => ({ ...navRef.current }),
@@ -1067,6 +1091,8 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       if (
         orbitSpinAllowed &&
         !nav.isDragging &&
+        nowFrameMs > nav.userActionUntilMs &&
+        nowFrameMs > nav.remoteHoldUntilMs &&
         !p.selectedCountry &&
         nav.flatMix < 0.05
       ) {
@@ -1101,6 +1127,22 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
         nav.lastReportedLon = normalizedLon;
         nav.lastReportedLat = nav.lat;
         p.onCameraCenterChange?.(normalizedLon, nav.lat);
+      }
+
+      if (nav.isDragging || nowFrameMs <= nav.userActionUntilMs) {
+        const lonDelta = Math.abs(shortestLonDelta(nav.lastEmittedUserLon, normalizedLon));
+        const latDelta = Math.abs(nav.lat - nav.lastEmittedUserLat);
+        const distDelta = Math.abs(nav.distance - nav.lastEmittedUserDist);
+        if (lonDelta > 0.35 || latDelta > 0.35 || distDelta > 0.02) {
+          nav.lastEmittedUserLon = normalizedLon;
+          nav.lastEmittedUserLat = nav.lat;
+          nav.lastEmittedUserDist = nav.distance;
+          p.onUserCameraChange?.({
+            lon: normalizedLon,
+            lat: nav.lat,
+            distance: nav.distance,
+          });
+        }
       }
 
       (scene.background as THREE.Color).set(p.backgroundHex);
@@ -1403,6 +1445,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
         dom.removeEventListener('dblclick', onDoubleClick);
       }
       window.removeEventListener('resize', onResize);
+      resizeObserver?.disconnect();
 
       earthGeo.dispose();
       earthMat.dispose();

@@ -19,11 +19,13 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =>
   const {
     country,
     availableCountryIds,
+    isPickingCountry,
     lang,
     layers,
     missionPhase,
     playback,
     storyStep,
+    subscribeGlobeCameraPose,
   } = useExperience();
   const world = useMemo(() => loadWorldCountries(), []);
 
@@ -39,19 +41,21 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =>
   );
 
   const [flyTarget, setFlyTarget] = useState<CameraViewTarget | null>(null);
+  const isGlobeMirrorActive =
+    missionPhase === 'exploring' && (storyStep === 0 || isPickingCountry);
   const isCountryFocused2D =
-    missionPhase === 'exploring' && storyStep > 0 && Boolean(country);
+    missionPhase === 'exploring' && storyStep > 0 && !isPickingCountry && Boolean(country);
 
   useEffect(() => {
     const isOverview =
       missionPhase === 'idle' ||
       missionPhase === 'ended' ||
-      (missionPhase === 'exploring' && storyStep === 0);
+      isGlobeMirrorActive;
     if (!country && !isOverview && missionPhase !== 'zero_g') return;
 
     setFlyTarget({
-      lon: country?.lon ?? -47,
-      lat: country?.lat ?? -14,
+      lon: isGlobeMirrorActive ? -35 : country?.lon ?? -47,
+      lat: isGlobeMirrorActive ? 4 : country?.lat ?? -14,
       distance:
         missionPhase === 'ended'
           ? 2.65
@@ -72,15 +76,29 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =>
     country?.lat,
     country?.lon,
     isCountryFocused2D,
+    isGlobeMirrorActive,
     missionPhase,
     storyStep,
   ]);
+
+  useEffect(() => {
+    if (!isGlobeMirrorActive) return;
+    return subscribeGlobeCameraPose((pose) => {
+      setFlyTarget({
+        lon: pose.lon,
+        lat: pose.lat,
+        distance: Math.max(1.8, Math.min(3.8, pose.distance)),
+        nonce: Date.now(),
+        fromRemoteSync: true,
+      });
+    });
+  }, [isGlobeMirrorActive, subscribeGlobeCameraPose]);
 
   const isOverviewMode =
     missionPhase === 'idle' ||
     missionPhase === 'briefing' ||
     missionPhase === 'ended' ||
-    (missionPhase === 'exploring' && storyStep === 0);
+    isGlobeMirrorActive;
 
   return (
     <section
@@ -88,6 +106,8 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =>
       style={{ backgroundColor: '#000000' }}
       data-surface="leftWall"
       data-render-context={renderContext}
+      data-globe-mirror={isGlobeMirrorActive ? 'true' : 'false'}
+      data-view-mode={isCountryFocused2D ? '2d' : '3d'}
     >
       {/* Luzinha azul destacando o Globo em repouso/espera + pulso atmosférico orbital */}
       {missionPhase === 'idle' && (
@@ -154,7 +174,9 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =>
           landBorderRings={world.landBorderRings}
           coastlineRings={world.coastlineRings}
           selectedCountry={
-            missionPhase === 'idle' || missionPhase === 'briefing' ? null : selectedGeoEntry
+            missionPhase === 'idle' || missionPhase === 'briefing' || isGlobeMirrorActive
+              ? null
+              : selectedGeoEntry
           }
           jukeboxPlaying={playback.isPlaying}
           interactive={false}
