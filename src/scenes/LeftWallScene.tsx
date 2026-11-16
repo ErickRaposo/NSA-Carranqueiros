@@ -10,10 +10,10 @@ import { SpaceStarfield } from './SpaceStarfield';
 import { SpaceshipLaunchOverlay } from './SpaceshipLaunchOverlay';
 
 /**
- * Superfície Projetada — PAREDE ESQUERDA (`leftWall` · Projetor 1 Canto em L):
- * - `boarding` / `countdown`: janelinha da nave vendo a torre de lançamento e pessoas lá embaixo.
- * - `zero_g` (4s): cabine espacial em volta do Globo que desaparece após 4 segundos.
- * - `idle` / `exploring` / `ended`: Globo inteiro no espaço `#000000` estrelado.
+ * Projected Surface — LEFT WALL (`leftWall` · Projector 1 L-Corner):
+ * - `boarding` / `countdown`: spaceship porthole overlooking the launch tower and people below.
+ * - `zero_g` (4s): space cabin around the Globe that fades away after 4 seconds.
+ * - `idle` / `exploring` / `ended`: Full Globe in starry `#000000` space.
  */
 export const LeftWallScene: React.FC<SceneSurfaceProps> = ({
   renderContext,
@@ -32,10 +32,23 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({
   } = useExperience();
   const world = useMemo(() => loadWorldCountries(), []);
 
-  const globeLayerStack = useMemo(() => buildGlobeLayerStack(layers), [layers]);
+  const isGlobeMirrorActive =
+    missionPhase === 'exploring' && (storyStep === 0 || isPickingCountry);
+  const isCountryFocused2D =
+    missionPhase === 'exploring' && storyStep > 0 && !isPickingCountry && Boolean(country);
+
+  const globeLayerStack = useMemo(() => {
+    const baseStack = buildGlobeLayerStack(layers);
+    if (isCountryFocused2D && !baseStack.some((layer) => layer.enabled)) {
+      return baseStack.map((layer) =>
+        layer.id === 'svs5011' ? { ...layer, enabled: true } : layer
+      );
+    }
+    return baseStack;
+  }, [isCountryFocused2D, layers]);
   const videoElements = useNasaVideoPool(
     globeLayerStack,
-    renderContext !== 'demo' || playback.isPlaying
+    renderContext !== 'demo' || playback.isPlaying || isCountryFocused2D
   );
 
   const selectedGeoEntry = useMemo(
@@ -44,10 +57,6 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({
   );
 
   const [flyTarget, setFlyTarget] = useState<CameraViewTarget | null>(null);
-  const isGlobeMirrorActive =
-    missionPhase === 'exploring' && (storyStep === 0 || isPickingCountry);
-  const isCountryFocused2D =
-    missionPhase === 'exploring' && storyStep > 0 && !isPickingCountry && Boolean(country);
 
   useEffect(() => {
     const isOverview =
@@ -112,7 +121,7 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({
       data-globe-mirror={isGlobeMirrorActive ? 'true' : 'false'}
       data-view-mode={isCountryFocused2D ? '2d' : '3d'}
     >
-      {/* Luzinha azul destacando o Globo em repouso/espera + pulso atmosférico orbital */}
+      {/* Subtle blue glow highlighting the Globe in idle/standby + orbital atmospheric pulse */}
       {missionPhase === 'idle' && (
         <div
           className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center mix-blend-screen"
@@ -194,7 +203,7 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({
         <SpaceStarfield seedOffset={1} count={missionPhase === 'idle' ? 92 : 64} />
       </div>
 
-      {/* Astros espaciais espalhados + camada mapeada cruzando para a Parede Direita em idle */}
+      {/* Scattered celestial bodies + projection-mapped layer crossing to the Right Wall in idle */}
       {missionPhase === 'idle' && (
         <>
           <motion.div
