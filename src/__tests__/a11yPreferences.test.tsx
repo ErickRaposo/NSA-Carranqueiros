@@ -237,7 +237,7 @@ describe('a11yPreferences — Global Shortcuts, Persistence & Non-Invasive Propa
     );
     expect(closedHtml).toContain('fixed bottom-4 right-4 z-50');
     expect(closedHtml).toContain('data-testid="a11y-widget-trigger"');
-    expect(closedHtml).toContain('aria-label="Abrir opções de acessibilidade"');
+    expect(closedHtml).toContain('aria-label="Open accessibility options"');
     expect(closedHtml).toContain('aria-expanded="false"');
     expect(closedHtml).toContain('aria-controls="a11y-widget-panel"');
     expect(closedHtml).not.toContain('data-testid="a11y-widget-panel"');
@@ -256,7 +256,22 @@ describe('a11yPreferences — Global Shortcuts, Persistence & Non-Invasive Propa
     expect(openHtml).toContain('aria-expanded="true"');
     expect(openHtml).toContain('data-testid="a11y-widget-panel"');
     expect(openHtml).toContain('role="dialog"');
-    expect(openHtml).toContain('aria-label="Opções de acessibilidade"');
+    expect(openHtml).toContain('aria-label="Accessibility options"');
+
+    const ptOpenHtml = renderToStaticMarkup(
+      <AccessibilityWidget
+        highContrast={false}
+        onToggleHighContrast={() => {}}
+        fontScale={1}
+        onCycleFontScale={() => {}}
+        reduceMotion={false}
+        onToggleReduceMotion={() => {}}
+        lang="pt"
+        defaultOpen={true}
+      />
+    );
+    expect(ptOpenHtml).toContain('aria-label="Abrir opções de acessibilidade"');
+    expect(ptOpenHtml).toContain('aria-label="Opções de acessibilidade"');
     expect(openHtml).toContain('data-testid="a11y-widget-contrast"');
     expect(openHtml).toContain('aria-pressed="true"');
     expect(openHtml).toContain('Alt+C');

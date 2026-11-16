@@ -525,7 +525,7 @@ export function speakTextPt(
   if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
   if (speechVolume01 <= 0.001) return;
 
-  const lang = options?.lang ?? 'pt';
+  const lang = options?.lang ?? 'en';
   const voiceId = PIPER_VOICE_IDS[lang];
   const cacheKey = `${voiceId}:${text}`;
 

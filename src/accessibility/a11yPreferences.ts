@@ -126,7 +126,8 @@ export function resolveA11yShortcutAction(event: {
   return null;
 }
 
-export function useA11yPreferences() {
+export function useA11yPreferences(lang: 'pt' | 'en' = 'en') {
+  const isPt = lang === 'pt';
   const [highContrast, setHighContrast] = useState<boolean>(() => readStoredHighContrast());
   const [fontScale, setFontScale] = useState<A11yFontScale>(() => readStoredFontScale());
   const [reduceMotion, setReduceMotion] = useState<boolean>(() => readStoredReduceMotion());
@@ -136,28 +137,48 @@ export function useA11yPreferences() {
     setHighContrast((prev) => {
       const next = !prev;
       writeStoredHighContrast(next);
-      setAnnouncement(next ? 'Alto contraste ativado' : 'Alto contraste desativado');
+      setAnnouncement(
+        next
+          ? isPt
+            ? 'Alto contraste ativado'
+            : 'High contrast enabled'
+          : isPt
+            ? 'Alto contraste desativado'
+            : 'High contrast disabled'
+      );
       return next;
     });
-  }, []);
+  }, [isPt]);
 
   const cycleFontScale = useCallback(() => {
     setFontScale((prev) => {
       const next = getNextFontScale(prev);
       writeStoredFontScale(next);
-      setAnnouncement(`Tamanho da letra: ${Math.round(next * 100)}%`);
+      setAnnouncement(
+        isPt
+          ? `Tamanho da letra: ${Math.round(next * 100)}%`
+          : `Text size: ${Math.round(next * 100)}%`
+      );
       return next;
     });
-  }, []);
+  }, [isPt]);
 
   const toggleReduceMotion = useCallback(() => {
     setReduceMotion((prev) => {
       const next = !prev;
       writeStoredReduceMotion(next);
-      setAnnouncement(next ? 'Movimento reduzido ativado' : 'Movimento reduzido desativado');
+      setAnnouncement(
+        next
+          ? isPt
+            ? 'Movimento reduzido ativado'
+            : 'Reduced motion enabled'
+          : isPt
+            ? 'Movimento reduzido desativado'
+            : 'Reduced motion disabled'
+      );
       return next;
     });
-  }, []);
+  }, [isPt]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;

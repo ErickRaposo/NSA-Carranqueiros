@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Accessibility, Activity, Contrast, Type, X } from 'lucide-react';
 import { A11yFontScale } from '../accessibility/a11yPreferences';
-import { ViewRole } from '../experience/types';
+import { Lang, ViewRole } from '../experience/types';
 
 const HIDDEN_RAW_VIEWS = new Set([
   'wall-left',
@@ -36,6 +36,7 @@ export interface AccessibilityWidgetProps {
   onCycleFontScale: () => void;
   reduceMotion: boolean;
   onToggleReduceMotion: () => void;
+  lang?: Lang;
   defaultOpen?: boolean;
 }
 
@@ -46,8 +47,10 @@ export const AccessibilityWidget: React.FC<AccessibilityWidgetProps> = ({
   onCycleFontScale,
   reduceMotion,
   onToggleReduceMotion,
+  lang = 'en',
   defaultOpen = false,
 }) => {
+  const isPt = lang === 'pt';
   const [open, setOpen] = useState(defaultOpen);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -149,7 +152,7 @@ export const AccessibilityWidget: React.FC<AccessibilityWidgetProps> = ({
           data-testid="a11y-widget-panel"
           role="dialog"
           aria-modal="false"
-          aria-label="Opções de acessibilidade"
+          aria-label={isPt ? 'Opções de acessibilidade' : 'Accessibility options'}
           style={panelStyle}
           className="mb-2.5 w-[296px] max-w-[calc(100vw-2rem)] rounded-2xl border p-3.5 shadow-2xl backdrop-blur-md"
         >
@@ -157,13 +160,13 @@ export const AccessibilityWidget: React.FC<AccessibilityWidgetProps> = ({
             <div className="flex items-center gap-2">
               <Accessibility className="h-4 w-4 text-[#7dd3fc]" aria-hidden="true" />
               <span className="text-xs font-semibold tracking-wide uppercase">
-                Acessibilidade
+                {isPt ? 'Acessibilidade' : 'Accessibility'}
               </span>
             </div>
             <button
               type="button"
               data-testid="a11y-widget-close"
-              aria-label="Fechar opções de acessibilidade"
+              aria-label={isPt ? 'Fechar opções de acessibilidade' : 'Close accessibility options'}
               onClick={() => closePanel(true)}
               className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-400/25 text-slate-300 transition-colors hover:bg-slate-800/70 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7dd3fc]"
             >
@@ -183,13 +186,13 @@ export const AccessibilityWidget: React.FC<AccessibilityWidgetProps> = ({
             >
               <span className="flex items-center gap-2 text-xs font-medium">
                 <Contrast className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span>Alto Contraste AAA</span>
+                <span>{isPt ? 'Alto Contraste AAA' : 'High Contrast AAA'}</span>
               </span>
               <span className="flex items-center gap-1.5 text-[11px] opacity-85">
                 <kbd className="rounded border border-current/30 px-1.5 py-0.5 text-[10px]">
                   Alt+C
                 </kbd>
-                <span>{highContrast ? 'Ativo' : 'Off'}</span>
+                <span>{highContrast ? (isPt ? 'Ativo' : 'On') : 'Off'}</span>
               </span>
             </button>
 
@@ -203,7 +206,7 @@ export const AccessibilityWidget: React.FC<AccessibilityWidgetProps> = ({
             >
               <span className="flex items-center gap-2 text-xs font-medium">
                 <Type className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span>Tamanho da Letra</span>
+                <span>{isPt ? 'Tamanho da Letra' : 'Text Size'}</span>
               </span>
               <span className="flex items-center gap-1.5 text-[11px] opacity-85">
                 <kbd className="rounded border border-current/30 px-1.5 py-0.5 text-[10px]">
@@ -223,19 +226,30 @@ export const AccessibilityWidget: React.FC<AccessibilityWidgetProps> = ({
             >
               <span className="flex items-center gap-2 text-xs font-medium">
                 <Activity className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span>Reduzir Movimento</span>
+                <span>{isPt ? 'Reduzir Movimento' : 'Reduce Motion'}</span>
               </span>
               <span className="text-[11px] opacity-85">
-                {reduceMotion ? 'Ativo' : 'Off'}
+                {reduceMotion ? (isPt ? 'Ativo' : 'On') : 'Off'}
               </span>
             </button>
           </div>
 
           <p className="mt-2.5 border-t border-slate-400/20 pt-2 text-[11px] leading-snug opacity-80">
-            Teclado: <kbd className="font-semibold">Tab</kbd> /{' '}
-            <kbd className="font-semibold">Shift+Tab</kbd> navega,{' '}
-            <kbd className="font-semibold">Enter</kbd> ativa,{' '}
-            <kbd className="font-semibold">Esc</kbd> fecha.
+            {isPt ? (
+              <>
+                Teclado: <kbd className="font-semibold">Tab</kbd> /{' '}
+                <kbd className="font-semibold">Shift+Tab</kbd> navega,{' '}
+                <kbd className="font-semibold">Enter</kbd> ativa,{' '}
+                <kbd className="font-semibold">Esc</kbd> fecha.
+              </>
+            ) : (
+              <>
+                Keyboard: <kbd className="font-semibold">Tab</kbd> /{' '}
+                <kbd className="font-semibold">Shift+Tab</kbd> navigate,{' '}
+                <kbd className="font-semibold">Enter</kbd> activate,{' '}
+                <kbd className="font-semibold">Esc</kbd> close.
+              </>
+            )}
           </p>
         </div>
       )}
@@ -244,7 +258,7 @@ export const AccessibilityWidget: React.FC<AccessibilityWidgetProps> = ({
         ref={triggerRef}
         type="button"
         data-testid="a11y-widget-trigger"
-        aria-label="Abrir opções de acessibilidade"
+        aria-label={isPt ? 'Abrir opções de acessibilidade' : 'Open accessibility options'}
         aria-expanded={open}
         aria-controls="a11y-widget-panel"
         onClick={() => setOpen((prev) => !prev)}
@@ -252,7 +266,7 @@ export const AccessibilityWidget: React.FC<AccessibilityWidgetProps> = ({
         className="inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-xs font-medium shadow-lg backdrop-blur-md transition-colors hover:border-[#7dd3fc]/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7dd3fc] focus-visible:ring-offset-2 focus-visible:ring-offset-[#060913]"
       >
         <Accessibility className="h-4 w-4 shrink-0 text-[#7dd3fc]" aria-hidden="true" />
-        <span className="hidden sm:inline">Acessibilidade</span>
+        <span className="hidden sm:inline">{isPt ? 'Acessibilidade' : 'Accessibility'}</span>
       </button>
     </div>
   );
