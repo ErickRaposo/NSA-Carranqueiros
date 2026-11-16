@@ -25,11 +25,42 @@ export const DEFAULT_LAYER_STACK: LayerConfig[] = [
   { id: 'svs5154', enabled: false, opacity: 0.78, blendMode: 'add' },
 ];
 
+export const DEFAULT_SUPABASE_COUNTRIES_BUCKET = 'nasa-countries';
+
+function readViteEnv(): Record<string, string | undefined> {
+  return typeof import.meta !== 'undefined'
+    ? ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {})
+    : {};
+}
+
+export function resolveRemoteCountriesBaseUrl(overrideBaseUrl?: string | null): string {
+  const override = (overrideBaseUrl ?? '').trim().replace(/\/+$/, '');
+  if (override) return override;
+
+  const env = readViteEnv();
+  const explicit = (
+    env.VITE_REMOTE_COUNTRIES_BASE_URL ||
+    env.VITE_SUPABASE_COUNTRIES_BASE_URL ||
+    ''
+  )
+    .trim()
+    .replace(/\/+$/, '');
+  if (explicit) return explicit;
+
+  const supabaseUrl = (env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
+  if (!supabaseUrl) return '';
+  const bucket = (env.VITE_SUPABASE_COUNTRIES_BUCKET || DEFAULT_SUPABASE_COUNTRIES_BUCKET)
+    .trim()
+    .replace(/^\/+|\/+$/g, '');
+  return `${supabaseUrl}/storage/v1/object/public/${bucket || DEFAULT_SUPABASE_COUNTRIES_BUCKET}`;
+}
+
+export function hasRemoteCountryBaseUrl(overrideBaseUrl?: string | null): boolean {
+  return Boolean(resolveRemoteCountriesBaseUrl(overrideBaseUrl));
+}
+
 export function resolveAssetUrl(relativePath: string): string {
-  const env =
-    typeof import.meta !== 'undefined'
-      ? ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {})
-      : {};
+  const env = readViteEnv();
   const rawBase = env.VITE_ASSETS_BASE_URL || env.BASE_URL || '';
   const cleanBase = rawBase.replace(/\/+$/, '');
   const cleanPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
@@ -40,7 +71,7 @@ let remoteCountriesBaseUrl = '';
 let remoteCountryIdSet: ReadonlySet<string> = new Set<string>();
 
 /**
- * Configura roteamento híbrido de países: ~100 países locais no bundle (`/countries/<id>/...`)
+ * Configura roteamento híbrido de países: 100 países locais no bundle (`/countries/<id>/...`)
  * e países excedentes servidos via bucket externo (ex.: Supabase Storage / Cloudflare R2).
  */
 export function setRemoteCountryAssetConfig(
@@ -56,18 +87,7 @@ export function resolveCountryAssetUrl(countryId: string, subPath: string): stri
   const cleanSub = subPath.replace(/^\/+/, '');
   const relPath = `/countries/${countryId}/${cleanSub}`;
   if (remoteCountryIdSet.has(countryId)) {
-    const env =
-      typeof import.meta !== 'undefined'
-        ? ((import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {})
-        : {};
-    const fallbackRemote = (
-      env.VITE_REMOTE_COUNTRIES_BASE_URL ||
-      env.VITE_SUPABASE_COUNTRIES_BASE_URL ||
-      ''
-    )
-      .trim()
-      .replace(/\/+$/, '');
-    const activeRemote = remoteCountriesBaseUrl || fallbackRemote;
+    const activeRemote = remoteCountriesBaseUrl || resolveRemoteCountriesBaseUrl();
     if (activeRemote) {
       return `${activeRemote}${relPath}`;
     }

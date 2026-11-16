@@ -33,19 +33,35 @@ function getLocalLanIpv4s(): string[] {
   return ips;
 }
 
+function getStagingCountriesDir(): string {
+  return path.join(__dirname, 'outputs/supabase-countries/countries');
+}
+
+function getAssetContentType(filePath: string): string {
+  if (filePath.endsWith('.json')) return 'application/json; charset=utf-8';
+  if (filePath.endsWith('.ogg')) return 'audio/ogg';
+  if (filePath.endsWith('.png')) return 'image/png';
+  if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) return 'image/jpeg';
+  return 'application/octet-stream';
+}
+
 function countRenderedCountries(): { count: number; ids: string[] } {
-  const dir = path.join(__dirname, 'public/countries');
-  if (!fs.existsSync(dir)) return { count: 0, ids: [] };
-  try {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    const ids = entries
-      .filter((e) => e.isDirectory() && fs.existsSync(path.join(dir, e.name, 'meta.json')))
-      .map((e) => e.name)
-      .sort();
-    return { count: ids.length, ids };
-  } catch {
-    return { count: 0, ids: [] };
+  const seen = new Set<string>();
+  for (const dir of [path.join(__dirname, 'public/countries'), getStagingCountriesDir()]) {
+    if (!fs.existsSync(dir)) continue;
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isDirectory() && e.name !== '156' && fs.existsSync(path.join(dir, e.name, 'meta.json'))) {
+          seen.add(e.name);
+        }
+      }
+    } catch {
+      // ignore
+    }
   }
+  const ids = Array.from(seen).sort();
+  return { count: ids.length, ids };
 }
 
 function encodeWsTextFrame(jsonText: string): Buffer {
@@ -188,6 +204,38 @@ function earthJukeboxLanPlugin(): Plugin {
     httpServer: { on: (event: string, cb: (req: IncomingMessage, socket: Duplex) => void) => void } | null
   ) => {
     middlewares.use((req, res, next) => {
+      if (req.method === 'GET' && req.url?.startsWith('/countries/')) {
+        const pathname = decodeURIComponent(req.url.split('?')[0] || '');
+        const rel = pathname.replace(/^\/countries\//, '');
+        const stagingDir = getStagingCountriesDir();
+        if (rel === 'index.json') {
+          const publicIndexPath = path.join(__dirname, 'public/countries/index.json');
+          if (fs.existsSync(publicIndexPath) && fs.existsSync(stagingDir)) {
+            try {
+              const parsed = JSON.parse(fs.readFileSync(publicIndexPath, 'utf8')) as Record<string, unknown>;
+              parsed.localStagingAvailable = true;
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              res.setHeader('Cache-Control', 'no-store');
+              res.end(JSON.stringify(parsed));
+              return;
+            } catch {
+              // fall through to static serve
+            }
+          }
+        } else if (rel && !rel.includes('..')) {
+          const publicCandidate = path.join(__dirname, 'public/countries', rel);
+          if (!fs.existsSync(publicCandidate)) {
+            const stagingCandidate = path.join(stagingDir, rel);
+            if (fs.existsSync(stagingCandidate) && fs.statSync(stagingCandidate).isFile()) {
+              res.setHeader('Content-Type', getAssetContentType(stagingCandidate));
+              res.setHeader('Cache-Control', 'public, max-age=3600');
+              fs.createReadStream(stagingCandidate).pipe(res as never);
+              return;
+            }
+          }
+        }
+      }
+
       if (req.url?.startsWith('/api/lan-info')) {
         const reqUrl = new URL(req.url, 'http://localhost');
         const queryRoom = (reqUrl.searchParams.get('room') ?? '').trim().toUpperCase();

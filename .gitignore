@@ -14,5 +14,6 @@ __pycache__/
 
 # Cache do Atlas Global de 96 quadros e Python
 outputs/
+.venv-gen/
 **/__pycache__/
 *.pyc

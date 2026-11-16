@@ -169,6 +169,9 @@ export const JukeboxStudioStage: React.FC<JukeboxStudioStageProps> = ({
     const nextMap: Partial<Record<VisualLayerId, HTMLImageElement>> = {};
     for (const lid of VISUAL_LAYER_ORDER) {
       const img = new Image();
+      if (/^https?:\/\//i.test(pngUrls[lid])) {
+        img.crossOrigin = 'anonymous';
+      }
       img.decoding = 'async';
       img.src = pngUrls[lid];
       nextMap[lid] = img;
@@ -184,8 +187,12 @@ export const JukeboxStudioStage: React.FC<JukeboxStudioStageProps> = ({
     const nextSheets: Partial<Record<VisualLayerId, HTMLImageElement>> = {};
     for (const lid of VISUAL_LAYER_ORDER) {
       const sheetImg = new Image();
+      const sheetUrl = resolveCountryAssetUrl(country.id, `video/${lid}_sheet.jpg`);
+      if (/^https?:\/\//i.test(sheetUrl)) {
+        sheetImg.crossOrigin = 'anonymous';
+      }
       sheetImg.decoding = 'async';
-      sheetImg.src = resolveCountryAssetUrl(country.id, `video/${lid}_sheet.jpg`);
+      sheetImg.src = sheetUrl;
       nextSheets[lid] = sheetImg;
     }
     videoSheetsRef.current = nextSheets;
