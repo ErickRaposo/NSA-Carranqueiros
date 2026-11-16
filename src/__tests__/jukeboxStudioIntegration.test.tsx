@@ -61,10 +61,21 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
     expect(fs.existsSync(indexUrl)).toBe(true);
     const indexJson = JSON.parse(decoder.decode(fs.readFileSync(indexUrl))) as {
       generatedIds: string[];
+      remoteIds?: string[];
+      localCount?: number;
+      remoteCount?: number;
+      totalCount?: number;
+      excludedIds?: string[];
       count: number;
     };
 
-    expect(indexJson.count).toBeGreaterThanOrEqual(11);
+    expect(indexJson.count).toBe(100);
+    expect(indexJson.generatedIds).toHaveLength(100);
+    expect(indexJson.remoteIds).toHaveLength(142);
+    expect(indexJson.totalCount).toBe(242);
+    expect(indexJson.generatedIds).not.toContain('156');
+    expect(indexJson.remoteIds).not.toContain('156');
+    expect(indexJson.excludedIds).toContain('156');
     for (const cid of GENERATED_COUNTRY_IDS) {
       expect(indexJson.generatedIds).toContain(cid);
 

@@ -3303,6 +3303,39 @@ a:focus-visible {
   color: #ffffff;
 }
 
+/* Fullscreen Project Video Section on Dark Navy Background */
+.entry-video-section {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  min-height: 100svh;
+  background: #040b1a;
+  border-top: 1px solid rgba(30, 58, 102, 0.45);
+  padding: clamp(20px, 3vw, 36px) clamp(16px, 3vw, 36px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.entry-video-frame {
+  width: 100%;
+  height: calc(100svh - clamp(44px, 6vw, 76px));
+  max-height: calc(100vw * 9 / 16);
+  min-height: 240px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid #1e3a66;
+  background: #020612;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+
+.entry-video-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
 .entry-mobile-menu-btn {
   display: none;
 }
@@ -3454,6 +3487,18 @@ a:focus-visible {
     padding: 48px 16px 56px;
   }
 
+  .entry-video-section {
+    min-height: 64svh;
+    padding: 28px 12px;
+  }
+
+  .entry-video-frame {
+    height: auto;
+    aspect-ratio: 16 / 9;
+    max-height: none;
+    border-radius: 12px;
+  }
+
   .entry-speech-bubble {
     font-size: 0.85em;
     padding: 10px 16px;
@@ -3487,6 +3532,8 @@ a:focus-visible {
 }
 
 .entry-portal.high-contrast .entry-about-section,
+.entry-portal.high-contrast .entry-team-section,
+.entry-portal.high-contrast .entry-video-section,
 .entry-portal.high-contrast .entry-content-band {
   background: #000000;
   color: #ffffff;
@@ -3504,10 +3551,12 @@ a:focus-visible {
 .entry-portal.high-contrast .portal-login-btn,
 .entry-portal.high-contrast .entry-stem-chip,
 .entry-portal.high-contrast .entry-social-btn,
-.entry-portal.high-contrast .entry-speech-bubble {
+.entry-portal.high-contrast .entry-speech-bubble,
+.entry-portal.high-contrast .entry-video-frame {
   background: #000000;
   color: #ffffff;
   border: 2px solid #ffffff;
+  box-shadow: none;
 }
 
 .entry-portal.high-contrast .entry-primary-cta,

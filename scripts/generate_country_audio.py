@@ -24,6 +24,7 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import struct
 import subprocess
 import sys
@@ -320,22 +321,37 @@ def encode_wav_to_ogg(
     wav_tmp = tmp_dir / f"{name}.wav"
     ogg_tmp = tmp_dir / f"{name}.ogg"
     write_pcm16_wav(stereo_sig, wav_tmp, SAMPLE_RATE)
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-y",
-            "-loglevel",
-            "error",
-            "-i",
-            str(wav_tmp),
-            "-c:a",
-            "libvorbis",
-            "-q:a",
-            str(audio_quality),
-            str(ogg_tmp),
-        ],
-        check=True,
-    )
+    oggenc_bin = shutil.which("oggenc")
+    if oggenc_bin:
+        subprocess.run(
+            [
+                oggenc_bin,
+                "-Q",
+                "-q",
+                str(audio_quality),
+                "-o",
+                str(ogg_tmp),
+                str(wav_tmp),
+            ],
+            check=True,
+        )
+    else:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-i",
+                str(wav_tmp),
+                "-c:a",
+                "libopus",
+                "-b:a",
+                "80k",
+                str(ogg_tmp),
+            ],
+            check=True,
+        )
     out_ogg.parent.mkdir(parents=True, exist_ok=True)
     ogg_tmp.replace(out_ogg)
     if wav_tmp.exists():

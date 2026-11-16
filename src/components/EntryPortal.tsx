@@ -562,6 +562,24 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
           </div>
         </section>
 
+        <section
+          id="portal-video"
+          className="entry-video-section"
+          aria-label="Vídeo oficial do projeto MINEIRØ"
+        >
+          <div className="entry-video-frame">
+            <iframe
+              className="entry-video-iframe"
+              src="https://www.youtube.com/embed/KCzPyhl4ewY?rel=0&modestbranding=1"
+              title="MINEIRØ — Vídeo de Apresentação (NASA Space Apps Challenge)"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              loading="lazy"
+              referrerPolicy="strict-origin-when-cross-origin"
+            />
+          </div>
+        </section>
+
         <footer className="entry-footer">
           <img src={mineiroLogo} alt="MINEIRØ" className="h-6 w-auto object-contain opacity-90" />
           <span className="entry-footer-copy">
