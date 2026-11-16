@@ -11,6 +11,10 @@ import {
 } from '../audio/spatialAudioEngine';
 import { RoomAccessGate } from '../components/RoomAccessGate';
 import { ExperienceProvider } from '../experience/ExperienceContext';
+import {
+  DEFAULT_ROOM_DIMENSIONS,
+  updateWallDimension,
+} from '../experience/roomDimensions';
 import { computeFormatBits, encodeQrMatrix } from '../lan/qrCodeSvg';
 import {
   buildViewUrl,
@@ -26,11 +30,19 @@ import {
   createTrailingThrottle,
   isHostCapableRole,
 } from '../lan/roomSyncTransport';
+import { buildCalibrationGridCircles } from '../projection/calibrationCircles';
+import { applyProjectionPreset } from '../projection/homography';
+import {
+  clampScreenDelayMs,
+  computeEffectiveScreenDelays,
+} from '../projection/screenDelay';
 import { SetupWizardView } from '../views/SetupWizardView';
 import { presetToScenario } from '../views/setup/setupTypes';
+import { ScreenDelayControlPanel } from '../views/admin/ScreenDelayControlPanel';
 import { StepAudioSetup } from '../views/setup/StepAudioSetup';
 import { StepControllerPairing } from '../views/setup/StepControllerPairing';
 import { StepLanguageAndRoom } from '../views/setup/StepLanguageAndRoom';
+import { StepProjectionSetup } from '../views/setup/StepProjectionSetup';
 import { StepReadySummary } from '../views/setup/StepReadySummary';
 
 describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atraso A/V e Toggles Independentes', () => {
@@ -661,5 +673,261 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     expect(step1ScenarioHtml).toContain('scenario-card-2');
     expect(step1ScenarioHtml).not.toContain('Recomendado p/ Sala');
     expect(step1ScenarioHtml).not.toContain('Tela Única');
+  });
+
+  it('atualiza o tamanho das paredes na etapa de Projetores derivando o teto pela largura de uma parede pela outra', () => {
+    const afterLeft = updateWallDimension(DEFAULT_ROOM_DIMENSIONS, 'leftWall', 'widthCm', '420');
+    const afterRight = updateWallDimension(afterLeft, 'rightWall', 'widthCm', '310');
+
+    expect(afterRight.leftWall).toEqual({ widthCm: 420, heightCm: 270 });
+    expect(afterRight.rightWall).toEqual({ widthCm: 310, heightCm: 270 });
+    expect(afterRight.ceiling).toEqual({ widthCm: 310, heightCm: 420 });
+
+    // Respeita limites mínimo (50 cm) e máximo (2000 cm)
+    const clampedMin = updateWallDimension(afterRight, 'leftWall', 'widthCm', '10');
+    expect(clampedMin.leftWall.widthCm).toBe(50);
+    expect(clampedMin.ceiling.heightCm).toBe(50);
+
+    const projStepHtml = renderToStaticMarkup(
+      <StepProjectionSetup
+        isPt={true}
+        scenario={3}
+        projectionState={applyProjectionPreset('3-projectors')}
+        roomDimensions={afterRight}
+        baseOrigin="https://earth.vercel.app"
+        roomCode="AB34CD"
+        lanClients={[]}
+        copiedKey={null}
+        onCopyText={() => {}}
+        onIdentifyOutputs={() => {}}
+        onToggleGlobalShowGrid={() => {}}
+        onResetAllProjectionQuads={() => {}}
+        onUpdateSurfaceQuad={() => {}}
+        onTranslateOutputMesh={() => {}}
+        onUpdateWallDimension={() => {}}
+        onResetRoomDimensions={() => {}}
+      />
+    );
+    expect(projStepHtml).toContain('setup-wall-dimensions-panel');
+    expect(projStepHtml).toContain('dim-leftWall-width');
+    expect(projStepHtml).toContain('dim-rightWall-width');
+    expect(projStepHtml).toContain('dim-ceiling-auto');
+    expect(projStepHtml).toContain('310 × 420 cm');
+
+    // Círculos de proporção espalhados na grade permanecem sempre contidos na parede em qualquer aspect ratio
+    for (const [w, h] of [
+      [1280, 960],
+      [1600, 900],
+      [640, 1280],
+    ]) {
+      const circles = buildCalibrationGridCircles(w, h);
+      expect(circles.length).toBeGreaterThanOrEqual(10);
+      for (const c of circles) {
+        expect(c.r).toBeGreaterThan(0);
+        expect(c.cx - c.r).toBeGreaterThanOrEqual(0);
+        expect(c.cx + c.r).toBeLessThanOrEqual(w);
+        expect(c.cy - c.r).toBeGreaterThanOrEqual(0);
+        expect(c.cy + c.r).toBeLessThanOrEqual(h);
+      }
+    }
+  });
+
+  it('empurra snapshot completo (sync + projection + calib) quando outro PC conecta e reenvia request-state com retentativas', () => {
+    vi.useFakeTimers();
+    const origWs = globalThis.WebSocket;
+    const sockets: Array<{
+      sent: string[];
+      onopen: (() => void) | null;
+      onmessage: ((ev: { data: string }) => void) | null;
+      onclose: (() => void) | null;
+      onerror: (() => void) | null;
+      readyState: number;
+      close: () => void;
+      send: (data: string) => void;
+    }> = [];
+
+    class MockWebSocket {
+      static OPEN = 1;
+      readyState = 1;
+      sent: string[] = [];
+      onopen: (() => void) | null = null;
+      onmessage: ((ev: { data: string }) => void) | null = null;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor() {
+        sockets.push(this);
+      }
+      send(data: string) {
+        this.sent.push(data);
+      }
+      close() {}
+    }
+
+    (globalThis as unknown as { WebSocket: typeof WebSocket }).WebSocket =
+      MockWebSocket as unknown as typeof WebSocket;
+
+    try {
+      const hostTransport = createRoomSyncTransport({
+        mode: 'lan-ws',
+        roomCode: 'SYNC01',
+        peerId: 'host-peer',
+        role: 'setup',
+        getHostSnapshot: () => ({
+          sync: { countryId: '076', isPlaying: true, progress01: 0.42 },
+          projection: { preset: '3-projectors' },
+          speakerCalib: { avOffsetMs: -50 },
+          calibSignal: { action: 'delay-click-all' },
+        }),
+        onSync: () => {},
+        onProjection: () => {},
+        onSpeakerCalib: () => {},
+        onCalibSignal: () => {},
+        onPresence: () => {},
+        onConnectionChange: () => {},
+      });
+
+      const hostSock = sockets[0];
+      hostSock.onopen?.();
+      const hostInitialTypes = hostSock.sent.map((s) => (JSON.parse(s) as { type: string }).type);
+      expect(hostInitialTypes).toContain('sync');
+      expect(hostInitialTypes).toContain('projection');
+      expect(hostInitialTypes).toContain('speaker-calib');
+      expect(hostInitialTypes).toContain('calib-signal');
+
+      // Simula entrada de novo computador na presença -> host empurra snapshot atualizado após 80ms
+      hostSock.sent.length = 0;
+      hostSock.onmessage?.({
+        data: JSON.stringify({
+          type: 'presence',
+          clients: [
+            { id: 'host-peer', role: 'setup', ip: '10.0.0.1', connectedAt: 1 },
+            { id: 'pc2-proj', role: 'projector-1', ip: '10.0.0.2', connectedAt: 2 },
+          ],
+        }),
+      });
+      vi.advanceTimersByTime(100);
+      const pushTypes = hostSock.sent.map((s) => (JSON.parse(s) as { type: string }).type);
+      expect(pushTypes).toEqual(
+        expect.arrayContaining(['sync', 'projection', 'speaker-calib', 'calib-signal'])
+      );
+
+      // Guest (outro PC) pede snapshot e faz retry automático até receber o primeiro sync
+      let receivedSyncCount = 0;
+      const guestTransport = createRoomSyncTransport({
+        mode: 'lan-ws',
+        roomCode: 'SYNC01',
+        peerId: 'pc2-proj',
+        role: 'projector-1',
+        onSync: () => {
+          receivedSyncCount += 1;
+        },
+        onProjection: () => {},
+        onSpeakerCalib: () => {},
+        onCalibSignal: () => {},
+        onPresence: () => {},
+        onConnectionChange: () => {},
+      });
+
+      const guestSock = sockets[1];
+      guestSock.onopen?.();
+      vi.advanceTimersByTime(600);
+      const reqCountBeforeSync = guestSock.sent.filter(
+        (s) => (JSON.parse(s) as { type: string }).type === 'request-state'
+      ).length;
+      expect(reqCountBeforeSync).toBe(2);
+
+      // Recebe sync do host -> cancela terceira retentativa
+      guestSock.onmessage?.({
+        data: JSON.stringify({
+          type: 'sync',
+          senderId: 'host-peer',
+          payload: { countryId: '076', isPlaying: true },
+        }),
+      });
+      expect(receivedSyncCount).toBe(1);
+      vi.advanceTimersByTime(1500);
+      const reqCountAfterSync = guestSock.sent.filter(
+        (s) => (JSON.parse(s) as { type: string }).type === 'request-state'
+      ).length;
+      expect(reqCountAfterSync).toBe(2);
+
+      hostTransport.dispose();
+      guestTransport.dispose();
+    } finally {
+      (globalThis as unknown as { WebSocket: typeof WebSocket }).WebSocket = origWs;
+      vi.useRealTimers();
+    }
+  });
+
+  it('calcula delays efetivos entre telas e renderiza o Controlador de Delay no Setup e Admin', () => {
+    expect(clampScreenDelayMs(999)).toBe(400);
+    expect(clampScreenDelayMs(-999)).toBe(-400);
+    expect(clampScreenDelayMs('abc')).toBe(0);
+
+    const baseState = applyProjectionPreset('3-projectors');
+    baseState.outputs[1].delayMs = 40;
+    baseState.outputs[2].delayMs = -120; // OUT 2 chegando atrás: força OUT 1 (+160) e OUT 3 (+120) esperarem
+    baseState.outputs[3].delayMs = 0;
+
+    const effective = computeEffectiveScreenDelays(baseState.outputs);
+    expect(effective[1]).toBe(160);
+    expect(effective[2]).toBe(0);
+    expect(effective[3]).toBe(120);
+    expect(Object.keys(baseState.outputs)).toEqual(['1', '2', '3']);
+
+    // Quando apenas OUT 3 está com grade ativa, o botão global indica grade ativa (para ocultá-la)
+    baseState.showGrid = false;
+    baseState.outputs[3].showGrid = true;
+
+    // Preserva delayMs ao alternar topologia
+    const switched = applyProjectionPreset('2-projectors', baseState);
+    expect(switched.outputs[1].delayMs).toBe(40);
+    expect(switched.outputs[2].delayMs).toBe(-120);
+
+    const panelHtml = renderToStaticMarkup(
+      <ScreenDelayControlPanel
+        isPt={true}
+        projectionState={baseState}
+        screenSyncPulseActive={true}
+        calibBeatSeq={4}
+        stepLabelPt="Passo 2D · Sincronia entre Telas"
+        stepLabelEn="Step 2D · Screen-to-Screen Delay"
+        onUpdateOutputDelay={() => {}}
+        onResetScreenDelays={() => {}}
+        onToggleScreenSyncPulse={() => {}}
+      />
+    );
+    expect(panelHtml).toContain('screen-delay-control-panel');
+    expect(panelHtml).toContain('screen-delay-slider-1');
+    expect(panelHtml).toContain('screen-delay-slider-2');
+    expect(panelHtml).toContain('screen-delay-slider-3');
+    expect(panelHtml).toContain('+160 ms');
+    expect(panelHtml).toContain('+120 ms');
+    expect(panelHtml).toContain('btn-screen-sync-pulse');
+    expect(panelHtml).toContain('btn-reset-screen-delays');
+
+    const stepHtml = renderToStaticMarkup(
+      <StepProjectionSetup
+        isPt={true}
+        scenario={3}
+        projectionState={baseState}
+        roomDimensions={DEFAULT_ROOM_DIMENSIONS}
+        baseOrigin="http://localhost:5173"
+        roomCode="ROOM01"
+        lanClients={[]}
+        copiedKey={null}
+        screenSyncPulseActive={false}
+        calibBeatSeq={0}
+        onCopyText={() => {}}
+        onIdentifyOutputs={() => {}}
+        onToggleGlobalShowGrid={() => {}}
+        onResetAllProjectionQuads={() => {}}
+        onUpdateSurfaceQuad={() => {}}
+        onTranslateOutputMesh={() => {}}
+      />
+    );
+    expect(stepHtml).toContain('Controlador de Delay entre as Telas');
+    expect(stepHtml).toContain('screen-delay-slider-3');
+    expect(stepHtml).toContain('Ocultar Guia dos 4 Cantos');
   });
 });

@@ -90,9 +90,13 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
-.reg-country-search-input:focus,
-.reg-country-search-input:focus-visible {
+.reg-country-search-input:focus:not(:focus-visible) {
   outline: none;
+}
+
+.reg-country-search-input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .toggle-chip:active:not(:disabled),
@@ -118,6 +122,14 @@ a:focus-visible {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }
 
 .sr-only {
@@ -8281,6 +8293,103 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
 
 .setup-block-enter {
   animation: setupBlockEnter 200ms var(--ease-out-quint) both;
+}
+
+/* ============================================================================
+   WCAG AAA HIGH CONTRAST & FONT SCALE FOR DEMO / TABLET CONTROLLER VIEWS
+   ============================================================================ */
+[data-testid="web-demo-view"].high-contrast,
+[data-testid="tablet-controller-view"].high-contrast {
+  --bg-space: #000000;
+  --surface-console: #000000;
+  --surface-sub: #000000;
+  --glass-bg: #000000;
+  --glass-border: #ffffff;
+  --hairline: #ffffff;
+  --hairline-muted: rgba(255, 255, 255, 0.65);
+  --text-main: #ffffff;
+  --text-muted: #ffffff;
+  --accent: #ffffff;
+  --focus-ring: #ffffff;
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
+
+[data-testid="web-demo-view"].high-contrast header,
+[data-testid="web-demo-view"].high-contrast section,
+[data-testid="web-demo-view"].high-contrast nav,
+[data-testid="tablet-controller-view"].high-contrast > div,
+[data-testid="tablet-controller-view"].high-contrast main,
+[data-testid="tablet-controller-view"].high-contrast section,
+[data-testid="tablet-controller-view"].high-contrast nav {
+  background-color: #000000;
+  color: #ffffff;
+}
+
+[data-testid="web-demo-view"].high-contrast button,
+[data-testid="web-demo-view"].high-contrast a,
+[data-testid="web-demo-view"].high-contrast input,
+[data-testid="web-demo-view"].high-contrast select,
+[data-testid="tablet-controller-view"].high-contrast button,
+[data-testid="tablet-controller-view"].high-contrast a,
+[data-testid="tablet-controller-view"].high-contrast input,
+[data-testid="tablet-controller-view"].high-contrast select {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  border-color: #ffffff !important;
+}
+
+[data-testid="web-demo-view"].high-contrast button[aria-pressed="true"],
+[data-testid="web-demo-view"].high-contrast button[aria-selected="true"],
+[data-testid="tablet-controller-view"].high-contrast button[aria-pressed="true"],
+[data-testid="tablet-controller-view"].high-contrast button[aria-selected="true"] {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
+}
+
+[data-testid="web-demo-view"].high-contrast [class*="text-slate-"],
+[data-testid="web-demo-view"].high-contrast [class*="text-sky-"],
+[data-testid="tablet-controller-view"].high-contrast [class*="text-slate-"],
+[data-testid="tablet-controller-view"].high-contrast [class*="text-sky-"] {
+  color: #ffffff;
+}
+
+[data-testid="web-demo-view"].high-contrast [class*="border-"],
+[data-testid="tablet-controller-view"].high-contrast [class*="border-"] {
+  border-color: #ffffff !important;
+}
+
+[data-a11y-scaled="true"] .text-\[10px\] {
+  font-size: calc(10px * var(--font-scale, 1));
+}
+
+[data-a11y-scaled="true"] .text-\[11px\] {
+  font-size: calc(11px * var(--font-scale, 1));
+}
+
+[data-a11y-scaled="true"] .text-xs {
+  font-size: calc(0.75rem * var(--font-scale, 1));
+}
+
+[data-a11y-scaled="true"] .text-sm {
+  font-size: calc(0.875rem * var(--font-scale, 1));
+}
+
+[data-a11y-scaled="true"] .text-base {
+  font-size: calc(1rem * var(--font-scale, 1));
+}
+
+[data-a11y-scaled="true"] .text-lg {
+  font-size: calc(1.125rem * var(--font-scale, 1));
+}
+
+[data-a11y-scaled="true"] .text-xl {
+  font-size: calc(1.25rem * var(--font-scale, 1));
+}
+
+[data-a11y-scaled="true"] .text-2xl {
+  font-size: calc(1.5rem * var(--font-scale, 1));
 }
 
 

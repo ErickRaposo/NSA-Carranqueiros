@@ -1,7 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { stopSpeech, stopUiAudioTones } from './accessibility/a11yEngine';
+import { useA11yPreferences } from './accessibility/a11yPreferences';
 import { stopAllSpaceAudio } from './audio/spaceAmbient';
 import { EntryPortal } from './components/EntryPortal';
+import {
+  AccessibilityWidget,
+  shouldShowAccessibilityWidget,
+} from './components/AccessibilityWidget';
 import { RoomAccessGate } from './components/RoomAccessGate';
 import { ExperienceProvider } from './experience/ExperienceContext';
 import { ProjectorOutId, SpeakerNodeIndex, ViewRole } from './experience/types';
@@ -63,8 +68,7 @@ export function parseRouteFromSearch(
   }
 
   const rawOut = Number(params.get('out') ?? '1');
-  const outId: ProjectorOutId =
-    rawOut === 2 ? 2 : rawOut === 3 ? 3 : rawOut === 4 ? 4 : 1;
+  const outId: ProjectorOutId = rawOut === 2 ? 2 : rawOut === 3 ? 3 : 1;
 
   return { view, outId };
 }
@@ -200,22 +204,55 @@ export function App(): React.ReactElement {
     [roomCode]
   );
 
-  const [highContrast, setHighContrast] = useState(false);
-  const [fontScale, setFontScale] = useState(1);
+  const {
+    highContrast,
+    fontScale,
+    reduceMotion,
+    announcement,
+    toggleHighContrast,
+    cycleFontScale,
+    toggleReduceMotion,
+  } = useA11yPreferences();
+
+  const a11yAnnouncer = (
+    <div
+      className="sr-only"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      data-testid="a11y-announcer"
+    >
+      {announcement}
+    </div>
+  );
+
+  const currentSearch = typeof window !== 'undefined' ? window.location.search : '';
+  const a11yWidget = shouldShowAccessibilityWidget(route.view, currentSearch) ? (
+    <AccessibilityWidget
+      highContrast={highContrast}
+      onToggleHighContrast={toggleHighContrast}
+      fontScale={fontScale}
+      onCycleFontScale={cycleFontScale}
+      reduceMotion={reduceMotion}
+      onToggleReduceMotion={toggleReduceMotion}
+    />
+  ) : null;
 
   if (route.view === 'portal') {
     return (
-      <EntryPortal
-        highContrast={highContrast}
-        onToggleHighContrast={() => setHighContrast((prev) => !prev)}
-        fontScale={fontScale}
-        onCycleFontScale={() =>
-          setFontScale((prev) => (prev === 1 ? 1.15 : prev === 1.15 ? 1.3 : 1))
-        }
-        onExploreEarth={() => navigateTo('demo')}
-        onOpenAuth={() => navigateTo('setup')}
-        onOpenRegister={() => navigateTo('controller')}
-      />
+      <>
+        {a11yAnnouncer}
+        <EntryPortal
+          highContrast={highContrast}
+          onToggleHighContrast={toggleHighContrast}
+          fontScale={fontScale}
+          onCycleFontScale={cycleFontScale}
+          onExploreEarth={() => navigateTo('demo')}
+          onOpenAuth={() => navigateTo('setup')}
+          onOpenRegister={() => navigateTo('controller')}
+        />
+        {a11yWidget}
+      </>
     );
   }
 
@@ -225,6 +262,8 @@ export function App(): React.ReactElement {
       roomCode={roomCode}
       onRegenerateRoomCode={handleRegenerateRoomCode}
     >
+      {a11yAnnouncer}
+      {a11yWidget}
       {route.view === 'setup' && (
         <SetupWizardView
           onOpenAdmin={() => navigateTo('admin')}
@@ -247,11 +286,13 @@ export function App(): React.ReactElement {
           onJoinRoomCode={handleJoinRoomCode}
           onGoToSetup={() => navigateTo('setup')}
         >
-          <TabletControllerView />
+          <TabletControllerView highContrast={highContrast} fontScale={fontScale} />
         </RoomAccessGate>
       )}
       {route.view === 'demo' && (
         <WebDemoView
+          highContrast={highContrast}
+          fontScale={fontScale}
           onBackToHub={() => navigateTo('setup')}
           onOpenSetup={() => navigateTo('admin')}
         />

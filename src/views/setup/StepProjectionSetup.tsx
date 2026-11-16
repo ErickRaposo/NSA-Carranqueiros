@@ -1,6 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, Copy, ExternalLink, Grid, RotateCcw, Scan } from 'lucide-react';
-import { LanPeerInfo, ProjectorOutId } from '../../experience/types';
+import {
+  DEFAULT_ROOM_DIMENSIONS,
+  formatMetersPair,
+} from '../../experience/roomDimensions';
+import {
+  LanPeerInfo,
+  PROJECTOR_OUT_IDS,
+  ProjectorOutId,
+  RoomDimensions,
+} from '../../experience/types';
 import { buildViewUrl } from '../../lan/roomCode';
 import {
   CalibrationSurfaceKey,
@@ -17,17 +26,22 @@ import {
   SURFACE_UI_META,
 } from '../admin/adminMeta';
 import { ConfirmedRackBar } from './ConfirmedRackBar';
+import { DimensionCmField } from '../admin/DimensionCmField';
 import { NextBlockTeaser } from './NextBlockTeaser';
+import { ScreenDelayControlPanel } from '../admin/ScreenDelayControlPanel';
 import { ScreenScenario } from './setupTypes';
 
 interface StepProjectionSetupProps {
   isPt: boolean;
   scenario: Exclude<ScreenScenario, 0>;
   projectionState: ProjectionCalibrationState;
+  roomDimensions?: RoomDimensions;
   baseOrigin: string;
   roomCode: string | null;
   lanClients: LanPeerInfo[];
   copiedKey: string | null;
+  screenSyncPulseActive?: boolean;
+  calibBeatSeq?: number;
   onCopyText: (key: string, text: string) => void;
   onIdentifyOutputs: () => void;
   onToggleGlobalShowGrid: () => void;
@@ -39,6 +53,15 @@ interface StepProjectionSetupProps {
     rawDx: number,
     rawDy: number
   ) => void;
+  onUpdateWallDimension?: (
+    wall: 'leftWall' | 'rightWall',
+    field: 'widthCm' | 'heightCm',
+    rawValue: string
+  ) => void;
+  onResetRoomDimensions?: () => void;
+  onUpdateOutputDelay?: (outId: ProjectorOutId, delayMs: number) => void;
+  onResetScreenDelays?: () => void;
+  onToggleScreenSyncPulse?: () => void;
 }
 
 type LocalDragState =
@@ -61,6 +84,7 @@ export const StepProjectionSetup: React.FC<StepProjectionSetupProps> = ({
   isPt,
   scenario,
   projectionState,
+  roomDimensions = DEFAULT_ROOM_DIMENSIONS,
   baseOrigin,
   roomCode,
   lanClients,
@@ -71,6 +95,13 @@ export const StepProjectionSetup: React.FC<StepProjectionSetupProps> = ({
   onResetAllProjectionQuads,
   onUpdateSurfaceQuad,
   onTranslateOutputMesh,
+  onUpdateWallDimension,
+  onResetRoomDimensions,
+  screenSyncPulseActive = false,
+  calibBeatSeq = 0,
+  onUpdateOutputDelay,
+  onResetScreenDelays,
+  onToggleScreenSyncPulse,
 }) => {
   const activeOutputs = ([1, 2, 3] as ProjectorOutId[]).slice(0, scenario);
   const [selectedOut, setSelectedOut] = useState<ProjectorOutId>(1);
@@ -134,7 +165,7 @@ export const StepProjectionSetup: React.FC<StepProjectionSetupProps> = ({
 
   return (
     <div className="flex flex-col gap-4 sm:gap-5" data-testid="setup-step-projection">
-      {/* Sub-bloco: Abrir janelas dos projetores e identificar cabos */}
+      {/* Sub-bloco 2A: Abrir janelas dos projetores e identificar cabos */}
       {!outputsConfirmed ? (
         <section
           className={`setup-block-enter p-5 sm:p-6 ${ADMIN_PANEL_CLASS}`}
@@ -270,12 +301,124 @@ export const StepProjectionSetup: React.FC<StepProjectionSetupProps> = ({
         />
       )}
 
-      {/* Sub-bloco: Corner-Pin nas Quinas Reais da Sala */}
-      {outputsConfirmed && (
-        <section
-          className={`setup-block-enter p-5 sm:p-6 ${ADMIN_PANEL_CLASS}`}
-          data-testid="substep-projection-warp"
-        >
+      {/* Sub-bloco 2B: Tamanho real das paredes (Teto derivado automaticamente das larguras) */}
+      <section className={`p-5 sm:p-6 ${ADMIN_PANEL_CLASS}`} data-testid="setup-wall-dimensions-panel">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-2xl">
+            <h2 className="text-base font-semibold tracking-[-0.015em] text-slate-50 sm:text-lg">
+              {isPt
+                ? 'Ajuste a largura e altura das duas paredes (cm)'
+                : 'Set width and height of both walls (cm)'}
+            </h2>
+            <p className="mt-1 text-xs leading-[1.55] text-slate-400 sm:text-[13px]">
+              {isPt
+                ? 'As dimensões do Teto são calculadas automaticamente pela largura da Parede Direita × largura da Parede Esquerda e aplicadas ao vivo nos Projetores e no Simulador 3D.'
+                : 'Ceiling dimensions derive automatically from Right Wall width × Left Wall width and update Projectors and the 3D Simulator live.'}
+            </p>
+          </div>
+
+          {onResetRoomDimensions && (
+            <button
+              type="button"
+              onClick={onResetRoomDimensions}
+              className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full border border-[#1e3a66] bg-[#060c1a] px-3.5 text-xs font-medium text-slate-200 transition hover:border-[#2563eb] hover:text-white ${ADMIN_FOCUS}`}
+            >
+              <RotateCcw size={13} />
+              <span>{isPt ? 'Padrão (360×270 cm)' : 'Default (360×270 cm)'}</span>
+            </button>
+          )}
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+          {(['leftWall', 'rightWall'] as const).map((wallId) => {
+            const dim = roomDimensions[wallId];
+            const ratio = (dim.widthCm / Math.max(1, dim.heightCm)).toFixed(2);
+            const meta = SURFACE_UI_META[wallId];
+            return (
+              <div
+                key={wallId}
+                className="rounded-xl border border-[#1e3a66]/55 bg-white/[0.02] p-4"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: meta.accentHex }}
+                    />
+                    <span className="text-sm font-semibold text-slate-100">
+                      {isPt ? meta.shortPt : meta.shortEn}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 [font-variant-numeric:tabular-nums]">
+                    {formatMetersPair(dim.widthCm, dim.heightCm)} · {ratio}:1
+                  </span>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2.5">
+                  <DimensionCmField
+                    label={isPt ? 'Largura · cm' : 'Width · cm'}
+                    value={dim.widthCm}
+                    testId={`dim-${wallId}-width`}
+                    onCommit={(raw) => onUpdateWallDimension?.(wallId, 'widthCm', raw)}
+                  />
+                  <DimensionCmField
+                    label={isPt ? 'Altura · cm' : 'Height · cm'}
+                    value={dim.heightCm}
+                    testId={`dim-${wallId}-height`}
+                    onCommit={(raw) => onUpdateWallDimension?.(wallId, 'heightCm', raw)}
+                  />
+                </div>
+              </div>
+            );
+          })}
+
+          <div className="flex flex-col justify-between rounded-xl border border-[#2563eb]/55 bg-[#0c1a36]/55 p-4">
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: SURFACE_UI_META.ceiling.accentHex }}
+                  />
+                  <span className="text-sm font-semibold text-slate-100">
+                    {isPt ? 'Teto · Automático' : 'Ceiling · Auto'}
+                  </span>
+                </div>
+                <span className="rounded-xl border border-[#1e3a66] bg-[#040b1a] px-2.5 py-0.5 text-[10px] font-semibold text-[#7dd3fc]">
+                  {isPt ? 'Calculado' : 'Derived'}
+                </span>
+              </div>
+
+              <div
+                data-testid="dim-ceiling-auto"
+                className="mt-3 text-lg font-semibold text-white [font-variant-numeric:tabular-nums]"
+              >
+                {roomDimensions.ceiling.widthCm} × {roomDimensions.ceiling.heightCm} cm
+              </div>
+              <div className="mt-0.5 text-xs text-[#7dd3fc] [font-variant-numeric:tabular-nums]">
+                {formatMetersPair(roomDimensions.ceiling.widthCm, roomDimensions.ceiling.heightCm)} ·{' '}
+                {(
+                  roomDimensions.ceiling.widthCm /
+                  Math.max(1, roomDimensions.ceiling.heightCm)
+                ).toFixed(2)}
+                :1
+              </div>
+            </div>
+
+            <p className="mt-3 text-xs leading-relaxed text-slate-400">
+              {isPt
+                ? `Parede Direita (${roomDimensions.rightWall.widthCm} cm) × Parede Esquerda (${roomDimensions.leftWall.widthCm} cm)`
+                : `Right Wall (${roomDimensions.rightWall.widthCm} cm) × Left Wall (${roomDimensions.leftWall.widthCm} cm)`}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Sub-bloco 2C: Corner-Pin nas Quinas Reais da Sala */}
+      <section
+        className={`setup-block-enter p-5 sm:p-6 ${ADMIN_PANEL_CLASS}`}
+        data-testid="substep-projection-warp"
+      >
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="max-w-[64ch]">
               <h2 className="text-base font-semibold tracking-[-0.015em] text-slate-50 sm:text-lg">
@@ -291,26 +434,33 @@ export const StepProjectionSetup: React.FC<StepProjectionSetupProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={onToggleGlobalShowGrid}
-                className={`inline-flex min-h-[42px] items-center gap-2 rounded-full border px-4 text-xs font-semibold ${PRESS_TRANSITION} ${ADMIN_FOCUS} ${
-                  projectionState.showGrid
-                    ? 'border-white bg-white text-[#060913]'
-                    : 'border-[#2563eb] bg-[#0c1a36] text-white hover:bg-[#142850]'
-                }`}
-              >
-                <Grid size={13} />
-                <span>
-                  {projectionState.showGrid
-                    ? isPt
-                      ? 'Ocultar Grade'
-                      : 'Hide Grid'
-                    : isPt
-                      ? 'Mostrar Grade'
-                      : 'Show Grid'}
-                </span>
-              </button>
+              {(() => {
+                const isAnyGridVisible =
+                  projectionState.showGrid ||
+                  PROJECTOR_OUT_IDS.some((id) => Boolean(projectionState.outputs[id]?.showGrid));
+                return (
+                  <button
+                    type="button"
+                    onClick={onToggleGlobalShowGrid}
+                    className={`inline-flex min-h-[42px] items-center gap-2 rounded-full border px-4 text-xs font-semibold ${PRESS_TRANSITION} ${ADMIN_FOCUS} ${
+                      isAnyGridVisible
+                        ? 'border-white bg-white text-[#060913]'
+                        : 'border-[#2563eb] bg-[#0c1a36] text-white hover:bg-[#142850]'
+                    }`}
+                  >
+                    <Grid size={13} />
+                    <span>
+                      {isAnyGridVisible
+                        ? isPt
+                          ? 'Ocultar Guia dos 4 Cantos'
+                          : 'Hide 4-Corner Guide'
+                        : isPt
+                          ? 'Mostrar Guia dos 4 Cantos'
+                          : 'Show 4-Corner Guide'}
+                    </span>
+                  </button>
+                );
+              })()}
 
               <button
                 type="button"
@@ -484,26 +634,26 @@ export const StepProjectionSetup: React.FC<StepProjectionSetupProps> = ({
               : 'The grid turns off automatically when launching the show.'}
           </div>
         </section>
-      )}
+
+      {/* Sub-bloco 2D: Controlador de Delay entre as Telas */}
+      <ScreenDelayControlPanel
+        isPt={isPt}
+        projectionState={projectionState}
+        screenSyncPulseActive={screenSyncPulseActive}
+        calibBeatSeq={calibBeatSeq}
+        stepLabelPt="Sincronia entre Telas"
+        stepLabelEn="Screen-to-Screen Delay"
+        onUpdateOutputDelay={(outId, delayMs) => onUpdateOutputDelay?.(outId, delayMs)}
+        onResetScreenDelays={() => onResetScreenDelays?.()}
+        onToggleScreenSyncPulse={() => onToggleScreenSyncPulse?.()}
+      />
 
       <NextBlockTeaser
-        title={
-          !outputsConfirmed
-            ? isPt
-              ? 'Encaixar cantos nas quinas reais das paredes'
-              : 'Fit mesh corners to physical wall seams'
-            : isPt
-              ? 'Escolher saída de áudio espacial 8D'
-              : 'Choose 8D spatial audio output'
-        }
+        title={isPt ? 'Escolher saída de áudio espacial 8D' : 'Choose 8D spatial audio output'}
         subtitle={
-          !outputsConfirmed
-            ? isPt
-              ? 'Ajuste a grade luminosa de 4 cantos sobre Parede Esquerda, Direita e Teto.'
-              : 'Align the 4-corner grid across Left Wall, Right Wall, and Ceiling.'
-            : isPt
-              ? 'Configure fone de ouvido ou 3 caixas e iguale o atraso entre imagem e som.'
-              : 'Select headphones or 3 speakers and balance A/V timing.'
+          isPt
+            ? 'Configure fone de ouvido ou 3 caixas e iguale o atraso entre imagem e som.'
+            : 'Select headphones or 3 speakers and balance A/V timing.'
         }
         slotCount={2}
       />

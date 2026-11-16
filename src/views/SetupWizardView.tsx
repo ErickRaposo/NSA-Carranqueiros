@@ -14,6 +14,10 @@ import {
   useProjectionAdmin,
 } from '../experience/ExperienceContext';
 import {
+  DEFAULT_ROOM_DIMENSIONS,
+  updateWallDimension,
+} from '../experience/roomDimensions';
+import {
   Lang,
   PROJECTOR_OUT_IDS,
   SurfaceId,
@@ -71,6 +75,8 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
     setLocalAudioMuted,
     playback,
     liveEvents,
+    roomDimensions,
+    setRoomDimensions,
     selectCountry,
     setAllLayersEnabled,
     playWithAudibleLayers,
@@ -81,6 +87,7 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
     speakerCalibration,
     calibTestMode,
     calibBeatSeq,
+    screenSyncPulseActive,
     visualDelayMs,
     outputDevices,
     outputSupportStatus,
@@ -93,6 +100,7 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
     togglePinkNoiseSpeaker,
     toggleDelayClickSpeaker,
     toggleHeadphoneDelayClick,
+    toggleScreenSyncPulse,
     stopCalibrationSignal,
     refreshOutputDevices,
   } = useAudioAdmin();
@@ -101,6 +109,7 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
     projectionState,
     selectProjectionPreset,
     updateOutputConfig,
+    resetScreenDelays,
     updateSurfaceQuad,
     translateOutputMesh,
     resetAllProjectionQuads,
@@ -464,6 +473,7 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
               isPt={isPt}
               scenario={scenario}
               projectionState={projectionState}
+              roomDimensions={roomDimensions}
               baseOrigin={baseOrigin}
               roomCode={roomCode}
               lanClients={lanClients}
@@ -474,6 +484,15 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
               onResetAllProjectionQuads={resetAllProjectionQuads}
               onUpdateSurfaceQuad={updateSurfaceQuad}
               onTranslateOutputMesh={translateOutputMesh}
+              onUpdateWallDimension={(wall, field, rawValue) =>
+                setRoomDimensions(updateWallDimension(roomDimensions, wall, field, rawValue))
+              }
+              onResetRoomDimensions={() => setRoomDimensions(DEFAULT_ROOM_DIMENSIONS)}
+              screenSyncPulseActive={screenSyncPulseActive}
+              calibBeatSeq={calibBeatSeq}
+              onUpdateOutputDelay={(outId, delayMs) => updateOutputConfig(outId, { delayMs })}
+              onResetScreenDelays={resetScreenDelays}
+              onToggleScreenSyncPulse={toggleScreenSyncPulse}
             />
           )}
 

@@ -15,11 +15,11 @@ import {
   resolveActiveMissionFrameId,
   SHAY_MISSION_FRAMES,
 } from '../experience/missionFrames';
+import { updateWallDimension } from '../experience/roomDimensions';
 import {
   PILOT_COUNTRY_IDS,
   PROJECTOR_OUT_IDS,
   ProjectorOutId,
-  RoomDimensions,
   SurfaceId,
 } from '../experience/types';
 import { encodeQrMatrix } from '../lan/qrCodeSvg';
@@ -89,6 +89,7 @@ export const SetupView: React.FC<SetupViewProps> = ({ onOpenSetupWizard }) => {
     speakerCalibration,
     calibTestMode,
     calibBeatSeq,
+    screenSyncPulseActive,
     outputDevices,
     outputSupportStatus,
     isSetSinkIdSupported,
@@ -101,6 +102,7 @@ export const SetupView: React.FC<SetupViewProps> = ({ onOpenSetupWizard }) => {
     resetSpeakerCalibration,
     togglePinkNoiseSpeaker,
     toggleDelayClickSpeaker,
+    toggleScreenSyncPulse,
     startPinkNoiseAll,
     startDelayClickAll,
     stopCalibrationSignal,
@@ -112,6 +114,7 @@ export const SetupView: React.FC<SetupViewProps> = ({ onOpenSetupWizard }) => {
     selectProjectionPreset,
     toggleOutputSurface,
     updateOutputConfig,
+    resetScreenDelays,
     updateSurfaceQuad,
     translateOutputMesh,
     updateEdgeMask,
@@ -151,7 +154,12 @@ export const SetupView: React.FC<SetupViewProps> = ({ onOpenSetupWizard }) => {
 
   const handleShowReadyPreset = () => {
     if (projectionState.globalBlackout) toggleGlobalBlackout();
-    if (projectionState.showGrid) toggleGlobalShowGrid();
+    if (
+      projectionState.showGrid ||
+      PROJECTOR_OUT_IDS.some((id) => projectionState.outputs[id]?.showGrid)
+    ) {
+      toggleGlobalShowGrid();
+    }
     setAllLayersEnabled(true);
     if (!country) selectCountry('076');
     playWithAudibleLayers();
@@ -183,7 +191,12 @@ export const SetupView: React.FC<SetupViewProps> = ({ onOpenSetupWizard }) => {
         ) {
           e.preventDefault();
           stopCalibrationSignal();
-          if (projectionState.showGrid) toggleGlobalShowGrid();
+          if (
+            projectionState.showGrid ||
+            PROJECTOR_OUT_IDS.some((id) => projectionState.outputs[id]?.showGrid)
+          ) {
+            toggleGlobalShowGrid();
+          }
         }
       }
     };
@@ -351,15 +364,8 @@ export const SetupView: React.FC<SetupViewProps> = ({ onOpenSetupWizard }) => {
     field: 'widthCm' | 'heightCm',
     rawValue: string
   ) => {
-    const val = Math.max(50, Math.min(2000, Number(rawValue) || 100));
-    const next: RoomDimensions = {
-      ...roomDimensions,
-      [surface]: {
-        ...roomDimensions[surface],
-        [field]: val,
-      },
-    };
-    setRoomDimensions(next);
+    if (surface === 'ceiling') return;
+    setRoomDimensions(updateWallDimension(roomDimensions, surface, field, rawValue));
   };
 
   const anyGridActive = useMemo(
@@ -431,7 +437,9 @@ export const SetupView: React.FC<SetupViewProps> = ({ onOpenSetupWizard }) => {
         lang={lang}
         isPlaying={playback.isPlaying}
         globalBlackout={projectionState.globalBlackout}
-        hasActiveTestsOrGrids={calibTestMode.kind !== 'off' || anyGridActive}
+        hasActiveTestsOrGrids={
+          calibTestMode.kind !== 'off' || screenSyncPulseActive || anyGridActive
+        }
         confirmResetArmed={confirmResetArmed}
         onTogglePlayOrStart={playback.isPlaying ? togglePlay : playWithAudibleLayers}
         onToggleBlackout={toggleGlobalBlackout}
@@ -553,6 +561,10 @@ export const SetupView: React.FC<SetupViewProps> = ({ onOpenSetupWizard }) => {
                 onUpdateEdgeMask={updateEdgeMask}
                 onCopyText={copyText}
                 onUpdateDimension={updateDimension}
+                screenSyncPulseActive={screenSyncPulseActive}
+                calibBeatSeq={calibBeatSeq}
+                onResetScreenDelays={resetScreenDelays}
+                onToggleScreenSyncPulse={toggleScreenSyncPulse}
               />
             )}
 

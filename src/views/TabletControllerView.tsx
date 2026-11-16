@@ -54,6 +54,8 @@ import {
 
 interface TabletControllerViewProps {
   embeddedInDemo?: boolean;
+  highContrast?: boolean;
+  fontScale?: number;
 }
 
 const PILOT_ID_SET = new Set<string>(PILOT_COUNTRY_IDS);
@@ -84,6 +86,8 @@ function normalizeLookupName(value: string): string {
 
 export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
   embeddedInDemo = false,
+  highContrast = false,
+  fontScale = 1,
 }) => {
   const {
     country,
@@ -138,6 +142,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
   const [countdownNum, setCountdownNum] = useState<number>(5);
   const [visitedCountryIds, setVisitedCountryIds] = useState<string[]>([]);
   const [activatedLayerIds, setActivatedLayerIds] = useState<VisualLayerId[]>([]);
+  const [globeRotationPaused, setGlobeRotationPaused] = useState<boolean>(false);
   const prevMissionPhaseRef = useRef<MissionPhase>(missionPhase);
   const lastGestureHapticPhaseRef = useRef<MissionPhase | null>(null);
 
@@ -562,10 +567,24 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
     <div
       className={`@container relative flex w-full min-w-0 flex-col overflow-hidden bg-[#060913] font-['Poppins',system-ui,sans-serif] text-slate-50 ${
         embeddedInDemo ? 'h-full' : 'h-dvh'
-      }`}
-      style={{ overscrollBehavior: 'none' }}
+      }${highContrast ? ' high-contrast' : ''}`}
+      style={{
+        overscrollBehavior: 'none',
+        ...(!embeddedInDemo && fontScale !== 1
+          ? ({
+              fontSize: `${Math.round(fontScale * 100)}%`,
+              '--font-scale': fontScale,
+            } as React.CSSProperties)
+          : {}),
+      }}
+      data-a11y-scaled={!embeddedInDemo && fontScale > 1 ? 'true' : undefined}
       data-testid="tablet-controller-view"
     >
+      {!embeddedInDemo && (
+        <a href="#tablet-main-content" className="skip-link">
+          {isPt ? 'Pular para o controle principal' : 'Skip to main controller'}
+        </a>
+      )}
       {/* Barra superior permanente: exibida no Tablet físico (?view=controller); na Demo é absorvida pelo header unificado */}
       {!embeddedInDemo && (
         <div className="z-30 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#1e3a66]/45 bg-[#040b1a]/95 px-3.5 py-2 backdrop-blur-md">
@@ -708,7 +727,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
         </div>
       </nav>
 
-      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+      <div id="tablet-main-content" tabIndex={-1} className="min-h-0 min-w-0 flex-1 overflow-hidden">
         {showIntroScreen ? (
           /* =====================================================================
              TELA 0 — INICIAL (INICIAR EXPEDIÇÃO OU ABRIR ESTÚDIO DIRETO)
@@ -722,9 +741,15 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                 </span>
 
                 <div className="space-y-2">
-                  <h1 className="text-lg font-bold tracking-tight text-slate-50 sm:text-2xl">
-                    {isPt ? 'Pronto para a expedição?' : 'Ready for the expedition?'}
-                  </h1>
+                  {embeddedInDemo ? (
+                    <h2 className="text-lg font-bold tracking-tight text-slate-50 sm:text-2xl">
+                      {isPt ? 'Pronto para a expedição?' : 'Ready for the expedition?'}
+                    </h2>
+                  ) : (
+                    <h1 className="text-lg font-bold tracking-tight text-slate-50 sm:text-2xl">
+                      {isPt ? 'Pronto para a expedição?' : 'Ready for the expedition?'}
+                    </h1>
+                  )}
                   <p className="text-xs leading-relaxed text-slate-400 sm:text-sm">
                     {isPt
                       ? 'Embarque na nave com o MINEIRØ ou abra diretamente o Jukebox Studio para explorar os sons da Terra.'
@@ -761,6 +786,11 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
              ===================================================================== */
           <div className="mx-auto flex h-full w-full min-w-0 max-w-2xl flex-col overflow-y-auto px-4 py-3 sm:px-6 sm:py-5">
             <main className="my-auto flex w-full flex-col items-center py-2">
+              {!embeddedInDemo && (
+                <h1 className="sr-only">
+                  {isPt ? 'Etapa da expedição espacial' : 'Space expedition stage'}
+                </h1>
+              )}
               {missionPhase === 'briefing' ? (
                 <div className={`${stageCardPadClass} border border-[#1e3a66]/55 bg-[#080d19]/95`}>
                   <span className="inline-flex items-center gap-2 rounded-full border border-[#1e3a66]/65 bg-[#060c1a] px-3.5 py-1 text-[11px] font-semibold tracking-wide text-[#7dd3fc]">
@@ -985,9 +1015,15 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
           <div className="mx-auto flex h-full w-full min-w-0 max-w-6xl flex-col gap-3 overflow-y-auto px-4 py-3 sm:px-6 @[740px]:overflow-hidden @[740px]:py-3">
             <header className="flex shrink-0 items-center justify-between gap-3">
               <div className="min-w-0">
-                <h1 className="truncate text-lg font-bold tracking-tight text-slate-50">
-                  {isPt ? 'Escolher País' : 'Choose Country'}
-                </h1>
+                {embeddedInDemo ? (
+                  <h2 className="truncate text-lg font-bold tracking-tight text-slate-50">
+                    {isPt ? 'Escolher País' : 'Choose Country'}
+                  </h2>
+                ) : (
+                  <h1 className="truncate text-lg font-bold tracking-tight text-slate-50">
+                    {isPt ? 'Escolher País' : 'Choose Country'}
+                  </h1>
+                )}
                 <p className="truncate text-xs text-slate-400">
                   {isPt
                     ? 'Gire o globo para mirar na parede, pesquise pelo nome ou escolha um destaque.'
@@ -1036,7 +1072,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                       landBorderRings={world.landBorderRings}
                       coastlineRings={world.coastlineRings}
                       selectedCountry={selectedGeoEntry}
-                      orbitAutoRotate={true}
+                      orbitAutoRotate={!globeRotationPaused}
                       interactive={true}
                       jukeboxPlaying={false}
                       lang={lang}
@@ -1047,6 +1083,38 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                       onSelectCountry={handleGlobeCountrySelect}
                     />
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => setGlobeRotationPaused((prev) => !prev)}
+                    data-testid="tablet-globe-rotation-toggle"
+                    aria-pressed={globeRotationPaused}
+                    aria-label={
+                      globeRotationPaused
+                        ? isPt
+                          ? 'Retomar rotação do globo 3D'
+                          : 'Resume 3D globe rotation'
+                        : isPt
+                          ? 'Pausar rotação do globo 3D'
+                          : 'Pause 3D globe rotation'
+                    }
+                    className="absolute top-2.5 right-2.5 z-10 inline-flex min-h-[34px] cursor-pointer items-center gap-1.5 rounded-full border border-[#1e3a66]/80 bg-[#060c1a]/90 px-3 py-1 text-[11px] font-semibold text-slate-200 backdrop-blur-md transition hover:border-[#2563eb] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc]"
+                  >
+                    {globeRotationPaused ? (
+                      <Play size={12} aria-hidden="true" />
+                    ) : (
+                      <Pause size={12} aria-hidden="true" />
+                    )}
+                    <span>
+                      {globeRotationPaused
+                        ? isPt
+                          ? 'Retomar globo'
+                          : 'Resume globe'
+                        : isPt
+                          ? 'Pausar globo'
+                          : 'Pause globe'}
+                    </span>
+                  </button>
 
                   <div className="pointer-events-none absolute bottom-2.5 left-3 rounded-full border border-[#1e3a66]/70 bg-[#060c1a]/85 px-3 py-1 text-[11px] font-medium text-slate-300 backdrop-blur-md">
                     {isPt
@@ -1085,6 +1153,10 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                           key={`quick-pick-${preset.id}`}
                           type="button"
                           onClick={() => handlePickCountryEntry(preset)}
+                          aria-pressed={active}
+                          aria-label={
+                            isPt ? `Selecionar país ${shortName}` : `Select country ${shortName}`
+                          }
                           className={`inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-xs font-semibold transition active:translate-y-[2px] active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
                             active
                               ? 'border-[#2563eb]/75 bg-[#0c1a36] text-white'
@@ -1210,9 +1282,15 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                     <CountryFlagIcon code={selectedAlpha2} />
                   </span>
                   <div className="min-w-0">
-                    <h1 className="truncate text-sm font-bold text-slate-50 sm:text-base">
-                      {isPt ? country.namePt : country.nameEn}
-                    </h1>
+                    {embeddedInDemo ? (
+                      <h2 className="truncate text-sm font-bold text-slate-50 sm:text-base">
+                        {isPt ? country.namePt : country.nameEn}
+                      </h2>
+                    ) : (
+                      <h1 className="truncate text-sm font-bold text-slate-50 sm:text-base">
+                        {isPt ? country.namePt : country.nameEn}
+                      </h1>
+                    )}
                     <p className="truncate text-[11px] text-sky-200/85 [font-variant-numeric:tabular-nums]">
                       {nasaReport?.summaryLine ??
                         `${Math.abs(country.lat).toFixed(1)}° · ${Math.abs(country.lon).toFixed(1)}° · NASA SVS`}
@@ -1258,6 +1336,8 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                       key={preset.id}
                       type="button"
                       onClick={() => handlePickCountryEntry(preset)}
+                      aria-pressed={active}
+                      aria-label={isPt ? `Selecionar país ${shortName}` : `Select country ${shortName}`}
                       className={`inline-flex min-h-[44px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition active:translate-y-[2px] active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7dd3fc] ${
                         active
                           ? 'border-[#2563eb]/75 bg-[#0c1a36] text-white'
@@ -1433,6 +1513,15 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
               role="group"
               aria-label={isPt ? 'Mixer das 5 camadas NASA' : 'NASA 5-layer mixer'}
             >
+              {embeddedInDemo ? (
+                <h3 className="sr-only">
+                  {isPt ? 'Mixer das 5 camadas NASA' : 'NASA 5-layer mixer'}
+                </h3>
+              ) : (
+                <h2 className="sr-only">
+                  {isPt ? 'Mixer das 5 camadas NASA' : 'NASA 5-layer mixer'}
+                </h2>
+              )}
               {VISUAL_LAYER_ORDER.map((layerId) => {
                 const meta = LAYER_METAS[layerId];
                 const isEnabled = layers[layerId].enabled;
@@ -1503,9 +1592,15 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                             : 'rgba(30, 58, 102, 0.45)',
                         }}
                         aria-pressed={isEnabled}
-                        aria-label={`${isPt ? 'Alternar camada' : 'Toggle layer'} ${
-                          isPt ? meta.labelPt : meta.labelEn
-                        }`}
+                        aria-label={
+                          isEnabled
+                            ? isPt
+                              ? `Ocultar camada ${meta.labelPt}`
+                              : `Hide ${meta.labelEn} layer`
+                            : isPt
+                              ? `Visualizar camada ${meta.labelPt}`
+                              : `Show ${meta.labelEn} layer`
+                        }
                       >
                         {/* Topo do Bloco: LED + Eye + Pílula ON/OFF */}
                         <div className="flex shrink-0 items-center justify-between gap-2 @[740px]:w-full">
@@ -1597,7 +1692,12 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                                 : 'border-[#1e3a66]/55 bg-[#060c1a] text-slate-300 hover:text-white'
                             }`}
                             title="Solo"
-                            aria-label={`Solo ${isPt ? meta.labelPt : meta.labelEn}`}
+                            aria-pressed={layers[layerId as SoloableLayerId].solo}
+                            aria-label={
+                              isPt
+                                ? `Ouvir apenas som de ${meta.labelPt}`
+                                : `Listen only to ${meta.labelEn} sound`
+                            }
                           >
                             S
                           </button>
@@ -1671,9 +1771,11 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                               }
                               style={{ touchAction: 'none', accentColor: meta.accentHex }}
                               className="h-10 min-w-[120px] flex-1 cursor-pointer"
-                              aria-label={`${isPt ? 'Volume' : 'Gain'} ${
-                                isPt ? meta.labelPt : meta.labelEn
-                              }`}
+                              aria-label={
+                                isPt
+                                  ? `Volume para ouvir som de ${meta.labelPt}`
+                                  : `Volume to listen to ${meta.labelEn} sound`
+                              }
                             />
                             <span className="w-14 text-right text-xs font-semibold text-slate-200 [font-variant-numeric:tabular-nums]">
                               {Math.round(layers[layerId as SoloableLayerId].gain * 100)}%
@@ -1748,7 +1850,12 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                                   : 'border-[#1e3a66]/55 bg-[#060c1a] text-slate-300 hover:text-white'
                               }`}
                               title={isPt ? 'Solo apenas Tempestade' : 'Solo Storm Sparkle only'}
-                              aria-label={isPt ? 'Solo Tempestade' : 'Solo Storm Sparkle'}
+                              aria-pressed={layers.melody.sparkleSolo}
+                              aria-label={
+                                isPt
+                                  ? 'Ouvir apenas som de Tempestade'
+                                  : 'Listen only to Storm Sparkle sound'
+                              }
                             >
                               S
                             </button>
@@ -1764,7 +1871,11 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                               onChange={(e) => setSparkleGain(Number(e.target.value) / 100)}
                               style={{ touchAction: 'none', accentColor: '#67f3ff' }}
                               className="h-10 min-w-[110px] flex-1 cursor-pointer"
-                              aria-label={isPt ? 'Ganho da Tempestade' : 'Storm Sparkle Gain'}
+                              aria-label={
+                                isPt
+                                  ? 'Volume para ouvir som de Tempestade'
+                                  : 'Volume to listen to Storm Sparkle sound'
+                              }
                             />
                             <span className="w-14 text-right text-xs font-semibold text-slate-200 [font-variant-numeric:tabular-nums]">
                               {layers.melody.sparkleGain.toFixed(2)}×

@@ -4,6 +4,7 @@ import {
   SURFACE_IDS,
   SurfaceId,
 } from '../experience/types';
+import { clampScreenDelayMs } from './screenDelay';
 
 export interface Point2D {
   x: number;
@@ -29,6 +30,8 @@ export interface ProjectorOutputConfig {
   surfaces: SurfaceId[];
   showGrid: boolean;
   blackout: boolean;
+  /** Compensação de atraso entre telas (-400 a +400 ms). */
+  delayMs?: number;
 }
 
 export type EdgeFeatherSide = 'left' | 'right' | 'top' | 'bottom';
@@ -45,6 +48,8 @@ export interface ProjectionCalibrationState {
   showGrid: boolean;
   globalBlackout: boolean;
   identifyUntil: number;
+  identifyNonce?: number;
+  identifyDurationMs?: number;
   outputs: Record<ProjectorOutId, ProjectorOutputConfig>;
   quads: Record<CalibrationSurfaceKey, QuadCorners>;
   edgeMasks: Record<CalibrationSurfaceKey, EdgeFeatherMask>;
@@ -64,7 +69,7 @@ export function parseSurfaceQuadKey(key: CalibrationSurfaceKey): {
   outId: ProjectorOutId;
   surfaceId: SurfaceId;
 } {
-  const match = /^out([1-4])-(leftWall|rightWall|ceiling)$/.exec(key);
+  const match = /^out([1-3])-(leftWall|rightWall|ceiling)$/.exec(key);
   if (!match) {
     return { outId: 1, surfaceId: 'leftWall' };
   }
@@ -427,7 +432,6 @@ export function applyProjectionPreset(
       1: { outId: 1, surfaces: ['leftWall'], showGrid: false, blackout: false },
       2: { outId: 2, surfaces: ['rightWall'], showGrid: false, blackout: false },
       3: { outId: 3, surfaces: ['ceiling'], showGrid: false, blackout: false },
-      4: { outId: 4, surfaces: [], showGrid: false, blackout: false },
     };
   } else if (preset === '1-projector') {
     // 1 Projetor único grande-angular cobrindo Canto em L + Teto
@@ -440,7 +444,6 @@ export function applyProjectionPreset(
       },
       2: { outId: 2, surfaces: [], showGrid: false, blackout: false },
       3: { outId: 3, surfaces: [], showGrid: false, blackout: false },
-      4: { outId: 4, surfaces: [], showGrid: false, blackout: false },
     };
   } else {
     // Default '2-projectors': Out 1 = Canto em L (Esq + Dir), Out 2 = Teto
@@ -448,11 +451,14 @@ export function applyProjectionPreset(
       1: { outId: 1, surfaces: ['leftWall', 'rightWall'], showGrid: false, blackout: false },
       2: { outId: 2, surfaces: ['ceiling'], showGrid: false, blackout: false },
       3: { outId: 3, surfaces: [], showGrid: false, blackout: false },
-      4: { outId: 4, surfaces: [], showGrid: false, blackout: false },
     };
   }
 
   for (const outId of PROJECTOR_OUT_IDS) {
+    outputs[outId] = {
+      ...outputs[outId],
+      delayMs: clampScreenDelayMs(prev?.outputs?.[outId]?.delayMs ?? 0),
+    };
     quads = buildAutoQuadsForSurfaces(outId, outputs[outId].surfaces, quads);
   }
 
@@ -461,6 +467,8 @@ export function applyProjectionPreset(
     showGrid: prev?.showGrid ?? false,
     globalBlackout: false,
     identifyUntil: 0,
+    identifyNonce: prev?.identifyNonce ?? 0,
+    identifyDurationMs: 7000,
     outputs,
     quads,
     edgeMasks: prev?.edgeMasks ?? createAllZeroEdgeMasks(),
@@ -552,6 +560,7 @@ export function loadCalibrationState(): ProjectionCalibrationState {
           ...fallback.outputs[outId],
           ...parsed.outputs[outId],
           outId,
+          delayMs: clampScreenDelayMs(parsed.outputs[outId].delayMs ?? 0),
           surfaces: Array.isArray(parsed.outputs[outId].surfaces)
             ? parsed.outputs[outId].surfaces
             : fallback.outputs[outId].surfaces,
@@ -579,6 +588,8 @@ export function loadCalibrationState(): ProjectionCalibrationState {
       showGrid: Boolean(parsed.showGrid),
       globalBlackout: Boolean(parsed.globalBlackout),
       identifyUntil: Number(parsed.identifyUntil ?? 0),
+      identifyNonce: Number(parsed.identifyNonce ?? 0),
+      identifyDurationMs: Number(parsed.identifyDurationMs ?? 7000),
       outputs: mergedOutputs,
       quads: {
         ...fallback.quads,

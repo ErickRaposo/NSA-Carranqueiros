@@ -15,7 +15,10 @@ import { SpaceshipLaunchOverlay } from './SpaceshipLaunchOverlay';
  * - `zero_g` (4s): cabine espacial em volta do Globo que desaparece após 4 segundos.
  * - `idle` / `exploring` / `ended`: Globo inteiro no espaço `#000000` estrelado.
  */
-export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => {
+export const LeftWallScene: React.FC<SceneSurfaceProps> = ({
+  renderContext,
+  globeRotationPaused = false,
+}) => {
   const {
     country,
     availableCountryIds,
@@ -156,7 +159,7 @@ export const LeftWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =>
           viewMode={isCountryFocused2D ? '2d' : '3d'}
           visualStyle="bioluminescent"
           backgroundHex="#000000"
-          orbitAutoRotate={!isCountryFocused2D && (!country || isOverviewMode)}
+          orbitAutoRotate={!globeRotationPaused && !isCountryFocused2D && (!country || isOverviewMode)}
           autoRotateSpeedDegPerSec={
             missionPhase === 'idle' ? 11.5 : missionPhase === 'briefing' ? 5.2 : 1.92
           }

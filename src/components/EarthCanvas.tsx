@@ -1480,6 +1480,12 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
     };
   }, [allRings, coastlineRings, countries, interactive, landBorderRings]);
 
+  const selectedCountryLabel = selectedCountry
+    ? lang === 'en'
+      ? selectedCountry.nameEn
+      : selectedCountry.namePt
+    : null;
+
   return (
     <div
       ref={containerRef}
@@ -1489,7 +1495,9 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
       style={interactive ? undefined : { pointerEvents: 'none' }}
       aria-label={
         interactive
-          ? 'Mapa interativo 3D e 2D da Terra com camadas da NASA. Use as setas do teclado para mover, mais e menos para zoom, Espaço para reproduzir ou pausar, J para Jukebox musical, E para explicação da música, V para narração por voz e R para ler os dados do local.'
+          ? lang === 'en'
+            ? `${selectedCountryLabel ? `Selected country: ${selectedCountryLabel}. ` : ''}Interactive 3D and 2D Earth map with NASA layers. Use arrow keys to move, plus and minus to zoom, Space to play or pause, J for musical Jukebox, E for music explanation, V for voice narration, and R to read location data.`
+            : `${selectedCountryLabel ? `País selecionado: ${selectedCountryLabel}. ` : ''}Mapa interativo 3D e 2D da Terra com camadas da NASA. Use as setas do teclado para mover, mais e menos para zoom, Espaço para reproduzir ou pausar, J para Jukebox musical, E para explicação da música, V para narração por voz e R para ler os dados do local.`
           : undefined
       }
       aria-hidden={interactive ? undefined : true}

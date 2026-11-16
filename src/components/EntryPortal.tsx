@@ -199,6 +199,9 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
       style={{ fontSize: `${Math.round(fontScale * 100)}%` }}
       aria-label="Portal de entrada do MINEIRØ — Explorador Planetário Sonoro"
     >
+      <a href="#portal-inicio" className="skip-link">
+        Pular para o conteúdo principal
+      </a>
       {/* Sticky Top Menu (transparent at top, deepens to dark navy on scroll) */}
       <header
         className="entry-topbar"
@@ -257,7 +260,8 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
             className={`portal-icon-btn entry-desktop-only ${highContrast ? 'is-active' : ''}`}
             onClick={onToggleHighContrast}
             aria-pressed={highContrast}
-            title="Alternar Alto Contraste WCAG AAA"
+            aria-keyshortcuts="Alt+C"
+            title="Alternar Alto Contraste WCAG AAA (Alt+C)"
             data-testid="portal-contrast-btn"
           >
             <Contrast size={16} aria-hidden="true" />
@@ -267,7 +271,8 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
             type="button"
             className="portal-icon-btn entry-desktop-only"
             onClick={onCycleFontScale}
-            title="Alterar tamanho do texto"
+            aria-keyshortcuts="Alt+A"
+            title="Alterar tamanho do texto (Alt+A)"
           >
             <span>A+</span>
           </button>
@@ -356,6 +361,8 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
                   className={`portal-icon-btn flex-1 gap-1.5 ${highContrast ? 'is-active' : ''}`}
                   onClick={onToggleHighContrast}
                   aria-pressed={highContrast}
+                  aria-keyshortcuts="Alt+C"
+                  title="Alternar Alto Contraste WCAG AAA (Alt+C)"
                 >
                   <Contrast size={15} aria-hidden="true" />
                   <span>Contraste</span>
@@ -364,6 +371,8 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
                   type="button"
                   className="portal-icon-btn flex-1"
                   onClick={onCycleFontScale}
+                  aria-keyshortcuts="Alt+A"
+                  title="Alterar tamanho do texto (Alt+A)"
                 >
                   <span>A+</span>
                 </button>
@@ -374,7 +383,7 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
       </header>
 
       {/* Hero Banner with Starfield + Crescent Earth on Left + Text on Right */}
-      <section id="portal-inicio" className="entry-hero-section">
+      <section id="portal-inicio" tabIndex={-1} className="entry-hero-section">
         {!highContrast && <StarfieldBackground />}
 
         <div className="entry-center-stage">

@@ -36,15 +36,19 @@ import {
   toggleSurfaceOnOutput,
 } from '../projection/homography';
 
-describe('Show Control Admin (?view=admin), Matriz de Projetores Out 1..4, Nós LAN e Motor 8D', () => {
-  it('resolve ?view=admin, ?view=setup, ?view=projector&out=1..4 e ?view=audio-node&spk=1..3', () => {
+describe('Show Control Admin (?view=admin), Matriz de Projetores Out 1..3, Nós LAN e Motor 8D', () => {
+  it('resolve ?view=admin, ?view=setup, ?view=projector&out=1..3 e ?view=audio-node&spk=1..3', () => {
     expect(parseRouteFromSearch('?view=admin').view).toBe('admin');
     expect(parseRouteFromSearch('', '/admin').view).toBe('admin');
     expect(parseRouteFromSearch('?view=setup').view).toBe('setup');
     expect(parseRouteFromSearch('', '/setup').view).toBe('setup');
+    expect(parseRouteFromSearch('?view=projector&out=3')).toEqual({
+      view: 'projector',
+      outId: 3,
+    });
     expect(parseRouteFromSearch('?view=projector&out=4')).toEqual({
       view: 'projector',
-      outId: 4,
+      outId: 1,
     });
     expect(parseRouteFromSearch('?view=audio-node&spk=3').view).toBe('audio-node');
     expect(parseSpeakerIndexFromSearch('?view=audio-node&spk=2')).toBe(2);
@@ -69,11 +73,11 @@ describe('Show Control Admin (?view=admin), Matriz de Projetores Out 1..4, Nós 
     expect(threeProj.quads[makeSurfaceQuadKey(2, 'rightWall')][0].x).toBe(0);
     expect(threeProj.quads[makeSurfaceQuadKey(2, 'rightWall')][1].x).toBe(1);
 
-    // Custom Matrix: adicionar ceiling no Out 4 marca preset 'custom' e dá tela cheia ao Out 4
-    const custom = toggleSurfaceOnOutput(threeProj, 4, 'ceiling');
+    // Custom Matrix: adicionar ceiling no Out 3 sobre '2-projectors' marca preset 'custom' e dá tela cheia ao Out 3
+    const custom = toggleSurfaceOnOutput(twoProj, 3, 'ceiling');
     expect(custom.preset).toBe('custom');
-    expect(custom.outputs[4].surfaces).toEqual(['ceiling']);
-    expect(custom.quads[makeSurfaceQuadKey(4, 'ceiling')][2]).toEqual({ x: 1, y: 1 });
+    expect(custom.outputs[3].surfaces).toEqual(['ceiling']);
+    expect(custom.quads[makeSurfaceQuadKey(3, 'ceiling')][2]).toEqual({ x: 1, y: 1 });
   });
 
   it('calcula ganhos VBAP das 3 caixas em potência constante (g1² + g2² + g3² = 1) e respeita mute', () => {
