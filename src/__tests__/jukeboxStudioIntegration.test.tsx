@@ -82,7 +82,7 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
       const dirUrl = new URL(`../../public/countries/${cid}/`, import.meta.url);
       expect(fs.existsSync(dirUrl)).toBe(true);
 
-      // 5 PNGs 1024x1024 + 5 Sprite Sheets de Vídeo NASA 96f (12x8)
+      // 5 1024x1024 PNGs + 5 NASA Video Sprite Sheets 96f (12x8)
       for (const lid of VISUAL_LAYER_ORDER) {
         expect(fs.existsSync(new URL(`${lid}.png`, dirUrl))).toBe(true);
         expect(fs.existsSync(new URL(`video/${lid}_sheet.jpg`, dirUrl))).toBe(true);
@@ -140,12 +140,12 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
     const emptyTimeline = buildBeatTimeline([]);
     expect(emptyTimeline).toEqual([]);
 
-    // Loop C2–C3 ([1, 2] -> intervalo [0.125, 0.375) num loop de 8 compassos)
+    // Loop C2–C3 ([1, 2] -> range [0.125, 0.375) in an 8-bar loop)
     const wrapped = advanceLoopProgress(0.37, 0.5, 16, null, 8, [1, 2]);
     expect(wrapped).toBeGreaterThanOrEqual(0.125);
     expect(wrapped).toBeLessThan(0.375);
 
-    // Se playhead estiver fora do barLoop (ex.: C1 = 0.02), salta imediatamente para o início do trecho
+    // If playhead is outside barLoop (e.g., C1 = 0.02), jump immediately to the start of the range
     const jumped = advanceLoopProgress(0.02, 0.016, 16, null, 8, [4, 5]);
     expect(jumped).toBeGreaterThanOrEqual(0.5);
     expect(jumped).toBeLessThan(0.75);
@@ -202,8 +202,17 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
     );
     expect(stageCtrlHtml).toContain('cursor-pointer');
 
-    const tabletHtml = renderToStaticMarkup(
+    const tabletEnDefaultHtml = renderToStaticMarkup(
       <ExperienceProvider>
+        <TabletControllerView />
+      </ExperienceProvider>
+    );
+    expect(tabletEnDefaultHtml).toContain('Voice: ON');
+    expect(tabletEnDefaultHtml).toContain('Open Jukebox Studio Directly');
+    expect(tabletEnDefaultHtml).toContain('EN · US');
+
+    const tabletHtml = renderToStaticMarkup(
+      <ExperienceProvider initialLang="pt">
         <TabletControllerView />
       </ExperienceProvider>
     );
@@ -213,7 +222,7 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
     expect(tabletHtml).toContain('Abrir Jukebox Studio Direto');
 
     const demoHtml = renderToStaticMarkup(
-      <ExperienceProvider routeView="demo">
+      <ExperienceProvider routeView="demo" initialLang="pt">
         <WebDemoView />
       </ExperienceProvider>
     );
@@ -272,7 +281,7 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
 
     for (const { phase, expectedLabel, checkRightWall } of phases) {
       const tabletPhaseHtml = renderToStaticMarkup(
-        <ExperienceProvider initialMissionPhase={phase}>
+        <ExperienceProvider initialLang="pt" initialMissionPhase={phase}>
           <TabletControllerView />
         </ExperienceProvider>
       );
@@ -289,7 +298,7 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
 
       if (checkRightWall) {
         const wallPhaseHtml = renderToStaticMarkup(
-          <ExperienceProvider initialMissionPhase={phase}>
+          <ExperienceProvider initialLang="pt" initialMissionPhase={phase}>
             <RightWallScene
               renderContext="simulator"
               surfaceId="rightWall"
@@ -330,7 +339,7 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
     expect(frame0Prompts.spoken.length).toBeGreaterThan(0);
 
     const wallFrame6Html = renderToStaticMarkup(
-      <ExperienceProvider initialMissionPhase="exploring" initialStoryStep={0}>
+      <ExperienceProvider initialLang="pt" initialMissionPhase="exploring" initialStoryStep={0}>
         <RightWallScene
           renderContext="simulator"
           surfaceId="rightWall"
@@ -344,7 +353,7 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
     expect(wallFrame6Html).not.toContain('data-testid="jukebox-studio-stage"');
 
     const tabletFrame6Html = renderToStaticMarkup(
-      <ExperienceProvider initialMissionPhase="exploring" initialStoryStep={0}>
+      <ExperienceProvider initialLang="pt" initialMissionPhase="exploring" initialStoryStep={0}>
         <TabletControllerView />
       </ExperienceProvider>
     );
@@ -356,7 +365,7 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
     expect(tabletFrame6Html).not.toContain('data-testid="tablet-switch-country-btn"');
 
     const wallStudioSilentHtml = renderToStaticMarkup(
-      <ExperienceProvider initialMissionPhase="exploring" initialStoryStep={1}>
+      <ExperienceProvider initialLang="pt" initialMissionPhase="exploring" initialStoryStep={1}>
         <RightWallScene
           renderContext="simulator"
           surfaceId="rightWall"
@@ -370,7 +379,7 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
     expect(wallStudioSilentHtml).not.toContain('MINEIRØ · ESCOLHA SEU DESTINO');
 
     const tabletStudioSilentHtml = renderToStaticMarkup(
-      <ExperienceProvider initialMissionPhase="exploring" initialStoryStep={1}>
+      <ExperienceProvider initialLang="pt" initialMissionPhase="exploring" initialStoryStep={1}>
         <TabletControllerView />
       </ExperienceProvider>
     );
@@ -432,7 +441,7 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
     expect(() => triggerConsoleHaptic(CONSOLE_HAPTIC_PATTERNS.launchSequence)).not.toThrow();
     expect(() => stopConsoleHaptic()).not.toThrow();
 
-    // 5 ticks de contagem (5..1 a cada 1100ms) somam 5500ms antes da ignição dos motores 8D
+    // 5 countdown ticks (5..1 every 1100ms) total 5500ms before 8D engine ignition
     const countdownMs = CONSOLE_HAPTIC_PATTERNS.launchSequence
       .slice(0, 10)
       .reduce((acc, val) => acc + val, 0);
@@ -525,7 +534,7 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
     expect(report!.byLayerId.temperature.metricHeadline).toContain('76% T2M · 101 BPM');
 
     const ceilingExploringHtml = renderToStaticMarkup(
-      <ExperienceProvider initialMissionPhase="exploring" initialStoryStep={1}>
+      <ExperienceProvider initialLang="pt" initialMissionPhase="exploring" initialStoryStep={1}>
         <CeilingScene
           renderContext="simulator"
           surfaceId="ceiling"
@@ -547,7 +556,7 @@ describe('Jukebox Studio Integration — 12 Real Countries, Zero Fallback, Right
     expect(ceilingExploringHtml).not.toContain('fi-cn');
 
     const tabletHtml = renderToStaticMarkup(
-      <ExperienceProvider initialMissionPhase="exploring" initialStoryStep={1}>
+      <ExperienceProvider initialLang="pt" initialMissionPhase="exploring" initialStoryStep={1}>
         <TabletControllerView />
       </ExperienceProvider>
     );

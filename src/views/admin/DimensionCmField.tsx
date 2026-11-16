@@ -9,7 +9,7 @@ interface DimensionCmFieldProps {
   onCommit: (raw: string) => void;
 }
 
-/** Campo numérico em centímetros (cm) com digitação livre e validação ao confirmar/sair. */
+/** Numeric field in centimeters (cm) with free typing and validation on confirm/blur. */
 export const DimensionCmField: React.FC<DimensionCmFieldProps> = ({
   label,
   value,

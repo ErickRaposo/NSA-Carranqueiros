@@ -57,11 +57,11 @@ const SMOKE_STEPS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 const MARQUEE_SEGMENT_ITEMS = Array.from({ length: 6 }, (_, i) => i);
 
 /**
- * Calcula posição determinística (via relógio global) do robô no palco contínuo 0%..200%:
- * - 0%..100%  = Parede Esquerda
- * - 100%..200% = Parede Direita
- * Dessa forma, quando ele sai pela borda direita da Parede Esquerda (100%),
- * entra instantaneamente pela borda esquerda da Parede Direita (0%) sem emenda.
+ * Computes deterministic robot position (via global clock) on the continuous 0%..200% stage:
+ * - 0%..100%  = Left Wall
+ * - 100%..200% = Right Wall
+ * That way, when it exits the right edge of the Left Wall (100%),
+ * it seamlessly enters the left edge of the Right Wall (0%).
  */
 function sampleRobotMotion(nowMs: number): {
   xGlobalPct: number;
@@ -71,14 +71,14 @@ function sampleRobotMotion(nowMs: number): {
   speedNorm: number;
 } {
   const sec = nowMs / 1000;
-  // Ciclo completo de ida e volta entre as duas paredes em ~9.8s (rápido e energético)
+  // Full round-trip cycle between both walls in ~9.8s (fast and energetic)
   const omega = (Math.PI * 2) / 9.8;
   const angle = sec * omega;
   const xNorm = -Math.cos(angle); // -1 .. +1
   const dir: 1 | -1 = Math.sin(angle) >= 0 ? 1 : -1;
   const speedNorm = Math.abs(Math.sin(angle));
 
-  const xGlobalPct = 100 + xNorm * 88; // vai de 12% (Parede Esq.) até 188% (Parede Dir.)
+  const xGlobalPct = 100 + xNorm * 88; // spans from 12% (Left Wall) to 188% (Right Wall)
   const bobPx = Math.sin(sec * 3.8) * 14;
   const tiltDeg = dir * speedNorm * 10.5;
 
@@ -86,10 +86,10 @@ function sampleRobotMotion(nowMs: number): {
 }
 
 /**
- * Camada compartilhada de projeção mapeada contínua entre Parede Esquerda e Parede Direita em `idle`:
- * - Faixas superiores/inferiores `MINEIRØ` atravessando a quina em L
- * - Cometas rápidos cruzando de uma parede para a outra
- * - Robô MINEIRØ gigante (`256px`) andando rápido pelas duas paredes com rastro de fumaça contínuo
+ * Shared continuous projection-mapped layer between Left Wall and Right Wall in `idle`:
+ * - Top/bottom `MINEIRØ` marquee strips crossing the L-corner
+ * - Fast comets streaking from one wall to the other
+ * - Giant MINEIRØ robot (`256px`) moving briskly across both walls with a continuous smoke trail
  */
 export const IdlePanoramaBridge: React.FC<IdlePanoramaBridgeProps> = ({ surface }) => {
   const [nowMs, setNowMs] = useState<number>(() =>
@@ -121,7 +121,7 @@ export const IdlePanoramaBridge: React.FC<IdlePanoramaBridgeProps> = ({ surface 
   const robotLocalLeftPct = robot.xGlobalPct + surfaceOffsetPct;
   const showRobotOnThisSurface = robotLocalLeftPct > -24 && robotLocalLeftPct < 124;
 
-  // Deslocamento contínuo em pista única de 400% (8 blocos iguais; cada bloco = 50% de uma parede)
+  // Continuous scroll on a single 400% track (8 equal chunks; each chunk = 50% of one wall)
   const topShiftPct = reducedMotion ? 0 : -((nowMs / 240) % 25);
   const bottomShiftPct = reducedMotion ? -12.5 : -25 + ((nowMs / 240) % 25);
 
@@ -159,7 +159,7 @@ export const IdlePanoramaBridge: React.FC<IdlePanoramaBridgeProps> = ({ surface 
       className="pointer-events-none absolute inset-0 z-25 overflow-hidden"
       aria-hidden="true"
     >
-      {/* Faixas contínuas topo & rodapé cruzando as duas paredes sem quebra na quina */}
+      {/* Continuous top & bottom marquee strips crossing both walls seamlessly at the corner */}
       <div className="absolute inset-x-0 top-4 overflow-hidden border-y border-sky-400/15 bg-sky-950/10 py-2">
         {renderMarqueeTrack(topShiftPct, 'top')}
       </div>
@@ -167,7 +167,7 @@ export const IdlePanoramaBridge: React.FC<IdlePanoramaBridgeProps> = ({ surface 
         {renderMarqueeTrack(bottomShiftPct, 'bottom')}
       </div>
 
-      {/* Cometas rápidos atravessando de uma parede para a outra pela quina */}
+      {/* Fast comets streaking from one wall to the other across the corner */}
       {!reducedMotion &&
         CROSS_WALL_COMETS.map((comet) => {
           const p = ((nowMs + comet.phaseMs) % comet.periodMs) / comet.periodMs;
@@ -207,9 +207,9 @@ export const IdlePanoramaBridge: React.FC<IdlePanoramaBridgeProps> = ({ surface 
           );
         })}
 
-      {/* Pista inferior única cruzando as duas paredes: Rastro de fumaça + Robô MINEIRØ gigante */}
+      {/* Single lower track crossing both walls: Smoke trail + giant MINEIRØ robot */}
       <div className="absolute inset-x-0 bottom-[62px] h-[270px]">
-        {/* Nuvens determinísticas de fumaça atrás do robô (cruzam a quina em sincronia exata) */}
+        {/* Deterministic smoke puffs behind the robot (cross the corner in exact sync) */}
         {!reducedMotion &&
           SMOKE_STEPS.map((stepIdx) => {
             const past = sampleRobotMotion(nowMs - stepIdx * 115);

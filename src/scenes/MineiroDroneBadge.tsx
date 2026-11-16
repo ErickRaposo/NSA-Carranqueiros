@@ -1,17 +1,17 @@
 import React from 'react';
 
 interface MineiroDroneBadgeProps {
-  /** Mensagem curta exibida no balão de fala ao lado ou acima do robô */
+  /** Short message displayed in the speech bubble beside or above the robot */
   speech?: string;
-  /** Onde o balão fica em relação ao robô (a setinha aponta sempre para o robô) */
+  /** Bubble placement relative to the robot (the pointer always aims at the robot) */
   bubblePosition?: 'right' | 'left' | 'top';
-  /** Destaque de cor da camada/ação atual */
+  /** Accent color for the current layer/action */
   accentHex?: string;
 }
 
 /**
- * Representação leve e compacta do robô MINEIRØ (proporcional para paredes projetadas)
- * para voar pelas superfícies (Globo e Teto) sem abrir múltiplos contextos WebGL.
+ * Lightweight, compact representation of the MINEIRØ robot (scaled for projected walls)
+ * for flying across surfaces (Globe and Ceiling) without opening multiple WebGL contexts.
  */
 export const MineiroDroneBadge: React.FC<MineiroDroneBadgeProps> = ({
   speech,

@@ -2000,7 +2000,7 @@ a:focus-visible {
   color: #7dd3fc;
 }
 
-/* Launchpad Colorido Tátil (Left Panel) */
+/* Tactile Colorful Launchpad (Left Panel) */
 .launchpad-pips {
   display: inline-flex;
   align-items: center;
@@ -2525,7 +2525,7 @@ a:focus-visible {
   border-radius: 999px;
 }
 
-/* Barra Musical Viva (PlayerBar Top Ribbon) */
+/* Live Musical Bar (PlayerBar Top Ribbon) */
 .musical-ribbon {
   display: flex;
   align-items: center;
@@ -5047,7 +5047,7 @@ button.spectrum-pill.is-off .spectrum-label {
   flex-shrink: 0;
 }
 
-/* COUNTRY FLAG VECTOR BADGE — SÓBRIO E INTEGRADO AO INSTRUMENTO ORBITAL */
+/* COUNTRY FLAG VECTOR BADGE — SOBER AND INTEGRATED INTO THE ORBITAL INSTRUMENT */
 .country-flag-badge {
   display: inline-flex;
   align-items: center;
@@ -5083,7 +5083,7 @@ button.spectrum-pill.is-off .spectrum-label {
   color: #cbd5e1;
 }
 
-/* CÁPSULA SUPERIOR DO PARTICIPANTE — MESMO ACABAMENTO DAS ILHAS E RAILS LATERAIS */
+/* TOP PARTICIPANT CAPSULE — SAME FINISH AS ISLANDS AND SIDE RAILS */
 .player-hud-wrap {
   position: relative;
   pointer-events: auto;
@@ -5201,7 +5201,7 @@ button.spectrum-pill.is-off .spectrum-label {
   transform: rotate(180deg);
 }
 
-/* POPOVERS SUPERIORES — ACABAMENTO OBSIDIANO 18PX SEM NEON */
+/* TOP POPOVERS — 18PX OBSIDIAN FINISH WITHOUT NEON */
 .topbar-popover {
   position: absolute;
   top: calc(100% + 8px);
@@ -5278,7 +5278,7 @@ button.spectrum-pill.is-off .spectrum-label {
   color: #f8fafc;
 }
 
-/* MENU DO PARTICIPANTE E MEUS DADOS (2 ABAS COESAS COM OS DOCKS LATERAIS) */
+/* PARTICIPANT MENU AND MY DATA (2 TABS COHESIVE WITH THE SIDE DOCKS) */
 .participant-popover-head {
   display: flex;
   align-items: center;
@@ -5449,7 +5449,7 @@ button.spectrum-pill.is-off .spectrum-label {
   color: #f8fafc;
 }
 
-/* GRADE MONOCROMÁTICA TABULAR DE 3 COLUNAS (ZERO SKITTLES / ZERO ARCO-ÍRIS) */
+/* 3-COLUMN TABULAR MONOCHROME GRID (ZERO SKITTLES / ZERO RAINBOW) */
 .participant-metrics-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -5498,7 +5498,7 @@ button.spectrum-pill.is-off .spectrum-label {
   text-overflow: ellipsis;
 }
 
-/* CREDENCIAL CIENTÍFICA DISCRETA (BARRA HAIRLINE 2PX MONOCROMÁTICA) */
+/* DISCREET SCIENTIFIC CREDENTIAL (2PX MONOCHROME HAIRLINE BAR) */
 .participant-credential-strip {
   padding: 10px 11px;
   border-radius: 12px;
@@ -5566,7 +5566,7 @@ button.spectrum-pill.is-off .spectrum-label {
   flex-shrink: 0;
 }
 
-/* REGISTROS RECENTES NO GLOBO */
+/* RECENT GLOBE LOGS */
 .participant-log-section {
   display: flex;
   flex-direction: column;
@@ -5627,7 +5627,7 @@ button.spectrum-pill.is-off .spectrum-label {
   color: #94a3b8;
 }
 
-/* ATALHOS EM 2 COLUNAS SEM QUEBRA DE LINHA */
+/* 2-COLUMN SHORTCUTS WITHOUT LINE WRAPPING */
 .participant-shortcuts-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5671,7 +5671,7 @@ button.spectrum-pill.is-off .spectrum-label {
   color: #e2e8f0;
 }
 
-/* ABA MEUS DADOS — FORMULÁRIO DE PERFIL, SENHA E GOVERNANÇA */
+/* MY DATA TAB — PROFILE, PASSWORD, AND GOVERNANCE FORM */
 .participant-form {
   display: flex;
   flex-direction: column;
@@ -5953,7 +5953,7 @@ button.spectrum-pill.is-off .spectrum-label {
   color: #fca5a5;
 }
 
-/* RANKING GLOBAL — TABELA E CARD LOCAL SÓBRIOS */
+/* GLOBAL RANKING — SOBER TABLE AND LOCAL CARD */
 .ranking-status-banner,
 .collective-sync-note {
   padding: 8px 10px;
@@ -6643,7 +6643,7 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   pointer-events: none;
 }
 
-/* MODO FOCO PURO DE PAÍS: APENAS CountryDetailCard fica 100% visível; toda a periferia recua para transparência sutil e acende no hover/foco */
+/* PURE COUNTRY FOCUS MODE: ONLY CountryDetailCard stays 100% visible; all periphery recedes to subtle transparency and lights up on hover/focus */
 .top-hud,
 .launchpad-floating-dock,
 .a11y-spatial-dock,
@@ -6654,7 +6654,7 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
     transform 220ms var(--ease-out-quint);
 }
 
-/* Simetria bilateral: menu esquerdo centralizado verticalmente espelhando o dock direito */
+/* Bilateral symmetry: left menu vertically centered mirroring the right dock */
 @media (min-width: 861px) {
   .hud-left-col.launchpad-shell {
     padding-left: 72px;
@@ -6753,7 +6753,7 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   }
 }
 
-/* ZONA 1 — SELETOR RÁPIDO DE ESTILO VISUAL NA TOPBAR */
+/* ZONE 1 — QUICK VISUAL STYLE SELECTOR IN TOPBAR */
 .topbar-style-popover {
   min-width: 224px;
 }
@@ -6787,7 +6787,7 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   color: #f0f9ff;
 }
 
-/* ZONA 2 — ESTÚDIO VISUAL (ESTILOS GLSL, PRESETS, ORDEM DIRETA, FUSÃO E COMPARTILHAR) */
+/* ZONE 2 — VISUAL STUDIO (GLSL STYLES, PRESETS, DIRECT ORDER, BLEND, AND SHARE) */
 .studio-style-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -6949,7 +6949,7 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   color: #f8fafc;
 }
 
-/* ZONA 3 — CARD DE DESCOBERTA DO PAÍS (ANCORADO NA ESQUERDA PARA O MAPA 2D EXIBIR O PAÍS À DIREITA) */
+/* ZONE 3 — COUNTRY DISCOVERY CARD (ANCHORED ON THE LEFT SO THE 2D MAP DISPLAYS THE COUNTRY ON THE RIGHT) */
 .hud-left-detail-slot {
   display: flex;
   align-items: stretch;
@@ -7007,7 +7007,7 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   flex-shrink: 0;
 }
 
-/* ZONA 4 — ESTAÇÃO VERTICAL MEIO-DIREITA (ACESSIBILIDADE DE DESTAQUE + GIRO + ZOOM) */
+/* ZONE 4 — MID-RIGHT VERTICAL STATION (HIGHLIGHT ACCESSIBILITY + SPIN + ZOOM) */
 .a11y-spatial-dock {
   position: fixed;
   right: 14px;
@@ -7082,7 +7082,7 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   margin: 2px 0;
 }
 
-/* ZONA 5 — SENSOR OLHO ORBITAL ACOPLADO + CONSOLE INFERIOR 100% CENTRALIZADO (50vw) */
+/* ZONE 5 — COUPLED ORBITAL EYE SENSOR + 100% CENTERED BOTTOM CONSOLE (50vw) */
 .bottom-console-dock {
   gap: 6px;
 }
@@ -7218,7 +7218,7 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   border-color: rgba(56, 189, 248, 0.62);
 }
 
-/* ZONA 6 — ÓRBITA GLOBAL INTEGRADA AOS INSTRUMENTOS LATERAIS + ABA PUXADA + GAVETA 18PX */
+/* ZONE 6 — GLOBAL ORBIT INTEGRATED WITH SIDE INSTRUMENTS + PULLED TAB + 18PX DRAWER */
 .bottom-right-collective-slot {
   position: fixed;
   right: 14px;
@@ -7582,7 +7582,7 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   white-space: nowrap;
 }
 
-/* GUIA FLUTUANTE IN-APP DO ROBÔ MINEIRØ 3D (NÃO BLOQUEIA O GLOBO) */
+/* IN-APP FLOATING GUIDE FOR 3D ROBOT MINEIRØ (DOES NOT BLOCK THE GLOBE) */
 .inapp-robot-guide {
   position: fixed;
   left: 86px;
@@ -7679,7 +7679,7 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   gap: 6px;
 }
 
-/* CARD CIENTÍFICO DA BASE NASA & ESCALA DE CORES (NASA SVS LITERACY) */
+/* NASA BASE SCIENTIFIC CARD & COLOR SCALE (NASA SVS LITERACY) */
 .nasa-dataset-card-slot {
   position: absolute;
   left: 2px;
@@ -8015,7 +8015,7 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   color: #f8fafc;
 }
 
-/* ALTO CONTRASTE WCAG & REDUCED MOTION PARA V2 */
+/* WCAG HIGH CONTRAST & REDUCED MOTION FOR V2 */
 .app-shell.high-contrast .a11y-spatial-dock,
 .app-shell.high-contrast .collective-orbit-pill,
 .app-shell.high-contrast .collective-bottom-sheet,
@@ -8036,7 +8036,7 @@ button.passport-country-pill.is-clickable:hover:not(:disabled) {
   color: #090d16;
 }
 
-/* RESPONSIVIDADE MOBILE (<= 900px e <= 760px) */
+/* MOBILE RESPONSIVENESS (<= 900px and <= 760px) */
 @media (max-width: 960px) {
   .hud-right-col {
     padding-right: 68px;

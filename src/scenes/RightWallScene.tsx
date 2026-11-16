@@ -41,9 +41,9 @@ const TEAM_CREDITS_ALPHABETICAL = [
 ] as const;
 
 /**
- * Superfície Projetada — PAREDE DIREITA (`rightWall` · Projetor 1 Canto em L):
- * Conduz toda a jornada sensorial da Expedição Mineira:
- * `idle` -> `boarding` -> `countdown` (5..1) -> `zero_g` -> `exploring` -> `ended` (créditos NASA).
+ * Projected Surface — RIGHT WALL (`rightWall` · Projector 1 L-Corner):
+ * Drives the entire sensory journey of the Mineira Expedition:
+ * `idle` -> `boarding` -> `countdown` (5..1) -> `zero_g` -> `exploring` -> `ended` (NASA credits).
  */
 export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => {
   const {
@@ -113,12 +113,12 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
   const [endedStage, setEndedStage] = useState<'reentry' | 'medal' | 'credits'>('reentry');
   const [landingBump, setLandingBump] = useState<boolean>(false);
 
-  // Controle de digitação letra por letra
+  // Letter-by-letter typewriter control
   const [phraseIdx, setPhraseIdx] = useState(0);
   const [charCount, setCharCount] = useState(0);
   const [isErasing, setIsErasing] = useState(false);
 
-  // Sequência automática em 3 etapas da Missão Cumprida (`ended`)
+  // Automatic 3-stage Mission Accomplished (`ended`) sequence
   useEffect(() => {
     if (missionPhase !== 'ended') {
       setEndedStage('reentry');
@@ -156,7 +156,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
     };
   }, [audioSessionUnlocked, missionPhase, renderContext]);
 
-  // Contagem regressiva 5, 4, 3, 2, 1 durante a fase `countdown`
+  // Countdown 5, 4, 3, 2, 1 during the `countdown` phase
   useEffect(() => {
     if (missionPhase !== 'countdown') {
       setCountdownNum(5);
@@ -273,7 +273,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
           };
     }
 
-    // Quadro 6 (`exploring-0`): escolha de país no Globo do tablet ou bandeiras no teto
+    // Frame 6 (`exploring-0`): country selection on the tablet Globe or ceiling flags
     if (activeStep === 0) {
       return isPt
         ? {
@@ -294,7 +294,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
           };
     }
 
-    // Fase `exploring`: comentário exclusivo por camada ativa (todas as 5 camadas)
+    // `exploring` phase: dedicated commentary per active layer (all 5 layers)
     if (activeLayerForSpeech) {
       const layerComments: Record<
         VisualLayerId,
@@ -413,7 +413,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
       return isPt ? layerComments[activeLayerForSpeech].pt : layerComments[activeLayerForSpeech].en;
     }
 
-    // `exploring-ready` (Silêncio Intencional: país escolhido e todas as camadas desligadas)
+    // `exploring-ready` (Intentional Silence: country selected with all layers muted)
     return isPt
       ? {
           phrases: [
@@ -497,7 +497,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
 
   const prevPhaseRef = useRef(missionPhase);
 
-  // Efeitos sonoros mecânicos sincronizados com as comportas, ejeção e dissolução da cabine
+  // Mechanical sound effects synced with blast doors, hatch ejection, and cabin dissolve
   useEffect(() => {
     const prev = prevPhaseRef.current;
     prevPhaseRef.current = missionPhase;
@@ -519,7 +519,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
     }
   }, [audioSessionUnlocked, missionPhase, renderContext]);
 
-  // Pré-carrega a voz neural Piper apenas após sessão de áudio desbloqueada pelo usuário
+  // Preload Piper neural voice only after the user unlocks the audio session
   useEffect(() => {
     if (renderContext === 'projector' || !audioSessionUnlocked || !voiceAutoEnabled) return;
     preloadPiperVoice(lang);
@@ -528,8 +528,8 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
   const spokenTextRef = useRef(phaseSpeech.spoken);
   spokenTextRef.current = phaseSpeech.spoken;
 
-  // Fala no idioma selecionado interrompendo imediatamente qualquer fala anterior ao trocar país/camada/fase
-  // + abaixa suavemente TODA a música (ambiente espacial e motor 8D dos países) enquanto o robô fala
+  // Speak in the selected language, immediately interrupting any prior speech on country/layer/phase change
+  // + smoothly duck ALL music (space ambient and country 8D engine) while the robot speaks
   useEffect(() => {
     const setAllMusicDucked = (ducked: boolean) => {
       setSpaceAmbientDucked(ducked);
@@ -564,11 +564,11 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
     if (lastSpokenKeyRef.current === key) return;
     lastSpokenKeyRef.current = key;
 
-    // Corta imediatamente qualquer fala em andamento antes de iniciar a nova
+    // Immediately cut off any in-progress speech before starting the next one
     stopSpeech();
     setAllMusicDucked(false);
 
-    // No briefing inicial, deixa a música espacial tocar antes do robô começar a falar
+    // In the initial briefing, let the space music play before the robot starts speaking
     const startDelayMs = missionPhase === 'briefing' ? 1400 : 180;
     const timer = window.setTimeout(() => {
       speechDelayTimerRef.current = null;
@@ -608,7 +608,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
     voiceAutoEnabled,
   ]);
 
-  // Responde imediatamente aos comandos de Pausa / Retomada / Interrupção vindos do Tablet
+  // Immediately respond to Pause / Resume / Stop commands from the Tablet
   useEffect(() => {
     if (renderContext === 'projector' || speechCommandNonce === 0 || !lastSpeechCommand) return;
     const setAllMusicDucked = (ducked: boolean) => {
@@ -689,7 +689,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         accentHex={activeLayerMeta.accentHex}
       />
 
-      {/* Arco sutil na borda esquerda conectando com a Parede Esquerda */}
+      {/* Subtle arc on the left edge connecting to the Left Wall */}
       <div
         className="pointer-events-none absolute top-1/2 -left-24 h-72 w-48 -translate-y-1/2 rounded-full border border-sky-400/20 opacity-45"
         style={{
@@ -699,12 +699,12 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         aria-hidden="true"
       />
 
-      {/* Estado inicial antes de iniciar operação (superfície 3D puramente ilustrativa) */}
+      {/* Initial state before starting operation (purely illustrative 3D surface) */}
       {missionPhase === 'idle' && (
         <IdleStageRightWall isPt={isPt} interactive={false} />
       )}
 
-      {/* Tela 2 · Boas-vindas: Robô MINEIRØ 3D gigante solto no espaço + balão de conversa cinematográfico */}
+      {/* Screen 2 · Welcome: Giant 3D MINEIRØ robot floating in space + cinematic speech bubble */}
       {missionPhase === 'briefing' && (
         <motion.div
           key="briefing-hero-stage"
@@ -713,7 +713,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
           className="pointer-events-none relative z-30 flex h-full w-full items-center justify-center gap-12 px-14"
         >
-          {/* Robô 3D grande no espaço #000000 com casinha/aura azul ampla */}
+          {/* Large 3D robot in #000000 space with a wide blue aura */}
           <div className="relative flex shrink-0 items-center justify-center">
             <motion.div
               className="pointer-events-none absolute h-[480px] w-[480px] rounded-full blur-3xl mix-blend-screen"
@@ -730,9 +730,9 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
             </div>
           </div>
 
-          {/* Bloco azul amplo e legível ao lado */}
+          {/* Wide, legible blue panel beside it */}
           <div className="relative flex max-w-[660px] flex-1 flex-col gap-6 rounded-3xl border border-sky-400/40 bg-[#050d20]/88 px-11 py-9 shadow-[0_0_64px_rgba(14,165,233,0.22)] backdrop-blur-md">
-            {/* Cabeçalho + Barrinhas/Ondas de Voz Animadas */}
+            {/* Header + Animated Voice Bars/Waves */}
             <div className="flex items-center justify-between gap-4 border-b border-sky-400/15 pb-4">
               <span
                 className="text-[14px] font-semibold tracking-[0.22em] text-sky-300/90 uppercase"
@@ -771,7 +771,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
               </div>
             </div>
 
-            {/* Texto de conversa bem grande */}
+            {/* Large conversation text */}
             <p className="min-h-[155px] text-[36px] font-semibold leading-[1.3] tracking-tight text-slate-50">
               {visibleText}
               {speechStatus !== 'stopped' && speechStatus !== 'paused' && (
@@ -782,7 +782,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
               )}
             </p>
 
-            {/* Indicador das frases sem botão dentro do balão */}
+            {/* Phrase indicator dots without any button inside the bubble */}
             <div className="flex items-center justify-start gap-2 pt-1" aria-hidden="true">
               {phaseSpeech.phrases.map((_, idx) => (
                 <span
@@ -795,7 +795,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
             </div>
           </div>
 
-          {/* Botão discreto no canto inferior direito */}
+          {/* Subtle button in the bottom-right corner */}
           <div className="pointer-events-none absolute right-8 bottom-6 z-40 origin-bottom-right scale-[0.88] opacity-70">
             <MissionGameButton
               label={isPt ? 'Embarcar na Nave' : 'Board Ship'}
@@ -807,7 +807,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         </motion.div>
       )}
 
-      {/* Contagem regressiva durante a decolagem (5, 4, 3, 2, 1) */}
+      {/* Liftoff countdown (5, 4, 3, 2, 1) */}
       {missionPhase === 'countdown' && (
         <div className="pointer-events-none relative z-30 mx-auto mt-14 flex flex-col items-center text-center">
           <span className="text-[18px] font-semibold tracking-[0.2em] text-amber-300 uppercase">
@@ -826,7 +826,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         </div>
       )}
 
-      {/* Quadro 6 (`exploring-0`): Palco dedicado de Escolha de País com MINEIRØ 3D gigante no espaço #000000 */}
+      {/* Frame 6 (`exploring-0`): Dedicated Country Selection stage with giant 3D MINEIRØ in #000000 space */}
       {missionPhase === 'exploring' && activeStep === 0 && (
         <motion.div
           key="exploring-0-hero-stage"
@@ -919,7 +919,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         </motion.div>
       )}
 
-      {/* Fase Exploring (`storyStep > 0`): Palco Jukebox Studio + Partitura MIDI em Loop ocupando a Parede Direita */}
+      {/* Exploring Phase (`storyStep > 0`): Jukebox Studio stage + Looping MIDI Score filling the Right Wall */}
       {missionPhase === 'exploring' && activeStep > 0 && (
         <JukeboxStudioStage
           renderContext={renderContext}
@@ -928,7 +928,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         />
       )}
 
-      {/* Robô MINEIRØ ampliado + bloco azul amplo nas fases com cabine/contagem (boarding, countdown, zero_g) */}
+      {/* Enlarged MINEIRØ robot + wide blue panel during cabin/countdown phases (boarding, countdown, zero_g) */}
       {(missionPhase === 'boarding' ||
         missionPhase === 'countdown' ||
         missionPhase === 'zero_g') && (
@@ -984,7 +984,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
         </>
       )}
 
-      {/* Tela final em 3 etapas: 1) Descida na nave -> 2) Tranco + Medalha animada -> 3) Logo MINEIRØ + Developed by */}
+      {/* 3-stage finale screen: 1) Ship descent -> 2) Landing thud + Animated Medal -> 3) MINEIRØ logo + Developed by */}
       {missionPhase === 'ended' && (
         <motion.div
           className="pointer-events-none relative z-30 flex h-full w-full flex-col items-center justify-center px-4 py-3 text-center"
@@ -1031,7 +1031,7 @@ export const RightWallScene: React.FC<SceneSurfaceProps> = ({ renderContext }) =
                 transition={{ type: 'spring', stiffness: 220, damping: 16 }}
                 className="flex flex-col items-center gap-7"
               >
-                {/* Medalha de Honra Animada */}
+                {/* Animated Medal of Honor */}
                 <motion.div
                   animate={{ rotateY: [0, 360], scale: [1, 1.07, 1] }}
                   transition={{

@@ -23,8 +23,8 @@ export interface RawMetaBeatEvent {
 }
 
 /**
- * Constrói a matriz sequencial de 32 batidas (8 compassos × 4 tempos) usando EXCLUSIVAMENTE
- * os eventos reais de `meta.json` do país (sem fallback sintético).
+ * Builds the sequential 32-beat matrix (8 bars × 4 beats) using EXCLUSIVELY
+ * real events from the country's `meta.json` (no synthetic fallback).
  */
 export function buildBeatTimeline(
   beatEvents?: ReadonlyArray<RawMetaBeatEvent> | null
@@ -88,8 +88,8 @@ export function buildBeatTimeline(
 }
 
 /**
- * Avança `progress01` respeitando opcionalmente o loop de compasso único (`loopSingleBar`)
- * ou sub-trecho de compassos (`barLoop = [b0, b1]`).
+ * Advances `progress01` while optionally respecting the single-bar loop (`loopSingleBar`)
+ * or bar sub-range (`barLoop = [b0, b1]`).
  */
 export function advanceLoopProgress(
   currentProgress01: number,
@@ -128,7 +128,7 @@ export function advanceLoopProgress(
 }
 
 /**
- * Resolve qual país deve entrar ao acionar `Alternar País A ⇄ País B na Mesma Batida`.
+ * Resolves which country should enter when triggering `Switch Country A ⇄ Country B on Same Beat`.
  */
 export function resolveCompareSwapTarget(
   activeCountryId: string | null,
@@ -141,8 +141,8 @@ export function resolveCompareSwapTarget(
 }
 
 /**
- * Calcula o nível acústico real enviado para cada uma das 3 caixas físicas (`C1`, `C2`, `C3`)
- * somando a energia VBAP dos eventos georreferenciados (`source_x`, `source_y`) e a órbita 360° do Vento 8D.
+ * Computes the actual acoustic level sent to each of the 3 physical speakers (`C1`, `C2`, `C3`)
+ * by summing the VBAP energy of georeferenced events (`source_x`, `source_y`) and the 360° orbit of the 8D Wind.
  */
 export function computeSpeakerLiveLevels(params: {
   events: ReadonlyArray<LiveNoteEvent>;
@@ -162,7 +162,7 @@ export function computeSpeakerLiveLevels(params: {
     return accum;
   }
 
-  // 1. Contribuição espacial direta de cada nota/raio ativo na batida
+  // 1. Direct spatial contribution of each active note/lightning event on the beat
   for (const ev of events) {
     const targetX = ev.source_x * 2 - 1;
     const targetY = ev.source_y * 2 - 1;
@@ -182,7 +182,7 @@ export function computeSpeakerLiveLevels(params: {
     }
   }
 
-  // 2. Contribuição orbital 360° do Bus de Vento 8D (2 voltas por ciclo de 8 compassos)
+  // 2. 360° orbital contribution from the 8D Wind Bus (2 rotations per 8-bar cycle)
   if (audioLevels.wind > 0.01) {
     const angle = progress01 * Math.PI * 4;
     const windVbap = computeVbap3Gains(
@@ -195,7 +195,7 @@ export function computeSpeakerLiveLevels(params: {
     }
   }
 
-  // 3. Aplica ganho de calibração individual (0..200%), mute e Master Bus
+  // 3. Apply individual calibration gain (0..200%), mute, and Master Bus
   const out: Record<SpeakerSlotId, number> = {
     speaker1: 0,
     speaker2: 0,

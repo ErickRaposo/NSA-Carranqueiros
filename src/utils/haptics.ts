@@ -1,8 +1,8 @@
 export type HapticPattern = number | number[];
 
 /**
- * Padrões táteis físicos para o Console Tablet (`?view=controller`) via Web Vibration API.
- * Mantém silêncio absoluto em iOS/iPadOS e Desktop (não cria vibração visual substituta).
+ * Physical haptic patterns for the Tablet Console (`?view=controller`) via the Web Vibration API.
+ * Keeps absolute silence on iOS/iPadOS and Desktop (does not create a substitute visual vibration).
  */
 export const CONSOLE_HAPTIC_PATTERNS = {
   tap: 12,
@@ -11,9 +11,9 @@ export const CONSOLE_HAPTIC_PATTERNS = {
   briefingStart: [22, 42, 36] as number[],
   boardingSlam: [70, 55, 120] as number[],
   /**
-   * Sincronizado com `TabletControllerView`:
-   * - 5 batidas na contagem regressiva (5..1 a cada 1100ms -> 5500ms exatos)
-   * - Ignição + tranco contínuo dos motores 8D de 5500ms até ~9400ms
+   * Synchronized with `TabletControllerView`:
+   * - 5 pulses on the countdown (5..1 every 1100ms -> exact 5500ms)
+   * - Ignition + continuous jolt of the 8D engines from 5500ms to ~9400ms
    */
   launchSequence: [
     50, 1050, 55, 1045, 65, 1035, 80, 1020, 100, 1000,
@@ -25,10 +25,10 @@ export const CONSOLE_HAPTIC_PATTERNS = {
 } as const;
 
 /**
- * Feedback tátil progressivo para o Console Tablet (?view=controller):
- * - Em dispositivos Android compatíveis, dispara vibração curta ou sequência de impacto via `navigator.vibrate`.
- * - Em iPadOS / iOS / Desktop onde `navigator.vibrate` não é exposto, ignora silenciosamente
- *   sem gerar áudio extra no ambiente (preservando a regra de silêncio e música 8D pura).
+ * Progressive haptic feedback for the Tablet Console (?view=controller):
+ * - On compatible Android devices, triggers a short vibration or impact sequence via `navigator.vibrate`.
+ * - On iPadOS / iOS / Desktop where `navigator.vibrate` is not exposed, silently ignores
+ *   without generating extra ambient audio (preserving the silence and pure 8D music rule).
  */
 export function triggerConsoleHaptic(pattern: HapticPattern = CONSOLE_HAPTIC_PATTERNS.tap): void {
   if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') {
@@ -42,7 +42,7 @@ export function triggerConsoleHaptic(pattern: HapticPattern = CONSOLE_HAPTIC_PAT
 }
 
 /**
- * Interrompe qualquer vibração em andamento (ex.: encerrar missão ou reiniciar no meio da decolagem).
+ * Stops any ongoing vibration (e.g., ending mission or restarting mid-liftoff).
  */
 export function stopConsoleHaptic(): void {
   if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') {

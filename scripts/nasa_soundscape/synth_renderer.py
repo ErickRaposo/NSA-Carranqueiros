@@ -1,17 +1,16 @@
 """
-Sintetizador Polifônico Independente + Bus Linear de Efeitos de Vento (NumPy + wave).
+Independent Polyphonic Synthesizer + Linear Wind Effects Bus (NumPy + wave).
 
-Arquitetura Earth Jukebox:
-  - 3 Instrumentos secos independentes com GANHO FIXO constante (`STEM_GAINS`):
-      * `chords.wav` (CO — Pad harmônico unison)
-      * `bass.wav`   (NO2 — Sub-bass musical contínuo com cutoff, drive e ataque variáveis)
-      * `melody.wav` (Raios — Celesta/Rhodes com harmônicos no ataque e parciais por densidade)
-  - `mix_dry.wav`: soma direta dos stems dos instrumentos ligados.
-  - `mix_wind.wav`: bus de efeitos de Vento estritamente LINEAR (Chorus + Ping-Pong Delay em
-    colcheia pontuada + Filtro Ressonante em movimento + Auto-Pan + Hall/Shimmer Reverb por
-    convolução, sem geração de ruído próprio) aplicado sobre `mix_dry` quando `--wind on`
-    (ou igual a `mix_dry` quando `--wind off`).
-  - Limitador suave (`MASTER_LIMITER_THRESHOLD`) aplicado apenas como proteção de teto no master.
+Earth Jukebox Architecture:
+  - 3 independent dry instruments with constant FIXED GAIN (`STEM_GAINS`):
+      * `chords.wav` (CO — Unison harmonic pad)
+      * `bass.wav`   (NO2 — Continuous musical sub-bass with variable cutoff, drive, and attack)
+      * `melody.wav` (Lightning — Celesta/Rhodes with attack harmonics and density-driven partials)
+  - `mix_dry.wav`: direct sum of enabled instrument stems.
+  - `mix_wind.wav`: strictly LINEAR Wind effects bus (Chorus + Dotted-Eighth Ping-Pong Delay +
+    Moving Resonant Filter + Auto-Pan + Convolution Hall/Shimmer Reverb, no self-generated noise)
+    applied over `mix_dry` when `--wind on` (or equal to `mix_dry` when `--wind off`).
+  - Soft limiter (`MASTER_LIMITER_THRESHOLD`) applied only as a ceiling safeguard on the master.
 """
 
 from dataclasses import dataclass
@@ -29,11 +28,11 @@ SAMPLE_RATE = 44100
 
 @dataclass
 class RenderedAudioBundle:
-    """Pacote com caminhos dos WAVs gerados, sinais em memória e envelopes RMS para vídeo."""
-    stem_paths: Dict[str, Path]            # Apenas os instrumentos ligados (chords, bass, melody)
+    """Bundle with paths to generated WAVs, in-memory signals, and RMS envelopes for video."""
+    stem_paths: Dict[str, Path]            # Enabled instruments only (chords, bass, melody)
     mix_dry_path: Path
     mix_wind_path: Path
-    active_mix_path: Path                  # mix_wind_path se wind=='on', senão mix_dry_path
+    active_mix_path: Path                  # mix_wind_path if wind=='on', else mix_dry_path
     frame_envelopes: Dict[str, List[float]]
     duration_seconds: float
     sample_rate: int = SAMPLE_RATE
@@ -67,8 +66,8 @@ def soft_limit_master(
     stereo_sig: np.ndarray, threshold: float = MASTER_LIMITER_THRESHOLD
 ) -> np.ndarray:
     """
-    Limitador suave aplicado apenas no master: 100% linear (identidade exata) para |x| <= threshold,
-    com compressão suave tanh acima do joelho até 0.998 para evitar clipping digital.
+    Soft limiter applied only on the master: 100% linear (exact identity) for |x| <= threshold,
+    with smooth tanh compression above the knee up to 0.998 to prevent digital clipping.
     """
     mag = np.abs(stereo_sig)
     if float(mag.max()) <= threshold:
@@ -87,8 +86,8 @@ def apply_temperature_color_tilt(
     stereo_sig: np.ndarray, temp_index: float, sr: int = SAMPLE_RATE
 ) -> np.ndarray:
     """
-    Inclinação tonal global opcional (--temperature-color): mais quente (>0.5) abre levemente o topo;
-    mais frio (<0.5) escurece suavemente o master. Operador linear via FFT.
+    Optional global tonal tilt (--temperature-color): warmer (>0.5) slightly opens the top end;
+    colder (<0.5) gently darkens the master. Linear FFT operator.
     """
     n = stereo_sig.shape[0]
     if n == 0:
@@ -141,7 +140,7 @@ def _fft_lowpass_stereo(stereo: np.ndarray, cutoff_hz: float, sr: int = SAMPLE_R
 def _fft_resonant_peak_stereo(
     stereo: np.ndarray, center_hz: float, resonance: float, sr: int = SAMPLE_RATE
 ) -> np.ndarray:
-    """Filtro linear com pico ressonante audível em `center_hz` para movimento espectral do vento."""
+    """Linear filter with audible resonant peak at `center_hz` for wind spectral movement."""
     n = stereo.shape[0]
     if n == 0:
         return stereo
@@ -176,7 +175,7 @@ def _add_stereo_clip(
 def _wrap_or_trim_stem(
     stem: np.ndarray, loop_samples: int, seamless_loop: bool, sr: int = SAMPLE_RATE
 ) -> np.ndarray:
-    """Ajusta o buffer para `loop_samples` de forma linear."""
+    """Linearly adjusts the buffer to `loop_samples`."""
     if loop_samples <= 0:
         return np.zeros((0, 2), dtype=np.float32)
     if stem.shape[0] < loop_samples:
@@ -200,7 +199,7 @@ def _wrap_or_trim_stem(
 
 
 # ============================================================================
-# Síntese dos 3 Instrumentos Independentes
+# Synthesis of the 3 Independent Instruments
 # ============================================================================
 
 def _render_pad_note(
@@ -262,10 +261,10 @@ def _render_bass_note(
     drv = float(np.clip(drive, 0.0, 0.8))
     base_cut = max(75.0, float(cutoff_hz))
 
-    # 1. Fundamental sub-grave 100% limpa (sem saturação) para sustentar a harmonia com peso e clareza
+    # 1. 100% clean sub-bass fundamental (no saturation) to support harmony with weight and clarity
     sub_fund = np.sin(np.float32(two_pi * freq) * t)
 
-    # 2. Corpo harmônico médio-grave (2f..7f) com abertura dinâmica de filtro no pluck + drive suave
+    # 2. Mid-low harmonic body (2f..7f) with dynamic filter opening on pluck + gentle drive
     c_env = base_cut * (1.0 + (0.42 + 0.85 * drv) * np.exp(-t * (7.5 + 5.5 * drv))).astype(np.float32)
     harm_weights = ((2, 0.54), (3, 0.29), (4, 0.16), (5, 0.09), (6, 0.05), (7, 0.03))
     upper_harm = np.zeros(n, dtype=np.float32)
@@ -284,7 +283,7 @@ def _render_bass_note(
 
     sig = (0.76 * sub_fund + (0.52 + 0.36 * drv) * upper_harm).astype(np.float32)
 
-    # 3. Envelope orgânico de dedo/corda: ataque cosseno + corpo quente sustentado + release suave
+    # 3. Organic finger/string envelope: cosine attack + warm sustained body + smooth release
     atk_n = max(24, min(n // 2, int(float(np.clip(attack_sec, 0.006, 0.090)) * sr)))
     rel_n = min(n - atk_n, int(rel_sec * sr))
     env = (0.68 + 0.32 * np.exp(-t * (1.55 + 1.15 * drv))).astype(np.float32)
@@ -308,10 +307,10 @@ def _render_melody_bell_note(
     sr: int = SAMPLE_RATE,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Celesta / Rhodes expressivo:
-      - Densidade local de clarões (`brightness`) abre harmônicos no ataque.
-      - Múltiplos clarões no mesmo slot (`harmonic_partials`) adicionam parciais de oitava (2f) e quinta (3f).
-      - Poucos eventos no compasso usam `attack_sec` suave e `release_sec` longo.
+    Expressive Celesta / Rhodes:
+      - Local flash density (`brightness`) opens attack harmonics.
+      - Multiple flashes in the same slot (`harmonic_partials`) add octave (2f) and fifth (3f) partials.
+      - Sparse bars use a gentle `attack_sec` and long `release_sec`.
     """
     rel_s = float(np.clip(release_sec, 0.35, 2.20))
     total_sec = max(0.30, dur_sec + rel_s)
@@ -321,7 +320,7 @@ def _render_melody_bell_note(
     b_clamped = float(np.clip(brightness, 0.0, 1.0))
     p_clamped = float(np.clip(harmonic_partials, 0.0, 1.0))
 
-    # Harmônicos de ataque (abrem fortemente com a densidade de pontos amarelos no quadro)
+    # Attack harmonics (open strongly with the density of yellow dots in the frame)
     atk_harm_env = np.exp(-t * (5.2 - 2.4 * b_clamped)).astype(np.float32)
     carrier = (
         0.84 * np.sin(2.0 * np.pi * freq * t)
@@ -330,7 +329,7 @@ def _render_melody_bell_note(
         + (0.14 * max(0.0, b_clamped - 0.35)) * np.sin(2.0 * np.pi * (4.0 * freq) * t) * np.exp(-t * 11.5)
     )
 
-    # Parciais sustentados de oitava (2f) e quinta (1.5f) quando há muitos clarões no quadro
+    # Sustained octave (2f) and fifth (1.5f) partials when many flashes are present in the frame
     if p_clamped > 0.02:
         sust_harm_env = np.exp(-t / max(0.55, dur_sec * 1.1)).astype(np.float32)
         if 2.0 * freq < 9500.0:
@@ -363,8 +362,8 @@ def _render_crystal_sparkle_note(
     sr: int = SAMPLE_RATE,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Cintilação cristalina aguda (Celesta / Glockenspiel delicado) para explosões de pontos amarelos:
-    passa-altas suave acima de 850 Hz para nunca embolar o registro médio da melodia principal.
+    High crystalline sparkle (delicate Celesta / Glockenspiel) for yellow-dot bursts:
+    gentle high-pass above 850 Hz so it never muddies the main melody's midrange.
     """
     rel_s = 0.24
     total_sec = max(0.14, dur_sec + rel_s)
@@ -403,8 +402,8 @@ def render_instrument_stem(
     sparkle_gain: Optional[float] = None,
 ) -> np.ndarray:
     """
-    Renderiza um único instrumento seco de forma 100% isolada e determinística.
-    Depende exclusivamente de `notes`, `bpm`, `total_bars` e `STEM_GAINS[instrument_id]`.
+    Renders a single dry instrument in a 100% isolated and deterministic way.
+    Depends exclusively on `notes`, `bpm`, `total_bars`, and `STEM_GAINS[instrument_id]`.
     """
     if instrument_id not in INSTRUMENT_LAYERS:
         raise ValueError(f"Instrumento desconhecido: {instrument_id}")
@@ -425,7 +424,7 @@ def render_instrument_stem(
                 midi_to_hz(float(n["pitch"])), dur_s, float(n["velocity"]), bright, sr
             )
             _add_stereo_clip(bus, s0, l_sig, r_sig)
-        # Brilho de filtro do pad modulado apenas pelo próprio vídeo de CO (média das notas se houver)
+        # Pad filter brightness modulated only by the CO video itself (mean of notes if present)
         pad_cutoff = 1550.0
         if notes:
             b_mean = float(np.mean([float(n.get("brightness") or 0.5) for n in notes]))
@@ -515,7 +514,7 @@ def render_instrument_stem(
 
 
 # ============================================================================
-# Bus Linear de Efeitos de Vento (Sem geração de som próprio)
+# Linear Wind Effects Bus (No self-generated sound)
 # ============================================================================
 
 def _smooth_and_interp_curve(
@@ -540,8 +539,8 @@ def _smooth_and_interp_curve(
 
 def _linear_octave_shimmer_feed(mono_sig: np.ndarray, sr: int = SAMPLE_RATE) -> np.ndarray:
     """
-    Pitch-shift linear de +1 oitava por grãos Hann sobrepostos (2x read rate).
-    Estritamente linear no sinal de entrada: T(a + b) == T(a) + T(b) e T(0) == 0.
+    Linear +1 octave pitch-shift using overlapping Hann grains (2x read rate).
+    Strictly linear on the input signal: T(a + b) == T(a) + T(b) and T(0) == 0.
     """
     n = mono_sig.size
     if n < 512:
@@ -553,7 +552,7 @@ def _linear_octave_shimmer_feed(mono_sig: np.ndarray, sr: int = SAMPLE_RATE) -> 
 
     win = np.hanning(grain_len).astype(np.float32)
     rel = np.arange(grain_len, dtype=np.float32)
-    # Leitura a 2x centrada no meio do grão para manter sincronismo temporal
+    # 2x read centered in the middle of the grain to maintain temporal sync
     read_offset = ((rel * 2.0) % grain_len)
     out = np.zeros(n, dtype=np.float32)
 
@@ -575,20 +574,20 @@ def apply_wind_bus(
     sr: int = SAMPLE_RATE,
 ) -> np.ndarray:
     """
-    Aplica o bus espacial de Vento de forma ESTRITAMENTE LINEAR sobre `dry_stereo`.
-      - Sem som próprio: `apply_wind_bus(0) == 0`.
-      - Aditividade preservada: `apply_wind_bus(A + B) == apply_wind_bus(A) + apply_wind_bus(B)`.
-      - Todos os moduladores interpolados por amostra vêm exclusivamente do vídeo de vento:
-          * velocidade média -> decay do reverb e quantidade de efeito (wet)
-          * contraste local  -> ressonância e movimento do filtro
-          * direção dominante -> auto-pan e deriva estéreo
-          * turbulência      -> profundidade do chorus e feedback do delay (colcheia pontuada)
+    Applies the Wind spatial bus STRICTLY LINEARLY over `dry_stereo`.
+      - No self-generated sound: `apply_wind_bus(0) == 0`.
+      - Additivity preserved: `apply_wind_bus(A + B) == apply_wind_bus(A) + apply_wind_bus(B)`.
+      - All per-sample interpolated modulators come exclusively from the wind video:
+          * mean speed          -> reverb decay and wet amount
+          * local contrast      -> filter resonance and movement
+          * dominant direction  -> auto-pan and stereo drift
+          * turbulence          -> chorus depth and delay feedback (dotted eighth)
     """
     n = dry_stereo.shape[0]
     if n == 0:
         return dry_stereo.copy()
 
-    # Curvas suavizadas e interpoladas por amostra
+    # Smoothed and per-sample interpolated curves
     speed_s = np.clip(
         _smooth_and_interp_curve(wind_params.get("speed_curve", []), n, float(wind_params.get("mean_speed", 0.3))),
         0.0,
@@ -615,17 +614,17 @@ def apply_wind_bus(
     mean_turb = float(wind_params.get("mean_turbulence", float(turb_s.mean())))
     reverb_decay_sec = float(wind_params.get("reverb_decay_seconds", 1.35 + 3.10 * mean_speed))
 
-    # Curva perceptiva: garante ambiência audível mesmo em brisas suaves (5% -> 22%, 65% -> 81%)
+    # Perceptual curve: ensures audible ambience even in gentle breezes (5% -> 22%, 65% -> 81%)
     speed_eff_s = np.sqrt(np.clip(speed_s, 0.0, 1.0)).astype(np.float32)
     mean_speed_eff = float(math.sqrt(max(0.0, min(1.0, mean_speed))))
 
-    # Crossover complementar estritamente linear: mantém o sub-grave (<175 Hz) firme e centrado
+    # Strictly linear complementary crossover: keeps sub-bass (<175 Hz) tight and centered
     sub_band = _fft_lowpass_stereo(dry_stereo, 175.0, sr)
     air_band = (dry_stereo - sub_band).astype(np.float32)
 
     t = np.arange(n, dtype=np.float32) / sr
 
-    # 1. Direção dominante -> Auto-pan audível e deriva estéreo sobre a banda média/aguda
+    # 1. Dominant direction -> Audible auto-pan and stereo drift on the mid/high band
     drift_rate = 0.17 + 0.28 * mean_speed
     drift_lfo = np.sin(2.0 * np.pi * drift_rate * t).astype(np.float32)
     pan_pos = np.clip(
@@ -646,7 +645,7 @@ def apply_wind_bus(
         axis=1,
     ).astype(np.float32)
 
-    # 2. Contraste local -> Ressonância e movimento contínuo do filtro ("formante de vento")
+    # 2. Local contrast -> Resonance and continuous filter movement ("wind formant")
     eff_res = float(np.clip(max(mean_contrast, 0.28 + 0.45 * mean_speed_eff), 0.25, 0.95))
     band_lo = _fft_resonant_peak_stereo(drifted_air, 480.0, eff_res, sr)
     band_hi = _fft_resonant_peak_stereo(drifted_air, 2350.0, eff_res, sr)
@@ -657,7 +656,7 @@ def apply_wind_bus(
     )[:, None].astype(np.float32)
     filtered_sig = ((1.0 - sweep_alpha) * band_lo + sweep_alpha * band_hi).astype(np.float32)
 
-    # 3. Turbulência -> Chorus estéreo largo (decorrelação Haas L/R + LFO em quadratura)
+    # 3. Turbulence -> Wide stereo chorus (L/R Haas decorrelation + quadrature LFO)
     base_d_l = 0.011 * sr
     base_d_r = 0.019 * sr
     mod_d = (0.0018 + 0.0065 * turb_s + 0.0018 * speed_eff_s) * sr
@@ -684,7 +683,7 @@ def apply_wind_bus(
         axis=1,
     ).astype(np.float32)
 
-    # 4. Turbulência & Velocidade -> Ping-Pong Delay audível em colcheia pontuada (1º eco sem atenuação dupla)
+    # 4. Turbulence & Speed -> Audible dotted-eighth Ping-Pong Delay (1st echo without double attenuation)
     beat_sec = 60.0 / max(1.0, float(bpm))
     delay_samples = max(120, int(round(0.75 * beat_sec * sr)))
     feedback = float(np.clip(0.32 + 0.34 * max(mean_turb, 0.45 * mean_speed_eff), 0.30, 0.68))
@@ -699,7 +698,7 @@ def apply_wind_bus(
         ch = (tap - 1) % 2
         delay_raw[offset:, ch] += delay_src[: n - offset] * tap_gain
         if seamless_loop and offset < n:
-            # Envolve suavemente a cauda do eco na virada do loop
+            # Smoothly wrap the echo tail at the loop turnaround
             rem = delay_src[n - offset :]
             w_len = min(n, rem.size)
             if w_len > 0:
@@ -708,7 +707,7 @@ def apply_wind_bus(
     delay_mix_s = (0.20 + 0.24 * turb_s + 0.20 * speed_eff_s)[:, None].astype(np.float32)
     delay_wet = (delay_raw * delay_mix_s).astype(np.float32)
 
-    # 5. Velocidade média -> Hall Reverb amplo + Shimmer cristalino de +1 oitava
+    # 5. Mean speed -> Wide Hall Reverb + crystalline +1 octave Shimmer
     shimmer_mono = _linear_octave_shimmer_feed(mono_send, sr)
     shimmer_amt = float(np.clip(0.24 + 0.52 * mean_speed_eff, 0.20, 0.78))
     reverb_send = np.stack(
@@ -752,7 +751,7 @@ def apply_wind_bus(
     reverb_mix_s = (0.52 + 0.72 * speed_eff_s)[:, None].astype(np.float32)
     reverb_wet = (np.stack([conv_l_trim, conv_r_trim], axis=1) * reverb_mix_s).astype(np.float32)
 
-    # Combinação linear: sub-grave limpo + ar filtrado/panoramizado + Chorus + Ping-Pong Delay + Shimmer Reverb
+    # Linear combination: clean sub-bass + filtered/panned air + Chorus + Ping-Pong Delay + Shimmer Reverb
     air_filter_mix = np.clip(0.54 + 0.34 * np.maximum(speed_eff_s, contrast_s), 0.50, 0.90)[:, None].astype(np.float32)
     air_direct = (1.0 - air_filter_mix) * air_band + air_filter_mix * filtered_sig
     dry_keep = (0.72 - 0.24 * speed_eff_s)[:, None].astype(np.float32)
@@ -786,7 +785,7 @@ def compute_frame_rms_envelope(stereo_sig: np.ndarray, num_video_frames: int) ->
 
 
 # ============================================================================
-# Renderizador Principal (Stems Secos + Mix Dry + Mix Wind)
+# Main Renderer (Dry Stems + Mix Dry + Mix Wind)
 # ============================================================================
 
 def render_jukebox_audio(
@@ -800,8 +799,8 @@ def render_jukebox_audio(
     sr: int = SAMPLE_RATE,
 ) -> RenderedAudioBundle:
     """
-    Renderiza apenas os instrumentos habilitados (`chords.wav`, `bass.wav`, `melody.wav`),
-    soma-os exatamente em `mix_dry.wav` e aplica o bus linear de vento para gerar `mix_wind.wav`.
+    Renders only enabled instruments (`chords.wav`, `bass.wav`, `melody.wav`),
+    sums them exactly into `mix_dry.wav`, and applies the linear wind bus to generate `mix_wind.wav`.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

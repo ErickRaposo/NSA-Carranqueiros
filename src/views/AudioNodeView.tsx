@@ -25,9 +25,9 @@ interface AudioNodeViewProps {
 }
 
 /**
- * Nó Receptor de Áudio LAN (`?view=audio-node&spk=1..3`):
- * Permite usar outro computador/celular na mesma rede como saída exclusiva
- * para a Caixa C1, C2 ou C3, seguindo a identidade visual do Painel Técnico.
+ * LAN Audio Receiver Node (`?view=audio-node&spk=1..3`):
+ * Allows using another computer/phone on the same network as a dedicated output
+ * for Speaker C1, C2, or C3, matching the Technical Panel visual identity.
  */
 export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
   spkIndex,
@@ -167,7 +167,7 @@ export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
 
       <main className="admin-scroll flex min-h-0 flex-1 items-center justify-center p-4 lg:p-5">
         <section className={`w-full max-w-md p-5 ${ADMIN_PANEL_CLASS}`}>
-          {/* Identidade do Canal + Medidor RMS ao vivo */}
+          {/* Channel Identity + Live RMS Meter */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="inline-flex h-6 w-7 items-center justify-center rounded-md border border-[#1e3a66] bg-[#060c1a] text-xs font-semibold text-slate-100 [font-variant-numeric:tabular-nums]">
@@ -187,7 +187,7 @@ export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
             />
           </div>
 
-          {/* Seletor de Canal C1 | C2 | C3 */}
+          {/* Channel Selector C1 | C2 | C3 */}
           <div className={`mt-4 grid-cols-3 ${ADMIN_SEGMENT_WRAP_CLASS}`}>
             {([1, 2, 3] as SpeakerNodeIndex[]).map((idx) => {
               const s = speakerCalibration.speakers[speakerIndexToSlotId(idx)];
@@ -207,7 +207,7 @@ export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
             })}
           </div>
 
-          {/* Ativação Web Audio / Controle de Mute */}
+          {/* Web Audio Activation / Mute Control */}
           <div className="mt-4">
             {!isAudioReady ? (
               <button
@@ -244,7 +244,7 @@ export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
             )}
           </div>
 
-          {/* Telemetria Recebida da Mesa */}
+          {/* Telemetry Received from Console */}
           <div className="mt-4 grid grid-cols-3 divide-x divide-[#1e3a66]/45 rounded-xl border border-[#1e3a66]/45 bg-[#040b1a] py-2.5 text-center [font-variant-numeric:tabular-nums]">
             <div className="px-2">
               <div className="text-[11px] text-slate-400">{isPt ? 'Ganho' : 'Gain'}</div>
@@ -264,7 +264,7 @@ export const AudioNodeView: React.FC<AudioNodeViewProps> = ({
             </div>
           </div>
 
-          {/* Saída Física neste Aparelho */}
+          {/* Physical Output on This Device */}
           <div className="mt-4 border-t border-[#1e3a66]/45 pt-4">
             {isSetSinkIdSupported ? (
               <>

@@ -1,11 +1,11 @@
 -- ============================================================================
--- MINEIRØ / EARTHSONG — FASE 4: SCHEMA POSTGRES + SUPABASE REALTIME
--- Regra Áurea: 1 Pessoa = 1 Camada por Região | Coautoria Justa 5/5 | Ranking Real
+-- MINEIRØ / EARTHSONG — PHASE 4: POSTGRES + SUPABASE REALTIME SCHEMA
+-- Golden Rule: 1 Person = 1 Layer per Region | Fair 5/5 Co-authorship | Real Ranking
 -- ============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- 1. PERFIL DO EXPLORADOR (Sincronizado com Supabase Auth ou Auth Próprio)
+-- 1. EXPLORER PROFILE (Synced with Supabase Auth or Custom Auth)
 CREATE TABLE IF NOT EXISTS public.users_profile (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username TEXT NOT NULL UNIQUE CHECK (char_length(username) BETWEEN 2 AND 32),
@@ -19,19 +19,19 @@ CREATE TABLE IF NOT EXISTS public.users_profile (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 2. CONTRIBUIÇÕES COLETIVAS POR REGIÃO (1 VOZ POR PESSOA POR REGIÃO, 5 CAMADAS ÚNICAS)
+-- 2. COLLECTIVE CONTRIBUTIONS PER REGION (1 VOICE PER PERSON PER REGION, 5 UNIQUE LAYERS)
 CREATE TABLE IF NOT EXISTS public.region_stem_contributions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  region_key TEXT NOT NULL,           -- Ex.: 'country:BRA', 'country:PRT'
-  region_label TEXT NOT NULL,         -- Ex.: 'Brasil', 'Portugal'
+  region_key TEXT NOT NULL,           -- E.g., 'country:BRA', 'country:PRT'
+  region_label TEXT NOT NULL,         -- E.g., 'Brasil', 'Portugal'
   stem_id TEXT NOT NULL CHECK (stem_id IN ('melody', 'harmony', 'rhythm', 'bass', 'fx')),
   user_id UUID NOT NULL REFERENCES public.users_profile(id) ON DELETE CASCADE,
   contributor_name TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-  -- Garante que cada instrumento só seja aceso 1 vez por região
+  -- Ensures each instrument is lit only once per region
   CONSTRAINT uq_region_stem UNIQUE (region_key, stem_id),
-  -- Garante honestamente a regra central: 1 pessoa = 1 camada por região
+  -- Honestly enforces the core rule: 1 person = 1 layer per region
   CONSTRAINT uq_region_single_voice_per_user UNIQUE (region_key, user_id)
 );
 
@@ -41,7 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_region_contributions_region_key
 CREATE INDEX IF NOT EXISTS idx_region_contributions_created_at
   ON public.region_stem_contributions (created_at DESC);
 
--- 3. CRIAÇÕES VISUAIS COMPARTILHADAS (ESTÚDIO VISUAL GENERATIVO)
+-- 3. SHARED VISUAL CREATIONS (GENERATIVE VISUAL STUDIO)
 CREATE TABLE IF NOT EXISTS public.shared_art_mixes (
   slug TEXT PRIMARY KEY,
   author_id UUID REFERENCES public.users_profile(id) ON DELETE SET NULL,
@@ -50,12 +50,12 @@ CREATE TABLE IF NOT EXISTS public.shared_art_mixes (
   visual_style TEXT NOT NULL CHECK (visual_style IN ('bioluminescent', 'infrared', 'blueprint', 'satellite')),
   view_mode TEXT NOT NULL DEFAULT '3d' CHECK (view_mode IN ('3d', '2d')),
   country_iso TEXT,
-  layers_payload JSONB NOT NULL,      -- Ordem da pilha, enabled, opacidade e blendMode
+  layers_payload JSONB NOT NULL,      -- Stack order, enabled, opacity, and blendMode
   likes_count INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 4. GATILHO DE XP + RECONCILIAÇÃO JUSTA DE COAUTORIA 5/5 (TODOS OS 5 RECEBEM CRÉDITO!)
+-- 4. XP TRIGGER + FAIR 5/5 CO-AUTHORSHIP RECONCILIATION (ALL 5 RECEIVE CREDIT!)
 CREATE OR REPLACE FUNCTION public.fn_award_collective_contribution_xp()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -64,18 +64,18 @@ AS $$
 DECLARE
   v_region_count INTEGER;
 BEGIN
-  -- +35 XP imediatos para quem acendeu esta camada
+  -- Immediate +35 XP for whoever lit this layer
   UPDATE public.users_profile
   SET xp = xp + 35,
       updated_at = now()
   WHERE id = NEW.user_id;
 
-  -- Conta quantas camadas já foram acesas nesta região
+  -- Count how many layers have already been lit in this region
   SELECT COUNT(*) INTO v_region_count
   FROM public.region_stem_contributions
   WHERE region_key = NEW.region_key;
 
-  -- Quando a 5ª camada fecha 5/5, TODOS os 5 coautores ganham +50 XP e +1 Constelação 5/5!
+  -- When the 5th layer completes 5/5, ALL 5 co-authors earn +50 XP and +1 5/5 Constellation!
   IF v_region_count = 5 THEN
     UPDATE public.users_profile
     SET xp = xp + 50,
@@ -98,7 +98,7 @@ CREATE TRIGGER trg_award_collective_contribution_xp
   FOR EACH ROW
   EXECUTE FUNCTION public.fn_award_collective_contribution_xp();
 
--- 5. VIEW OFICIAL DO RANKING GLOBAL (SEM DADOS FICTÍCIOS)
+-- 5. OFFICIAL GLOBAL LEADERBOARD VIEW (NO MOCK DATA)
 CREATE OR REPLACE VIEW public.leaderboard_view AS
 SELECT
   ROW_NUMBER() OVER (ORDER BY p.xp DESC, p.completed_symphonies_count DESC, p.created_at ASC) AS position,
@@ -118,7 +118,7 @@ LEFT JOIN (
 ) c ON c.user_id = p.id
 ORDER BY p.xp DESC, p.completed_symphonies_count DESC;
 
--- 6. ROW LEVEL SECURITY (RLS) + REALTIME PARA O TOAST DA ÓRBITA COLETIVA
+-- 6. ROW LEVEL SECURITY (RLS) + REALTIME FOR COLLECTIVE ORBIT TOAST
 ALTER TABLE public.users_profile ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.region_stem_contributions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.shared_art_mixes ENABLE ROW LEVEL SECURITY;
@@ -141,12 +141,12 @@ CREATE POLICY "Leitura pública de artes compartilhadas"
 CREATE POLICY "Qualquer explorador salva link curto de arte"
   ON public.shared_art_mixes FOR INSERT WITH CHECK (true);
 
--- Habilitar transmissão ao vivo (Supabase Realtime) para o Toast da Órbita Coletiva:
+-- Enable live broadcast (Supabase Realtime) for the Collective Orbit Toast:
 -- ALTER PUBLICATION supabase_realtime ADD TABLE public.region_stem_contributions;
 
 
 -- ============================================================================
--- 7. REGISTRO OFICIAL DE SALAS ATIVAS (?room=XXXXXX) — SETUP / PROJETORES / MOBILE
+-- 7. OFFICIAL ACTIVE ROOMS REGISTRY (?room=XXXXXX) — SETUP / PROJECTORS / MOBILE
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS public.rooms (
   code TEXT PRIMARY KEY CHECK (char_length(code) BETWEEN 3 AND 24),

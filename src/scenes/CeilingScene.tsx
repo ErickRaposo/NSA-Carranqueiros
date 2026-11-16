@@ -28,19 +28,19 @@ const ORBIT_RINGS: readonly OrbitRingSpec[] = [
 ];
 
 const CEILING_FLAG_OPTIONS: CeilingFlagOption[] = [
-  // Anel interno (4 países)
+  // Inner ring (4 countries)
   { id: '076', alpha2: 'BR', namePt: 'Brasil', nameEn: 'Brazil', orbitRing: 0 },
   { id: '818', alpha2: 'EG', namePt: 'Egito', nameEn: 'Egypt', orbitRing: 0 },
   { id: '392', alpha2: 'JP', namePt: 'Japão', nameEn: 'Japan', orbitRing: 0 },
   { id: '250', alpha2: 'FR', namePt: 'França', nameEn: 'France', orbitRing: 0 },
-  // Anel médio (6 países)
+  // Middle ring (6 countries)
   { id: '840', alpha2: 'US', namePt: 'Estados Unidos', nameEn: 'United States', orbitRing: 1 },
   { id: '276', alpha2: 'DE', namePt: 'Alemanha', nameEn: 'Germany', orbitRing: 1 },
   { id: '356', alpha2: 'IN', namePt: 'Índia', nameEn: 'India', orbitRing: 1 },
   { id: '036', alpha2: 'AU', namePt: 'Austrália', nameEn: 'Australia', orbitRing: 1 },
   { id: '484', alpha2: 'MX', namePt: 'México', nameEn: 'Mexico', orbitRing: 1 },
   { id: '710', alpha2: 'ZA', namePt: 'África do Sul', nameEn: 'South Africa', orbitRing: 1 },
-  // Anel externo (9 países)
+  // Outer ring (9 countries)
   { id: '620', alpha2: 'PT', namePt: 'Portugal', nameEn: 'Portugal', orbitRing: 2 },
   { id: '124', alpha2: 'CA', namePt: 'Canadá', nameEn: 'Canada', orbitRing: 2 },
   { id: '032', alpha2: 'AR', namePt: 'Argentina', nameEn: 'Argentina', orbitRing: 2 },
@@ -128,10 +128,10 @@ const CEILING_COMETS: readonly CometSpec[] = [
 ];
 
 /**
- * Superfície Projetada — TETO (`ceiling` · Projetor 2):
- * - `boarding` / `countdown`: escotilha da nave + rastros de subida para o espaço.
- * - `idle` / `zero_g` / `ended` / `exploring` (sem país escolhido): céu estrelado + cometas + 19 bandeiras em órbita.
- * - `exploring` (com país escolhido e `storyStep > 0`): os 5 PNGs empilhados estilo Photoshop + `liveEvents`.
+ * Projected Surface — CEILING (`ceiling` · Projector 2):
+ * - `boarding` / `countdown`: spaceship hatch + ascent trails into space.
+ * - `idle` / `zero_g` / `ended` / `exploring` (no country selected): starry sky + comets + 19 orbiting flags.
+ * - `exploring` (country selected and `storyStep > 0`): 5 stacked Photoshop-style PNGs + `liveEvents`.
  */
 export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => {
   const {
@@ -193,7 +193,7 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
           className="absolute inset-0 z-10 overflow-hidden"
           style={{ containerType: 'size' }}
         >
-          {/* Astros espaciais espalhados no teto em repouso/boas-vindas (sem bandeiras ainda) */}
+          {/* Celestial bodies scattered across the ceiling in idle/briefing (no flags yet) */}
           {showIdleCosmos && (
             <>
               <motion.div
@@ -268,7 +268,7 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
             </>
           )}
 
-          {/* Cometas cruzando o céu estrelado com cauda luminosa */}
+          {/* Comets crossing the starry sky with luminous tails */}
           {showComets &&
             CEILING_COMETS.map((comet, idx) => (
               <motion.div
@@ -314,7 +314,7 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
 
           {showFloatingFlags && (
             <>
-              {/* Núcleo e trilhas orbitais muito sutis no céu #000000 */}
+              {/* Subtle orbital core and tracks against the #000000 sky */}
               <div
                 className="pointer-events-none absolute top-1/2 left-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-200/80"
                 style={{
@@ -420,7 +420,7 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
         </div>
       ) : (
         <div className="relative z-10 flex h-full w-full items-center justify-center p-4">
-          {/* Ações sutis das camadas da NASA no céu aberto do teto */}
+          {/* Subtle NASA layer effects in the open ceiling sky */}
           {isLayerVisible('temperature') && (
             <motion.div
               className="pointer-events-none absolute inset-12 rounded-full blur-3xl"
@@ -513,7 +513,7 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
                 />
               ))}
 
-          {/* Card Colorido de Curiosidades & Hero Banner da Bandeira no Teto */}
+          {/* Colorful Curiosities Card & Flag Hero Banner on the Ceiling */}
           {nasaReport && (
             <motion.aside
               key={nasaReport.countryId}
@@ -523,7 +523,7 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
               className="pointer-events-none flex w-[490px] max-w-[84%] flex-col overflow-hidden rounded-[22px] border border-white/15 bg-[#060b19]/94 text-left shadow-[0_0_64px_rgba(0,0,0,0.92)]"
               data-testid="ceiling-country-nasa-card"
             >
-              {/* Capa Hero Full-Width da Bandeira (100% limpa sem texto em cima + vinheta sutil nas bordas) */}
+              {/* Full-Width Flag Hero Cover (100% clean without overlaid text + subtle edge vignette) */}
               {nasaReport.alpha2 && (
                 <div
                   className="relative h-[152px] w-full shrink-0 overflow-hidden bg-slate-950"
@@ -550,7 +550,7 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
                 </div>
               )}
 
-              {/* Faixa nas cores dos 5 mapas da NASA logo abaixo da bandeira */}
+              {/* Accent strip in the colors of the 5 NASA maps right below the flag */}
               <div
                 className="h-1 w-full shrink-0"
                 style={{
@@ -560,7 +560,7 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
               />
 
               <div className="flex flex-col gap-2.5 p-4">
-                {/* Bloco de Títulos separado abaixo da bandeira */}
+                {/* Separate title block below the flag */}
                 <div className="flex flex-col gap-1 border-b border-white/10 pb-2.5">
                   <div className="flex items-center justify-between gap-2.5">
                     <span className="inline-flex items-center rounded-full border border-sky-400/35 bg-sky-500/12 px-2.5 py-0.5 text-[10px] font-bold tracking-[0.12em] text-sky-300 uppercase">
@@ -582,7 +582,7 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
                   </div>
                 </div>
 
-                {/* Curiosidade Divertida Baseada nos Dados Reais */}
+                {/* Fun Curiosity Based on Real Data */}
                 <div className="rounded-xl border border-amber-300/25 bg-white/[0.04] px-3.5 py-2">
                   <div className="text-[10px] font-bold tracking-[0.08em] text-amber-200 uppercase">
                     {nasaReport.curiosityTitle}
@@ -592,7 +592,7 @@ export const CeilingScene: React.FC<SceneSurfaceProps> = ({ renderContext }) => 
                   </p>
                 </div>
 
-                {/* 5 Cards Coloridos com as Cores dos Mapas */}
+                {/* 5 Colorful Cards Matching the Map Colors */}
                 <div className="grid grid-cols-2 gap-2">
                   {nasaReport.layers.map((row, idx) => (
                     <div

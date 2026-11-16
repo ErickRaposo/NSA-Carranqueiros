@@ -756,7 +756,7 @@ export const JukeboxStudioStage: React.FC<JukeboxStudioStageProps> = ({
             const dirSign = windPanX >= 0 ? 1 : -1;
             const axEnd = Math.max(sqX + 6 * u, Math.min(sqX + sqSize - 6 * u, wx + dirSign * arrowLen));
 
-            // Vetor direcional real do vento (Oeste <-> Leste)
+            // Actual directional wind vector (West <-> East)
             ctx.strokeStyle = 'rgba(56, 189, 248, 0.85)';
             ctx.lineWidth = Math.max(1.0, 2.0 * u);
             ctx.beginPath();
@@ -1079,7 +1079,7 @@ export const JukeboxStudioStage: React.FC<JukeboxStudioStageProps> = ({
       ctx.lineWidth = Math.max(0.6, 1.0 * u);
       ctx.strokeRect(px0, py0, pw, ph);
 
-      // Callout de alto contraste quando todas as 5 camadas estão desligadas (Silêncio Intencional)
+      // High-contrast callout when all 5 layers are muted (Intentional Silence)
       const allLayersSilent =
         !melMainAudible &&
         !spkAudible &&
@@ -1241,7 +1241,7 @@ export const JukeboxStudioStage: React.FC<JukeboxStudioStageProps> = ({
         </div>
       )}
 
-      {/* Top-Right Mineiro3D + Typewriter Pill Overlay (transform: scale(u) -> cabendo exatamente na barra superior sem cobrir os mapas) */}
+      {/* Top-Right Mineiro3D + Typewriter Pill Overlay (transform: scale(u) -> fits exactly in the top bar without covering the maps) */}
       {showTopHeader && !hideRobot && (
         <div
           className="pointer-events-none absolute top-0 right-0 flex h-[34px] w-[328px] flex-nowrap items-center gap-2 overflow-hidden rounded-full border border-sky-400/35 bg-[#050d20]/94 pr-3.5 pl-1 shadow-[0_0_24px_rgba(14,165,233,0.18)]"

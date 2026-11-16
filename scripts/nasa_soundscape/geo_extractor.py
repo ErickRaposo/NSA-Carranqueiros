@@ -1,16 +1,16 @@
 """
-Extrator geográfico, físico-visual e espacial 2D reamostrado em linha do tempo comum
-para os 5 vídeos globais da NASA (arquitetura Earth Jukebox).
+Geographic, physical-visual, and 2D spatial extractor resampled onto a common timeline
+for the 5 global NASA videos (Earth Jukebox architecture).
 
-Princípios garantidos:
-  - Reamostragem temporal comum: vídeos com durações e FPS distintos (ex.: 100s @ 60fps
-    da ISS vs. 31s @ 12fps do GMAO) são projetados na mesma grade canônica de `total_bars`.
-  - Fluxo óptico (Farneback + diferença temporal) calculado isoladamente por vídeo.
-  - Raios (Melodia): limiares adaptativos por percentil (com piso mínimo para silêncio real),
-    componentes conectados, fusão refratária entre frames vizinhos mantendo o frame de pico
-    e mapa 2D de persistência anual para notas-âncora.
-  - NO2 (Baixo) e CO (Acordes): perfis espaciais esquerda->direita por compasso.
-  - Vento (Efeito): séries contínuas de velocidade, contraste local, direção dominante e turbulência.
+Guaranteed principles:
+  - Common temporal resampling: videos with different durations and FPS (e.g., 100s @ 60fps
+    from ISS vs. 31s @ 12fps from GMAO) are projected onto the same canonical `total_bars` grid.
+  - Optical flow (Farneback + temporal difference) computed per video in isolation.
+  - Lightning (Melody): percentile-adaptive thresholds (with a minimum floor for true silence),
+    connected components, refractory merging across neighboring frames keeping the peak frame,
+    and a 2D annual persistence map for anchor notes.
+  - NO2 (Bass) and CO (Chords): left-to-right spatial profiles per bar.
+  - Wind (Effect): continuous series for speed, local contrast, dominant direction, and turbulence.
 """
 
 from dataclasses import asdict, dataclass, field
@@ -27,7 +27,7 @@ from .config import ALL_LAYERS, BASE_DIR, VIDEO_FILES, GeoBoundingBox, normalize
 
 @dataclass
 class SpatialFlashPoint:
-    """Ponto espacial 2D normalizado [0..1] dentro do recorte."""
+    """Normalized 2D spatial point [0..1] within the crop."""
     x_norm: float
     y_norm: float
     intensity: float
@@ -36,7 +36,7 @@ class SpatialFlashPoint:
 
 @dataclass
 class LightningEvent:
-    """Evento discreto de relâmpago após agrupamento espacial e fusão refratária temporal."""
+    """Discrete lightning event after spatial clustering and temporal refractory merging."""
     frame: int
     total_frames: int
     x_norm: float
@@ -63,7 +63,7 @@ class LightningEvent:
 
 @dataclass
 class LayerFeatures:
-    """Métricas e curvas de controle derivadas EXCLUSIVAMENTE do vídeo desta camada."""
+    """Metrics and control curves derived EXCLUSIVELY from this layer's video."""
     layer_id: str
     video_file: str
     source_duration_sec: float
@@ -136,7 +136,7 @@ class LayerFeatures:
 
 @dataclass
 class SynchronizedLayerStream:
-    """Fluxo de quadros reamostrados na linha do tempo canônica + campos físicos decodificados."""
+    """Stream of frames resampled onto the canonical timeline + decoded physical fields."""
     features: LayerFeatures
     frames_bgr: List[np.ndarray]
     fields_norm: List[np.ndarray]
@@ -145,7 +145,7 @@ class SynchronizedLayerStream:
 
 
 def bbox_to_pixels(bbox: GeoBoundingBox, width: int, height: int) -> Tuple[int, int, int, int]:
-    """Converte bounding box (lat/lon) para coordenadas de pixel (x0, x1, y0, y1)."""
+    """Converts a bounding box (lat/lon) to pixel coordinates (x0, x1, y0, y1)."""
     b = bbox.validate()
     x0 = int(round(((b.lon_min + 180.0) / 360.0) * width))
     x1 = int(round(((b.lon_max + 180.0) / 360.0) * width))
@@ -162,7 +162,7 @@ def bbox_to_pixels(bbox: GeoBoundingBox, width: int, height: int) -> Tuple[int, 
 def build_hud_valid_mask(
     width: int, height: int, x0: int, x1: int, y0: int, y1: int, has_gmao_hud: bool
 ) -> np.ndarray:
-    """Descarta overlays de logo/timestamp da NASA GMAO nos cantos esquerdos caso intersectem."""
+    """Discards NASA GMAO logo/timestamp overlays in the left corners if they intersect."""
     mask = np.ones((y1 - y0, x1 - x0), dtype=bool)
     if not has_gmao_hud:
         return mask
@@ -185,7 +185,7 @@ def build_hud_valid_mask(
 
 
 # ============================================================================
-# Decodificadores heurísticos calibrados para a paleta visual de cada vídeo NASA
+# Heuristic decoders calibrated to each NASA video's visual palette
 # ============================================================================
 
 def decode_temperature_map(rgb: np.ndarray, center_lat: float) -> np.ndarray:
@@ -296,7 +296,7 @@ def decode_layer_field(layer_id: str, rgb: np.ndarray, center_lat: float) -> np.
 
 
 # ============================================================================
-# Análises Espaciais, Fluxo Óptico Isolado e Extração Adaptativa de Raios
+# Spatial Analysis, Isolated Optical Flow, and Adaptive Lightning Extraction
 # ============================================================================
 
 def _find_frame_hotspot(
@@ -359,7 +359,7 @@ def _compute_frame_motion(
     prev_field: Optional[np.ndarray],
     valid_mask: np.ndarray,
 ) -> float:
-    """Fluxo óptico Farneback + diferença entre frames restrito APENAS a este vídeo."""
+    """Farneback optical flow + frame difference restricted ONLY to this video."""
     if prev_field is None or prev_field.shape != field.shape:
         return 0.0
     diff = float(np.abs(field - prev_field)[valid_mask].mean()) if valid_mask.any() else 0.0
@@ -393,8 +393,8 @@ def _compute_wind_frame_metrics(
     valid_mask: np.ndarray,
 ) -> Tuple[float, float, float]:
     """
-    Extrai direção dominante [-1..1], contraste local [0..1] e turbulência instantânea [0..1]
-    exclusivamente do mapa de vento.
+    Extracts dominant direction [-1..1], local contrast [0..1], and instantaneous turbulence [0..1]
+    exclusively from the wind map.
     """
     masked = np.where(valid_mask, field, 0.0).astype(np.float32)
     gx = cv2.Sobel(masked, cv2.CV_32F, 1, 0, ksize=3)
@@ -437,14 +437,14 @@ def _extract_lightning_events_and_persistence(
     total_bars: int = 8,
 ) -> Tuple[List[LightningEvent], np.ndarray, List[dict], Dict[str, float], List[dict]]:
     """
-    Extrai eventos discretos de raios com:
-      1. Transiente entre frames + brilho.
-      2. Limiares adaptativos por percentil do vídeo/recorte (com piso mínimo para silêncio real).
-      3. Componentes conectados (descartando micro-ruído).
-      4. Período refratário temporal: funde manchas na mesma posição em frames vizinhos, mantendo o pico.
-      5. Mapa 2D de persistência anual em todo o vídeo: identifica regiões persistentes (notas-âncora).
-      6. Contagem física quadro a quadro de pontos amarelos visíveis (`frame_yellow_bursts`) para
-         abertura em tempo real de dobras harmônicas (5a/8a) e cintilação cristalina aguda.
+    Extracts discrete lightning events with:
+      1. Inter-frame transient + brightness.
+      2. Percentile-adaptive thresholds per video/crop (with a minimum floor for true silence).
+      3. Connected components (discarding micro-noise).
+      4. Temporal refractory period: merges blobs at the same position in neighboring frames, keeping the peak.
+      5. 2D annual persistence map across the whole video: identifies persistent regions (anchor notes).
+      6. Frame-by-frame physical count of visible yellow dots (`frame_yellow_bursts`) for
+         real-time opening of harmonic doublings (5th/8th) and high crystalline sparkle.
     """
     grid_h, grid_w = 24, 32
     empty_grid = np.zeros((grid_h, grid_w), dtype=np.float32)
@@ -455,9 +455,9 @@ def _extract_lightning_events_and_persistence(
     h, w = fields_norm[0].shape[:2]
     valid_area = float(max(1, int(valid_mask.sum())))
 
-    # 1. Remove luzes de cidades noturnas (presentes em ~30-50% dos quadros conforme passa a sombra
-    #    dia/noite da ISS -> capturadas pelo percentil 88 temporal por pixel), preservando clarões
-    #    reais de relâmpagos (eventos impulsivos breves que brilham em poucos quadros).
+    # 1. Remove nighttime city lights (present in ~30-50% of frames as the ISS day/night
+    #    terminator passes -> captured by the per-pixel 88th temporal percentile), preserving
+    #    real lightning flashes (brief impulsive events glowing for only a few frames).
     masked_stack = np.stack(
         [np.where(valid_mask, f, 0.0).astype(np.float32) for f in fields_norm], axis=0
     )
@@ -470,7 +470,7 @@ def _extract_lightning_events_and_persistence(
     global_max = float(dynamic_stack.max())
     empty_bursts = [{"dot_count": 0, "yellow_density": 0.0, "top_points": []} for _ in range(n_frames)]
 
-    # Piso absoluto de silêncio: vídeo zerado/mascarado ou apenas luzes fixas -> zero eventos!
+    # Absolute silence floor: zeroed/masked video or only static lights -> zero events!
     if global_max < 0.075:
         return [], empty_grid, [], {"pixel_thresh": 0.08, "peak_thresh": 0.10, "min_area_px": 4.0}, empty_bursts
 
@@ -492,7 +492,7 @@ def _extract_lightning_events_and_persistence(
         score_maps.append(blurred)
         prev_dyn = dyn
 
-        # Medição física comparável entre regiões: pontos amarelos acesos neste exato quadro (dyn >= 0.13)
+        # Cross-region comparable physical measurement: lit yellow dots in this exact frame (dyn >= 0.13)
         y_u8 = ((dyn >= 0.13) & valid_mask).astype(np.uint8)
         if y_u8.any():
             y_closed = cv2.morphologyEx(y_u8, cv2.MORPH_CLOSE, dot_kernel)
@@ -515,7 +515,7 @@ def _extract_lightning_events_and_persistence(
                     )
                 )
             pts_frame.sort(reverse=True)
-            # Escala física: <=12 pontos = 0.0 (puro); 13..48 = peso 5a/8a; 49..165+ = cintilação cristalina
+            # Physical scale: <=12 dots = 0.0 (pure); 13..48 = 5th/8th weight; 49..165+ = crystalline sparkle
             y_dens = float(np.clip((dot_cnt - 12.0) / 145.0, 0.0, 1.0))
             frame_yellow_bursts.append(
                 {
@@ -530,7 +530,7 @@ def _extract_lightning_events_and_persistence(
         else:
             frame_yellow_bursts.append({"dot_count": 0, "yellow_density": 0.0, "top_points": []})
 
-    # 2. Limiares adaptativos por percentil dos pixels transientes reais do recorte
+    # 2. Percentile-adaptive thresholds on real transient pixels in the crop
     active_samples = (
         np.concatenate(
             [sm[valid_mask & (sm > 0.04)] for sm in score_maps if np.any(valid_mask & (sm > 0.04))]
@@ -547,7 +547,7 @@ def _extract_lightning_events_and_persistence(
     peak_thresh = float(np.clip(pix_thresh * 1.20, 0.095, 0.28))
     min_area = max(3, min(10, int(round(0.00008 * valid_area))))
 
-    # 3. Componentes conectados em cada frame
+    # 3. Connected components in each frame
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
     raw_blobs: List[LightningEvent] = []
 
@@ -584,12 +584,12 @@ def _extract_lightning_events_and_persistence(
             "min_area_px": float(min_area),
         }, frame_yellow_bursts
 
-    # 4. Fusão refratária entre frames vizinhos na mesma posição mantendo o frame de pico
+    # 4. Refractory merging across neighboring frames at the same position, keeping the peak frame
     frames_per_bar = max(2, n_frames // max(1, total_bars))
     refractory_frames = max(2, frames_per_bar // 6)
     spatial_merge_radius = 0.065
 
-    # Ordena do pico mais forte para o mais fraco (desempate determinístico por coordenada/frame)
+    # Sort from strongest to weakest peak (deterministic tie-breaker by coordinate/frame)
     raw_blobs.sort(
         key=lambda ev: (
             round(ev.intensity * math.sqrt(max(1e-5, ev.area_ratio)), 6),
@@ -614,10 +614,10 @@ def _extract_lightning_events_and_persistence(
         else:
             fused_events.append(cand)
 
-    # Ordena cronologicamente
+    # Sort chronologically
     fused_events.sort(key=lambda ev: (ev.frame, ev.x_norm, ev.y_norm))
 
-    # 5. Mapa de persistência anual (acumula todos os eventos do vídeo inteiro)
+    # 5. Annual persistence map (accumulates all events across the entire video)
     yy, xx = np.mgrid[0:grid_h, 0:grid_w].astype(np.float32)
     xx_norm = (xx + 0.5) / grid_w
     yy_norm = (yy + 0.5) / grid_h
@@ -631,7 +631,7 @@ def _extract_lightning_events_and_persistence(
     if float(pers_grid.max()) > 1e-6:
         pers_grid /= float(pers_grid.max())
 
-    # Pontua cada evento com a persistência de sua região geográfica
+    # Score each event with the persistence of its geographic region
     pers_scores: List[float] = []
     for ev in fused_events:
         gx_i = min(grid_w - 1, max(0, int(ev.x_norm * grid_w)))
@@ -643,7 +643,7 @@ def _extract_lightning_events_and_persistence(
     for ev in fused_events:
         ev.is_anchor = bool(ev.persistence >= anchor_thresh and len(fused_events) >= 3)
 
-    # Extrai até 4 centros persistentes dominantes para manifesto/diagnóstico
+    # Extract up to 4 dominant persistent centers for manifest/diagnostics
     persistence_hotspots: List[dict] = []
     temp_grid = pers_grid.copy()
     for _ in range(4):
@@ -674,7 +674,7 @@ def _compute_scan_windows(
     num_windows: int = 16,
     layer_id: str = "chords",
 ) -> List[dict]:
-    """Percorre o mapa esquerda->direita sincronizado ao tempo do vídeo em `num_windows` passos."""
+    """Scans the map left->right synchronized to video time in `num_windows` steps."""
     if not fields_norm:
         return []
     h, w = fields_norm[0].shape[:2]
@@ -735,9 +735,9 @@ def _compute_bar_column_profiles(
     cols_per_bar: int = 8,
 ) -> List[List[dict]]:
     """
-    Para cada compasso (fatia temporal do vídeo), varre o recorte da esquerda para a direita
-    em `cols_per_bar` colunas (ex.: 8 colcheias), medindo nível médio, pico urbano (p95),
-    contraste espacial e centroide vertical Y.
+    For each bar (temporal slice of the video), scans the crop left-to-right
+    in `cols_per_bar` columns (e.g., 8 eighth-notes), measuring mean level, urban peak (p95),
+    spatial contrast, and vertical Y centroid.
     """
     if not fields_norm:
         return []
@@ -785,7 +785,7 @@ def _compute_bar_column_profiles(
 
 
 # ============================================================================
-# Decodificação e Reamostragem Temporal Comum de Qualquer Vídeo
+# Decoding and Common Temporal Resampling of Any Video
 # ============================================================================
 
 def _decode_video_resampled_tiles(
@@ -798,8 +798,8 @@ def _decode_video_resampled_tiles(
     blend_frames: bool = True,
 ) -> Tuple[List[np.ndarray], np.ndarray, float, float]:
     """
-    Reamostra qualquer vídeo (independente da duração ou FPS nativo) para exatamente
-    `num_target_frames` quadros uniformemente distribuídos na linha do tempo comum.
+    Resamples any video (regardless of duration or native FPS) to exactly
+    `num_target_frames` uniformly distributed frames on the common timeline.
     """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -815,9 +815,9 @@ def _decode_video_resampled_tiles(
     cw, ch = x1 - x0, y1 - y0
     tile_w, tile_h = tile_size
 
-    # Define janela temporal: por padrão usa 100% da duração do vídeo (evolução anual completa)
+    # Define temporal window: by default uses 100% of video duration (full annual evolution)
     if time_start_sec is not None and window_span_sec is not None and window_span_sec > 0:
-        # Escala proporcional caso o vídeo tenha duração diferente da referência de 31s
+        # Proportional scaling if the video has a different duration from the 31s reference
         start_norm = float(np.clip(time_start_sec / 31.0, 0.0, 0.90))
         span_norm = float(np.clip(window_span_sec / 31.0, 0.08, 1.0 - start_norm))
         actual_start = start_norm * src_duration_sec
@@ -835,7 +835,7 @@ def _decode_video_resampled_tiles(
         is_huge_4k = (total_src_frames > 1500 and width >= 3000 and actual_span > 40.0)
 
         if is_huge_4k:
-            # Extração rápida multithread de keyframes 1Hz do vídeo 4K 60fps da ISS (~101 frames cobrindo os 100s)
+            # Fast multithreaded 1Hz keyframe extraction from the ISS 4K 60fps video (~101 frames covering 100s)
             vf_chain = f"crop={cw}:{ch}:{x0}:{y0},scale={tile_w}:{tile_h}:flags={scale_flag}"
             cmd = [
                 ffmpeg_bin,
@@ -916,13 +916,13 @@ def _decode_video_resampled_tiles(
     if not raw_frames:
         raise RuntimeError(f"Nenhum quadro pôde ser decodificado de {video_path}")
 
-    # Reamostra exatamente para `num_target_frames` quadros na linha do tempo comum
+    # Resample to exact `num_target_frames` frames on the common timeline
     n_src = len(raw_frames)
     resampled: List[np.ndarray] = []
     if n_src == num_target_frames:
         resampled = raw_frames
     elif not blend_frames:
-        # Preserva transientes nítidos de clarões (sem cross-blend artificial entre frames)
+        # Preserve sharp flash transients (no artificial cross-blend between frames)
         idxs = np.round(np.linspace(0, n_src - 1, num_target_frames)).astype(int)
         resampled = [raw_frames[int(k)] for k in idxs]
     else:
@@ -951,8 +951,8 @@ def extract_layer_stream(
     predecoded_tiles_override: Optional[Tuple[List[np.ndarray], np.ndarray, float, float]] = None,
 ) -> SynchronizedLayerStream:
     """
-    Extrai e analisa um único vídeo da NASA na linha do tempo canônica (`total_bars * frames_per_bar` quadros),
-    100% isolado das demais camadas.
+    Extracts and analyzes a single NASA video on the canonical timeline (`total_bars * frames_per_bar` frames),
+    100% isolated from the other layers.
     """
     cid = normalize_layer_id(layer_id)
     bbox = bbox.validate()
@@ -974,7 +974,7 @@ def extract_layer_stream(
         )
     width, height, x0, x1, y0, y1 = [int(v) for v in geom]
 
-    # Raios não têm HUD da GMAO; nos vídeos GMAO descartamos logo/timestamp caso intersectem
+    # Lightning has no GMAO HUD; in GMAO videos discard logo/timestamp if they intersect
     has_hud = cid != "melody"
     raw_mask = build_hud_valid_mask(width, height, x0, x1, y0, y1, has_gmao_hud=has_hud)
     mask_tile = cv2.resize(
@@ -983,9 +983,9 @@ def extract_layer_stream(
     if not mask_tile.any():
         mask_tile[:] = True
 
-    # Para raios evitamos cross-blend entre keyframes ao reamostrar para preservar nitidez dos clarões
+    # For lightning we avoid cross-blending between keyframes when resampling to preserve flash sharpness
     if cid == "melody":
-        # Reindexação nearest preserva picos transientes exatos
+        # Nearest re-indexing preserves exact transient peaks
         frames_bgr = raw_frames_check
     else:
         frames_bgr = raw_frames_check
@@ -1038,7 +1038,7 @@ def extract_layer_stream(
             temporal_diffs.append(float(np.abs(field - prev_field)[mask_tile].mean()))
         prev_field = field
 
-    # Agrega séries em `musical_slots` colcheias (total_bars * 8)
+    # Aggregate series into `musical_slots` eighth-notes (total_bars * 8)
     slot_series: List[float] = []
     slot_contours: List[float] = []
     slot_hotspots: List[SpatialFlashPoint] = []
@@ -1151,8 +1151,8 @@ def extract_all_layer_streams(
     preview_out_path: Optional[Path] = None,
 ) -> Dict[str, SynchronizedLayerStream]:
     """
-    Extrai os 5 streams canônicos (`chords`, `bass`, `melody`, `temperature`, `wind`)
-    na mesma linha do tempo comum, permitindo sobrescrever vídeos individuais (`video_overrides`).
+    Extracts the 5 canonical streams (`chords`, `bass`, `melody`, `temperature`, `wind`)
+    on the same common timeline, allowing individual video overrides (`video_overrides`).
     """
     bbox = bbox.validate()
     overrides_norm: Dict[str, Path] = {}

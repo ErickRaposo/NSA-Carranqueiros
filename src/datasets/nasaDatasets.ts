@@ -71,8 +71,8 @@ let remoteCountriesBaseUrl = '';
 let remoteCountryIdSet: ReadonlySet<string> = new Set<string>();
 
 /**
- * Configura roteamento híbrido de países: 100 países locais no bundle (`/countries/<id>/...`)
- * e países excedentes servidos via bucket externo (ex.: Supabase Storage / Cloudflare R2).
+ * Configures hybrid country routing: 100 local countries in the bundle (`/countries/<id>/...`)
+ * and remaining countries served via external bucket (e.g., Supabase Storage / Cloudflare R2).
  */
 export function setRemoteCountryAssetConfig(
   baseUrl: string | undefined | null,

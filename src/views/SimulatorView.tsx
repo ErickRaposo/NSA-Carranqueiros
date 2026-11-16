@@ -36,8 +36,8 @@ interface SimulatorViewProps {
 const LOGICAL_SCENE_HEIGHT = 960;
 
 /**
- * Monta qualquer cena na mesma resolução lógica do Projetor (960px de altura)
- * e aplica scale uniforme para que Simulador 3D, Demo e Projetor sejam 1:1 fiéis.
+ * Renders any scene at the same logical resolution as the Projector (960px height)
+ * and applies uniform scaling so the 3D Simulator, Demo, and Projector are 1:1 faithful.
  */
 const LogicalSceneViewport: React.FC<{
   aspectRatio: number;
@@ -170,7 +170,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
   const ceilingAspect =
     roomDimensions.ceiling.widthCm / Math.max(1, roomDimensions.ceiling.heightCm);
 
-  // Escala geométrica exata em pixels (1 cm -> ~0.82 px base) mantendo proporções reais da sala
+  // Exact geometric scale in pixels (1 cm -> ~0.82 px base) preserving real room proportions
   const maxCm = Math.max(
     roomDimensions.leftWall.widthCm,
     roomDimensions.rightWall.widthCm,
@@ -196,7 +196,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
       }`}
       data-testid="simulator-view"
     >
-      {/* Camera Presets Bar (alinhada em altura, espaçamento e circunferência com a barra do Tablet) */}
+      {/* Camera Presets Bar (aligned in height, spacing, and circumference with the Tablet bar) */}
       <div
         className={`z-20 flex min-h-[46px] shrink-0 items-center gap-2 overflow-x-auto border-b border-[#1e3a66]/45 bg-[#040b1a]/95 px-3.5 py-1.5 ${
           hideBrandTitle ? 'justify-between' : 'justify-between'
@@ -418,7 +418,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
             setZoomScale(Number(next.toFixed(3)));
           }}
         >
-          {/* Verdadeira Sala 3D Ortogonal 90°: Vértice (0,0,0) = encontro superior Parede Esq + Parede Dir + Teto */}
+          {/* True 90° Orthogonal 3D Room: Vertex (0,0,0) = top junction of Left Wall + Right Wall + Ceiling */}
           <div
             style={{
               position: 'relative',
@@ -431,7 +431,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
               transition: dragStateRef.current ? 'none' : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)',
             }}
           >
-            {/* 1. Parede Esquerda (x = 0, z ∈ [0, leftW], voltada para +X dentro da sala) */}
+            {/* 1. Left Wall (x = 0, z ∈ [0, leftW], facing +X into the room) */}
             <div
               className={`pointer-events-none absolute overflow-hidden bg-black shadow-2xl select-none ${seamBorderClass}`}
               style={{
@@ -457,7 +457,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
               </LogicalSceneViewport>
             </div>
 
-            {/* 2. Parede Direita (z = 0, x ∈ [0, rightW], voltada para +Z dentro da sala) */}
+            {/* 2. Right Wall (z = 0, x ∈ [0, rightW], facing +Z into the room) */}
             <div
               className={`pointer-events-none absolute overflow-hidden bg-black shadow-2xl select-none ${seamBorderClass}`}
               style={{
@@ -480,7 +480,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
               </LogicalSceneViewport>
             </div>
 
-            {/* 3. Teto (y = 0, x ∈ [0, ceilW], z ∈ [0, ceilD], voltado para baixo +Y para quem olha p/ cima) */}
+            {/* 3. Ceiling (y = 0, x ∈ [0, ceilW], z ∈ [0, ceilD], facing down +Y for someone looking up) */}
             <div
               className={`pointer-events-none absolute overflow-hidden bg-black shadow-2xl select-none ${seamBorderClass}`}
               style={{
@@ -545,14 +545,14 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
         </div>
       )}
 
-      {/* Bancada Rápida de Validação para Shay (Pessoa 1): 3 Países Piloto + 5 Olhinhos Photoshop + Play/Story */}
+      {/* Quick Validation Workbench for Shay (Person 1): 3 Pilot Countries + 5 Photoshop Eyes + Play/Story */}
       {!embedded && showControlDock && (
         <aside
           className="z-20 border-t border-slate-400/15 bg-[#080d19]/95 px-4 py-3 backdrop-blur-md"
           data-testid="simulator-pilot-dock"
         >
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
-            {/* 1. Seleção instantânea dos Países Piloto (Brasil, Egito) */}
+            {/* 1. Instant selection of Pilot Countries (Brazil, Egypt) */}
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="mr-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
                 {isPt ? 'Pilotos:' : 'Pilots:'}
@@ -586,7 +586,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
               })}
             </div>
 
-            {/* 2. Os 5 Olhinhos estilo Photoshop + Solo (S) + Tempestade */}
+            {/* 2. The 5 Photoshop-style Eyes + Solo (S) + Storm */}
             <div className="flex flex-wrap items-center gap-1.5">
               {VISUAL_LAYER_ORDER.map((layerId) => {
                 const meta = LAYER_METAS[layerId];
@@ -648,7 +648,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({
               })}
             </div>
 
-            {/* 3. Transporte (Play/Pause + Compasso) + Passo do Robozinho + PT/EN */}
+            {/* 3. Transport (Play/Pause + Bar/Measure) + Robot Step + PT/EN */}
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"

@@ -26,7 +26,7 @@ export const NasaDatasetCard: React.FC<NasaDatasetCardProps> = ({
   open,
   datasetId,
   enabledDatasetIds,
-  lang = 'pt',
+  lang = 'en',
   countryName,
   countryCoordinates,
   countryLayerMetric,

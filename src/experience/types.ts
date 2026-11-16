@@ -28,12 +28,12 @@ export const PROJECTOR_OUT_IDS: readonly ProjectorOutId[] = [1, 2, 3] as const;
 export const SURFACE_IDS: readonly SurfaceId[] = ['leftWall', 'rightWall', 'ceiling'] as const;
 
 /**
- * As 5 camadas estilo Photoshop do Earth Jukebox (1:1 com os 5 PNGs 1024x1024 por país).
+ * The 5 Photoshop-style layers of Earth Jukebox (1:1 with the 5 1024x1024 PNGs per country).
  */
 export type VisualLayerId = 'melody' | 'chords' | 'temperature' | 'bass' | 'wind';
 
 /**
- * Camadas geradoras principais com áudio próprio + botão Solo (S).
+ * Primary generator layers with dedicated audio + Solo (S) button.
  */
 export type SoloableLayerId = 'melody' | 'chords' | 'bass';
 
@@ -64,15 +64,15 @@ export interface CompareCountriesState {
 }
 
 /**
- * Os Países Piloto para validação no Simulador 3D:
- * - '076': Brasil
- * - '818': Egito
+ * Pilot Countries for 3D Simulator validation:
+ * - '076': Brazil
+ * - '818': Egypt
  */
 export const PILOT_COUNTRY_IDS = ['076', '818'] as const;
 
 /**
- * Os 100 Países locais pré-gerados no repositório (5 PNGs 1024x1024 RGBA + 5 vídeos 96f + 16 Stems OGG + Partitura MIDI Studio).
- * Os demais 142 países habitados (exceto China '156') ficam em `remoteIds` no Supabase Storage (`nasa-countries`).
+ * The 100 local pre-generated countries in the repository (5 RGBA 1024x1024 PNGs + 5 96f videos + 16 OGG Stems + Studio MIDI Score).
+ * The remaining 142 inhabited countries (excluding China '156') live in `remoteIds` on Supabase Storage (`nasa-countries`).
  */
 export const GENERATED_COUNTRY_IDS = [
   '076',
@@ -429,10 +429,10 @@ export type AudioLevelsMap = Record<
 
 export interface LiveNoteEvent {
   layer: 'melody' | 'sparkle' | 'chords' | 'bass';
-  /** Coordenadas normalizadas 0..1 (snake_case compatível com meta.json Python e pedido da Pessoa 1) */
+  /** Normalized coordinates 0..1 (snake_case compatible with Python meta.json and Person 1's request) */
   source_x: number;
   source_y: number;
-  /** Aliases camelCase por conveniência no TypeScript */
+  /** camelCase aliases for TypeScript convenience */
   sourceX: number;
   sourceY: number;
   pitch: number;
@@ -482,7 +482,7 @@ export interface LanPeerInfo {
 export type AudioOwnerRole = 'pc' | 'tablet' | 'both';
 
 /**
- * Intervalo de compassos em loop `[barStart, barEnd]` inclusivo (`0..7`), ou `null` para todos os 8 compassos (`C1–C8`).
+ * Inclusive bar loop range `[barStart, barEnd]` (`0..7`), or `null` for all 8 bars (`C1–C8`).
  */
 export type BarLoopRange = [number, number] | null;
 
@@ -493,68 +493,68 @@ export interface ExperienceContextValue {
   pilotCountryIds: ReadonlySet<string>;
   loadStatus: 'idle' | 'loading' | 'ready' | 'error';
   lang: Lang;
-  /** Passo atual da narrativa do Robozinho (Parede Direita <-> Tablet) */
+  /** Current step of the Little Robot's narrative (Right Wall <-> Tablet) */
   storyStep: number;
-  /** Fase atual da expedição espacial (idle -> boarding -> countdown -> zero_g -> exploring -> ended) */
+  /** Current space expedition phase (idle -> boarding -> countdown -> zero_g -> exploring -> ended) */
   missionPhase: MissionPhase;
-  /** Verdadeiro quando o console Tablet está na aba do Globo escolhendo/trocando país */
+  /** True when the Tablet console is on the Globe tab selecting/switching countries */
   isPickingCountry: boolean;
-  /** Contador para reiniciar animações locais do quadro ativo (ex: contagem 5..1 ou cabine 4s) */
+  /** Counter to restart local animations of the active frame (e.g., 5..1 countdown or 4s cabin) */
   sceneReplayKey: number;
-  /** Compasso congelado em loop (0..7) para inspeção de animação/áudio, ou null para fluxo normal */
+  /** Bar frozen in loop (0..7) for animation/audio inspection, or null for normal flow */
   loopSingleBar: number | null;
-  /** Trecho de compassos em loop estilo Jukebox Studio (`[b0, b1]` inclusivo ou `null` p/ `C1–C8`) */
+  /** Jukebox Studio-style bar loop range (`[b0, b1]` inclusive or `null` for `C1–C8`) */
   barLoop: BarLoopRange;
-  /** Par de países configurado para comparação científica A ⇄ B na mesma batida */
+  /** Country pair configured for A ⇄ B scientific comparison on the same beat */
   compareCountries: CompareCountriesState;
-  /** Sequência completa de 32 batidas (8 compassos x 4 tempos) do país ativo */
+  /** Complete 32-beat sequence (8 bars × 4 beats) of the active country */
   beatTimeline: ReadonlyArray<BeatTimelineSlot>;
-  /** Partitura MIDI e telemetria completa do Jukebox Studio para o país atual */
+  /** Complete Jukebox Studio MIDI score and telemetry for the current country */
   studioData: CountryStudioPayload | null;
-  /** Sessão ativa (`region` ou `base`) da partitura MIDI */
+  /** Active section (`region` or `base`) of the MIDI score */
   activeStudioSession: StudioSessionData | null;
-  /** Telemetria oficial NASA extraída por camada do meta.json do país ativo */
+  /** Official NASA telemetry extracted per layer from the active country's meta.json */
   telemetrySummary: CountryTelemetrySummary | null;
-  /** Energia acústica em tempo real (0..1) enviada para cada uma das 3 caixas físicas (VBAP) */
+  /** Real-time acoustic energy (0..1) sent to each of the 3 physical speakers (VBAP) */
   speakerLiveLevels: Record<'speaker1' | 'speaker2' | 'speaker3', number>;
   audioMode: AudioOutputMode;
   masterGain: number;
   voiceVolume: number;
-  /** Pico em dBFS medido em tempo real no barramento Master */
+  /** Peak in dBFS measured in real time on the Master bus */
   masterDbFs: number;
-  /** Silencia apenas este dispositivo/aba local (ex.: Projetores mudos por padrão ou Tablet remoto mudo) */
+  /** Mutes only this local device/tab (e.g., muted Projectors by default or muted remote Tablet) */
   localAudioMuted: boolean;
-  /** Fonte de áudio ativa ('stems' para os 8 stems OGG pré-renderizados) */
+  /** Active audio source ('stems' for the 8 pre-rendered OGG stems) */
   audioSourceKind: 'stems' | 'meta-synth';
-  /** Estado da rede LAN WebSocket offline-first */
+  /** Offline-first LAN WebSocket network status */
   lanConnected: boolean;
   lanClients: LanPeerInfo[];
   layers: ExperienceLayersState;
   playback: ExperiencePlaybackState;
-  /** Notas/raios ativos no compasso/batida atual com `source_x` e `source_y` */
+  /** Active notes/lightning events in the current bar/beat with `source_x` and `source_y` */
   liveEvents: LiveNoteEvent[];
-  /** Níveis de áudio por camada (0..1) */
+  /** Audio levels per layer (0..1) */
   audioLevels: AudioLevelsMap;
-  /** URLs dos 5 PNGs 1024x1024 recortados na silhueta do país selecionado */
+  /** URLs of the 5 1024x1024 PNGs clipped to the selected country's silhouette */
   pngUrls: Record<VisualLayerId, string> | null;
-  /** Dimensões físicas reais configuradas no ?view=setup / ?view=admin */
+  /** Actual physical dimensions configured in ?view=setup / ?view=admin */
   roomDimensions: RoomDimensions;
-  /** Getter síncrono sem re-render para loops requestAnimationFrame (60fps) */
+  /** Synchronous non-rerendering getter for requestAnimationFrame loops (60fps) */
   getLiveFrame: () => LiveFrameSnapshot;
-  /** Estado real do AudioContext do navegador ('running' | 'suspended' | 'closed' | 'uninitialized') */
+  /** Real browser AudioContext state ('running' | 'suspended' | 'closed' | 'uninitialized') */
   audioContextState: AudioContextState | 'uninitialized';
-  /** Nível RMS real medido pelo AnalyserNode do Web Audio [0..1] */
+  /** Real RMS level measured by the Web Audio AnalyserNode [0..1] */
   realAudioRms01: number;
-  /** Código da sala ativa na URL (?room=XXXXXX) ou null quando visitante isolado */
+  /** Active room code in the URL (?room=XXXXXX) or null when isolated visitor */
   roomCode: string | null;
-  /** Modo de barramento de rede ativo ('isolated' | 'lan-ws' | 'cloud-room') */
+  /** Active network bus mode ('isolated' | 'lan-ws' | 'cloud-room') */
   syncNetworkMode: SyncNetworkMode;
-  /** Gera um novo código de sala de 6 caracteres e atualiza a URL atual */
+  /** Generates a new 6-character room code and updates the current URL */
   regenerateRoomCode: () => string;
-  /** Dono do áudio na instalação física (PC Mestre, Tablet ou Ambos) */
+  /** Audio owner in the physical installation (Master PC, Tablet, or Both) */
   audioOwner: AudioOwnerRole;
 
-  // Ações compartilhadas (Contrato Pessoa 1 <-> Pessoa 2)
+  // Shared actions (Person 1 <-> Person 2 Contract)
   selectCountry: (countryId: string | null) => void;
   selectCountryPreserveBeat: (countryId: string) => void;
   setCompareSlot: (slot: 'A' | 'B', countryId: string) => void;

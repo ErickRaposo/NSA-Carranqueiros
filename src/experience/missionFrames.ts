@@ -247,8 +247,8 @@ export interface FramePromptContext {
 }
 
 /**
- * Espelho fiel de leitura das falas reais definidas em `RightWallScene.tsx`,
- * permitindo inspecionar e testar o TTS no Admin sem alterar o código da Shay.
+ * Faithful read mirror of the real lines defined in `RightWallScene.tsx`,
+ * allowing TTS inspection and testing in Admin without modifying Shay's code.
  */
 export function resolveFramePrompts(
   frameId: MissionFrameId,

@@ -146,10 +146,10 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
   const prevMissionPhaseRef = useRef<MissionPhase>(missionPhase);
   const lastGestureHapticPhaseRef = useRef<MissionPhase | null>(null);
 
-  // Cancela qualquer vibração ativa se o tablet sair da tela
+  // Cancel any active vibration if the tablet leaves the screen
   useEffect(() => () => stopConsoleHaptic(), []);
 
-  // Impactos físicos sincronizados com transições automáticas / remotas da missão (Android)
+  // Physical impacts synchronized with automatic / remote mission transitions (Android)
   useEffect(() => {
     const prev = prevMissionPhaseRef.current;
     prevMissionPhaseRef.current = missionPhase;
@@ -204,7 +204,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
     });
   }, [layers, missionPhase]);
 
-  // Contagem regressiva 5..1 -> subida lenta (10s) -> zero_g
+  // Countdown 5..1 -> slow ascent (10s) -> zero_g
   useEffect(() => {
     if (missionPhase !== 'countdown') {
       setCountdownNum(5);
@@ -219,7 +219,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
     return () => timers.forEach((t) => window.clearTimeout(t));
   }, [missionPhase, setMissionPhase]);
 
-  // Na gravidade zero, espera a fala completa + respiro (13.5s) antes de abrir o Quadro 6 (exploring-0)
+  // In zero gravity, wait for the full speech + pause (13.5s) before opening Frame 6 (exploring-0)
   useEffect(() => {
     if (missionPhase !== 'zero_g') return;
     const timer = window.setTimeout(() => {
@@ -585,7 +585,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
           {isPt ? 'Pular para o controle principal' : 'Skip to main controller'}
         </a>
       )}
-      {/* Barra superior permanente: exibida no Tablet físico (?view=controller); na Demo é absorvida pelo header unificado */}
+      {/* Permanent top bar: shown on physical Tablet (?view=controller); on Demo it is absorbed by the unified header */}
       {!embeddedInDemo && (
         <div className="z-30 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#1e3a66]/45 bg-[#040b1a]/95 px-3.5 py-2 backdrop-blur-md">
           <div className="flex min-w-0 items-center gap-2">
@@ -655,7 +655,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
         </div>
       )}
 
-      {/* Etapas da Missão sincronizadas com a sala */}
+      {/* Mission Steps synchronized with the room */}
       <nav
         aria-label={isPt ? 'Etapas da missão' : 'Mission stages'}
         data-testid="mission-progress-bar"
@@ -730,7 +730,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
       <div id="tablet-main-content" tabIndex={-1} className="min-h-0 min-w-0 flex-1 overflow-hidden">
         {showIntroScreen ? (
           /* =====================================================================
-             TELA 0 — INICIAL (INICIAR EXPEDIÇÃO OU ABRIR ESTÚDIO DIRETO)
+             SCREEN 0 — INITIAL (START EXPEDITION OR OPEN STUDIO DIRECTLY)
              ===================================================================== */
           <div className="mx-auto flex h-full w-full min-w-0 max-w-2xl flex-col overflow-y-auto px-4 py-3 sm:px-6 sm:py-5">
             <main className="my-auto flex w-full flex-col items-center py-2">
@@ -782,7 +782,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
           </div>
         ) : showMissionStageScreen ? (
           /* =====================================================================
-             FASES DA EXPEDIÇÃO: EMBARQUE -> DECOLAGEM -> GRAVIDADE ZERO -> FIM
+             EXPEDITION PHASES: BOARDING -> LIFTOFF -> ZERO GRAVITY -> END
              ===================================================================== */
           <div className="mx-auto flex h-full w-full min-w-0 max-w-2xl flex-col overflow-y-auto px-4 py-3 sm:px-6 sm:py-5">
             <main className="my-auto flex w-full flex-col items-center py-2">
@@ -924,7 +924,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                 </div>
               )}
 
-              {/* Controles de Voz do MINEIRØ sincronizados com a sala (Pausar / Retomar / Interromper) */}
+              {/* MINEIRØ Voice Controls synchronized with the room (Pause / Resume / Stop) */}
               <div
                 data-testid="tablet-stage-speech-bar"
                 className="mt-3 flex w-full max-w-md flex-wrap items-center justify-between gap-2 rounded-[18px] border border-[#1e3a66]/45 bg-[#080d19]/95 px-3.5 py-2.5 backdrop-blur-xl"
@@ -1010,7 +1010,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
           </div>
         ) : showSelectionScreen || !country ? (
           /* =====================================================================
-             TELA 1 — GLOBO 3D + SUGESTÕES + PESQUISA DE PAÍS (CONSOLE HORIZONTAL)
+             SCREEN 1 — 3D GLOBE + SUGGESTIONS + COUNTRY SEARCH (HORIZONTAL CONSOLE)
              ===================================================================== */
           <div className="mx-auto flex h-full w-full min-w-0 max-w-6xl flex-col gap-3 overflow-y-auto px-4 py-3 sm:px-6 @[740px]:overflow-hidden @[740px]:py-3">
             <header className="flex shrink-0 items-center justify-between gap-3">
@@ -1044,7 +1044,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
             </header>
 
             <div className="flex min-h-0 flex-1 flex-col gap-3 @[740px]:grid @[740px]:grid-cols-[1.15fr_1fr] @[740px]:gap-4">
-              {/* Coluna Esquerda (Horizontal) — Globo 3D Interativo Espelhado */}
+              {/* Left Column (Landscape) — Mirrored Interactive 3D Globe */}
               <section
                 className="relative flex shrink-0 flex-col overflow-hidden rounded-[18px] border border-[#1e3a66]/55 bg-[#040b1a] @[740px]:h-full @[740px]:min-h-0"
                 aria-label={isPt ? 'Globo 3D interativo para escolher país' : 'Interactive 3D globe country picker'}
@@ -1133,9 +1133,9 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                 )}
               </section>
 
-              {/* Coluna Direita (Horizontal) — Sugestões + Pesquisa + Lista Rolável */}
+              {/* Right Column (Landscape) — Suggestions + Search + Scrollable List */}
               <div className="flex min-h-0 flex-1 flex-col gap-2.5 @[740px]:overflow-hidden">
-                {/* Sugestões para explorar (Presets para indecisos) */}
+                {/* Suggestions to explore (Presets for undecided users) */}
                 <section
                   className="flex shrink-0 flex-col gap-1.5"
                   aria-label={isPt ? 'Sugestões para explorar' : 'Quick picks'}
@@ -1173,7 +1173,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                   </div>
                 </section>
 
-                {/* Barra de pesquisa */}
+                {/* Search bar */}
                 <div className="flex min-h-[48px] shrink-0 items-center gap-2.5 rounded-xl border border-[#1e3a66]/60 bg-[#0c1a36] px-3.5 transition-colors focus-within:border-[#7dd3fc]">
                   <Search size={18} className="shrink-0 text-slate-400" />
                   <input
@@ -1268,10 +1268,10 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
           </div>
         ) : (
           /* =====================================================================
-             TELA 2 — CONSOLE HORIZONTAL / MANETE DO JUKEBOX STUDIO NO TABLET
+             SCREEN 2 — HORIZONTAL CONSOLE / JUKEBOX STUDIO CONTROLLER ON TABLET
              ===================================================================== */
           <div className="mx-auto flex h-full w-full min-w-0 max-w-6xl flex-col gap-2 overflow-x-hidden overflow-y-auto px-3.5 py-3 sm:px-5 @[740px]:overflow-hidden @[740px]:py-2.5">
-            {/* 1. Cabeçalho do País Ativo + Pílulas Rápidas + Ir para outro país */}
+            {/* 1. Active Country Header + Quick Pills + Go to another country */}
             <section
               className="flex min-w-0 max-w-full shrink-0 flex-col gap-2 rounded-[18px] border border-[#1e3a66]/50 bg-[#080d19]/95 p-2.5 backdrop-blur-xl @[740px]:flex-row @[740px]:items-center @[740px]:justify-between"
               aria-label={isPt ? 'País selecionado' : 'Selected country'}
@@ -1325,7 +1325,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                 </div>
               </div>
 
-              {/* Pílulas Horizontais de Troca Rápida */}
+              {/* Horizontal Quick-Switch Pills */}
               <div className="flex min-w-0 max-w-full flex-1 items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] @[740px]:justify-center @[740px]:pb-0">
                 {quickPresetCountries.slice(0, 6).map((preset) => {
                   const active = preset.id === country.id;
@@ -1378,7 +1378,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
               </div>
             </section>
 
-            {/* 2. Palco Jukebox Studio + Deck de Transporte & Master Bus */}
+            {/* 2. Jukebox Studio Stage + Transport Deck & Master Bus */}
             <section
               className="flex min-w-0 max-w-full shrink-0 flex-col gap-2 rounded-[18px] border border-[#1e3a66]/50 bg-[#080d19]/95 p-2.5 backdrop-blur-xl @[740px]:grid @[740px]:grid-cols-[minmax(0,1fr)_272px] @[740px]:items-stretch @[740px]:gap-2.5"
               aria-label={isPt ? 'Estúdio Jukebox Ao Vivo' : 'Live Jukebox Studio'}
@@ -1413,7 +1413,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                       )}
                     </button>
 
-                    {/* Voltar ao Início */}
+                    {/* Back to Start */}
                     <button
                       type="button"
                       onClick={() => {
@@ -1428,7 +1428,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                     </button>
                   </div>
 
-                  {/* Restaurar Padrão */}
+                  {/* Reset to Default */}
                   <button
                     type="button"
                     onClick={() => {
@@ -1491,7 +1491,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
               </div>
             </section>
 
-            {/* Banner de Silêncio Intencional quando todas as 5 camadas estão desligadas */}
+            {/* Intentional Silence Banner when all 5 layers are turned off */}
             {enabledCount === 0 && (
               <div
                 role="status"
@@ -1507,7 +1507,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
               </div>
             )}
 
-            {/* 3. Mixer / Manete Videogame das 5 Camadas NASA */}
+            {/* 3. Mixer / Gamepad Controller for the 5 NASA Layers */}
             <section
               className="flex min-w-0 max-w-full flex-col gap-2 @[740px]:min-h-0 @[740px]:flex-1 @[740px]:grid @[740px]:grid-cols-5 @[740px]:gap-2.5"
               role="group"
@@ -1576,7 +1576,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                         : 'rgba(8, 13, 25, 0.85)',
                     }}
                   >
-                    {/* Zona Superior: Bloco Tátil Arcade (ON/OFF no toque) */}
+                    {/* Upper Zone: Tactile Arcade Pad (ON/OFF on tap) */}
                     <div className="flex items-center justify-between gap-2 @[740px]:min-h-0 @[740px]:flex-1 @[740px]:flex-col @[740px]:items-stretch">
                       <button
                         type="button"
@@ -1602,7 +1602,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                               : `Show ${meta.labelEn} layer`
                         }
                       >
-                        {/* Topo do Bloco: LED + Eye + Pílula ON/OFF */}
+                        {/* Pad Top: LED + Eye + ON/OFF Pill */}
                         <div className="flex shrink-0 items-center justify-between gap-2 @[740px]:w-full">
                           <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#1e3a66]/55 bg-[#060c1a] text-slate-100 @[740px]:h-9 @[740px]:w-9">
                             {isEnabled ? (
@@ -1629,7 +1629,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                           </span>
                         </div>
 
-                        {/* Centro do Bloco: Nome + Fenômeno NASA + Telemetria */}
+                        {/* Pad Center: Name + NASA Phenomenon + Telemetry */}
                         <div className="min-w-0 flex-1 @[740px]:my-1 @[740px]:flex-none">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span
@@ -1648,7 +1648,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                           </div>
                         </div>
 
-                        {/* Base do Bloco (Horizontal): Medidor VU + Valor */}
+                        {/* Pad Bottom (Horizontal): VU Meter + Value */}
                         <div className="hidden w-full flex-col gap-1 @[740px]:flex">
                           <div className="flex items-center justify-between text-[10px] font-semibold text-slate-200 [font-variant-numeric:tabular-nums]">
                             <span className="text-slate-400">
@@ -1674,7 +1674,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                         </div>
                       </button>
 
-                      {/* Zona Inferior Isolada de Ações Secundárias (Solo / Tempestade / Ajustar / Info) */}
+                      {/* Isolated Lower Zone for Secondary Actions (Solo / Storm / Adjust / Info) */}
                       <div
                         className="flex shrink-0 items-center gap-1.5 @[740px]:justify-between"
                         onClick={(e) => e.stopPropagation()}
@@ -1755,7 +1755,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Sliders em linha mantidos apenas em telas estreitas (< 740px) */}
+                    {/* Inline sliders kept only on narrow screens (< 740px) */}
                     <div className="flex flex-col gap-2 @[740px]:hidden">
                       {meta.roleKind === 'generator' && (
                         <div className="flex flex-col gap-1.5 pl-1">
@@ -1943,7 +1943,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
               })}
             </section>
 
-            {/* 4. Rodapé Compacto de Controle de Narração */}
+            {/* 4. Compact Narration Control Footer */}
             <footer className="mt-auto shrink-0 pb-0.5">
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-[16px] border border-[#1e3a66]/45 bg-white/[0.025] px-3.5 py-1.5">
                 <div className="flex items-center gap-2">
@@ -2020,7 +2020,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
               </div>
             </footer>
 
-            {/* Drawer de Ajuste Fino (Console Horizontal) */}
+            {/* Fine-Tuning Drawer (Horizontal Console) */}
             {adjustedLayerId && (
               <div
                 className="fixed inset-0 z-40 flex items-end justify-center bg-black/65 p-4 backdrop-blur-sm sm:items-center"
@@ -2257,7 +2257,7 @@ export const TabletControllerView: React.FC<TabletControllerViewProps> = ({
               </div>
             )}
 
-            {/* Card Colorido de Curiosidades & Bandeira — Todas as 5 Camadas NASA */}
+            {/* Colored Curiosities & Flag Card — All 5 NASA Layers */}
             {countryNasaModalOpen && nasaReport && (
               <div
                 className="fixed inset-0 z-40 flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center"

@@ -81,7 +81,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
       })
     ).toBe('isolated');
 
-    // Domínio público HTTPS -> Sala Online (Supabase Realtime)
+    // Public HTTPS domain -> Online Room (Supabase Realtime)
     expect(
       resolveSyncNetworkMode({
         view: 'setup',
@@ -90,7 +90,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
       })
     ).toBe('cloud-room');
 
-    // Localhost COM Supabase configurado -> também usa cloud-room para conectar celulares externos via código da sala
+    // Localhost WITH Supabase configured -> also uses cloud-room to connect external phones via room code
     expect(
       resolveSyncNetworkMode({
         view: 'setup',
@@ -100,7 +100,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
       })
     ).toBe('cloud-room');
 
-    // Instalação offline na rede local SEM Supabase -> LAN WebSocket (/ws-earth-sync)
+    // Offline installation on local network WITHOUT Supabase -> LAN WebSocket (/ws-earth-sync)
     expect(
       resolveSyncNetworkMode({
         view: 'setup',
@@ -115,13 +115,13 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     const missing = await validateRoomAccess(null, 'cloud-room', []);
     expect(missing.status).toBe('missing-code');
 
-    // Mesmo que o próprio projetor apareça em livePeers, sem host setup/admin e sem registro a sala DEVE ser bloqueada
+    // Even if the projector itself appears in livePeers, without a setup/admin host and without registration the room MUST be blocked
     const fakeProjectorOnly = await validateRoomAccess('TEST57123', 'lan-ws', [
       { id: 'proj-self', role: 'projector-1', ip: 'local', connectedAt: 1000 },
     ]);
     expect(fakeProjectorOnly.status).toBe('not-found');
 
-    // Quando o Setup registra a sala (ou está ativo como host), a validação aprova
+    // When Setup registers the room (or is active as host), validation approves
     await registerActiveRoom('VALID9', 'lan-ws');
     const validRegistered = await validateRoomAccess('VALID9', 'lan-ws', []);
     expect(validRegistered.status).toBe('valid');
@@ -131,7 +131,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     ]);
     expect(validLiveHost.status).toBe('valid');
 
-    // Renderização do bloqueio quando projetor abre sem código de sala
+    // Renders the access gate when projector opens without a room code
     const blockedGateHtml = renderToStaticMarkup(
       <ExperienceProvider activeView="projector" roomCode={null}>
         <RoomAccessGate onJoinRoomCode={() => {}} onGoToSetup={() => {}}>
@@ -153,13 +153,13 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     expect(normalizeSupabaseOrigin('ftp://invalid.example.com')).toBeNull();
     expect(normalizeSupabaseOrigin('')).toBeNull();
 
-    // Em cloud-room, um host setup/admin ativo na presença sempre valida a sala
+    // In cloud-room, an active setup/admin host in presence always validates the room
     const validViaCloudHost = await validateRoomAccess('QHXA44', 'cloud-room', [
       { id: 'host-setup', role: 'setup', ip: 'cloud', connectedAt: 1000 },
     ]);
     expect(validViaCloudHost.status).toBe('valid');
 
-    // Simula Dev Tunnel apontando para o servidor Vite (/api/rooms retornando JSON válido)
+    // Simulates Dev Tunnel pointing to the Vite server (/api/rooms returning valid JSON)
     const prevWindow = (globalThis as { window?: unknown }).window;
     try {
       (globalThis as { window?: unknown }).window = {
@@ -173,7 +173,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
       const validViaTunnelApi = await validateRoomAccess('QHXA44', 'cloud-room', []);
       expect(validViaTunnelApi.status).toBe('valid');
 
-      // Simula fallback HTML da Vercel (sem /api/rooms): NÃO pode liberar sala inexistente
+      // Simulates Vercel HTML fallback (without /api/rooms): MUST NOT unlock a non-existent room
       (globalThis as { window?: unknown }).window = {
         location: { origin: 'https://earth.vercel.app' },
         fetch: vi.fn(async () => ({
@@ -194,10 +194,10 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     const matrix = encodeQrMatrix(url);
     const n = matrix.length;
 
-    // Dark Module obrigatório em (row = n - 8, col = 8)
+    // Mandatory Dark Module at (row = n - 8, col = 8)
     expect(matrix[n - 8][8]).toBe(true);
 
-    // Extrai os 15 bits de Format Info da cópia 1 (em torno do finder superior-esquerdo)
+    // Extracts the 15 Format Info bits from copy 1 (around the top-left finder)
     const copy1Coords: Array<[number, number]> = [
       [0, 8],
       [1, 8],
@@ -220,7 +220,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
       if (matrix[r][c]) bitsCopy1 |= 1 << i;
     });
 
-    // Extrai os 15 bits de Format Info da cópia 2 (superior-direito + inferior-esquerdo)
+    // Extracts the 15 Format Info bits from copy 2 (top-right + bottom-left)
     let bitsCopy2 = 0;
     for (let i = 0; i <= 7; i++) {
       if (matrix[8][n - 1 - i]) bitsCopy2 |= 1 << i;
@@ -235,7 +235,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     );
     expect(validMasksFormatBits).toContain(bitsCopy1);
 
-    // Testa URL longa (> 135 bytes -> Versão >= 7 com Version Info 6x3 simétrico)
+    // Tests long URL (> 135 bytes -> Version >= 7 with symmetric 6x3 Version Info)
     const longUrl =
       'https://nsa-carranqueiros-git-feature-multi-room-setup-erickraposo.vercel.app/?view=controller&room=AB34CD&utm_source=qrcode_test_long_payload';
     const longMatrix = encodeQrMatrix(longUrl);
@@ -251,7 +251,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
 
   it('calcula atrasos negativos/positivos por caixa (-400..+400 ms) e offset global Vídeo × Som sem valores negativos no DelayNode', () => {
     const base = createDefaultAudioCalibration();
-    // C1 = 0 ms, C2 = -150 ms (adianta C2 atrasando C1 e C3 em +150 ms), avOffsetMs = -100 ms (atrasa vídeo em +250 ms totais!)
+    // C1 = 0 ms, C2 = -150 ms (advances C2 by delaying C1 and C3 by +150 ms), avOffsetMs = -100 ms (delays video by +250 ms total!)
     const calibNeg = {
       ...base,
       avOffsetMs: -100,
@@ -268,13 +268,13 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     expect(roomNeg.speakerDelaySec.speaker3).toBeCloseTo(0.2, 4);
     expect(roomNeg.visualDelayMs).toBeCloseTo(250, 2);
 
-    // No modo Fone de Ouvido com avOffsetMs positivo (+180 ms -> projetor atrasado, atrasa o som em 0.18s)
+    // In Headphones mode with positive avOffsetMs (+180 ms -> projector delayed, delays sound by 0.18s)
     const calibHrtfPos = { ...base, avOffsetMs: 180 };
     const hrtfPos = computeEffectiveAudioVisualDelays(calibHrtfPos, 'hrtf', null);
     expect(hrtfPos.masterDirectDelaySec).toBeCloseTo(0.18, 4);
     expect(hrtfPos.visualDelayMs).toBe(0);
 
-    // No modo Fone de Ouvido com avOffsetMs negativo (-220 ms -> fone Bluetooth atrasado, atrasa o vídeo em 220 ms)
+    // In Headphones mode with negative avOffsetMs (-220 ms -> Bluetooth headphones delayed, delays video by 220 ms)
     const calibHrtfNeg = { ...base, avOffsetMs: -220 };
     const hrtfNeg = computeEffectiveAudioVisualDelays(calibHrtfNeg, 'hrtf', null);
     expect(hrtfNeg.masterDirectDelaySec).toBe(0);
@@ -295,20 +295,20 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     expect(isPinkNoiseSpeakerActive(engine.getCalibrationTestMode(), 'speaker1')).toBe(true);
     expect(isPinkNoiseSpeakerActive(engine.getCalibrationTestMode(), 'speaker2')).toBe(false);
 
-    // Ligar C2 mantém C1 ligada ao mesmo tempo!
+    // Turning on C2 keeps C1 on at the same time!
     const active12 = engine.togglePinkNoiseSpeaker('speaker2');
     expect(active12).toEqual(['speaker1', 'speaker2']);
     expect(isPinkNoiseSpeakerActive(engine.getCalibrationTestMode(), 'speaker1')).toBe(true);
     expect(isPinkNoiseSpeakerActive(engine.getCalibrationTestMode(), 'speaker2')).toBe(true);
     expect(isPinkNoiseSpeakerActive(engine.getCalibrationTestMode(), 'speaker3')).toBe(false);
 
-    // Desligar C1 mantém C2 tocando sozinha
+    // Turning off C1 keeps C2 playing alone
     const active2 = engine.togglePinkNoiseSpeaker('speaker1');
     expect(active2).toEqual(['speaker2']);
     expect(isPinkNoiseSpeakerActive(engine.getCalibrationTestMode(), 'speaker1')).toBe(false);
     expect(isPinkNoiseSpeakerActive(engine.getCalibrationTestMode(), 'speaker2')).toBe(true);
 
-    // Mesma independência no Pulso Rítmico de atraso
+    // Same independence for the Rhythmic Delay Pulse
     engine.toggleDelayClickSpeaker('speaker1');
     expect(
       isDelayClickSpeakerActive(engine.getCalibrationTestMode(), 'speaker1', 'speaker1')
@@ -378,7 +378,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     expect(wizardHtml).not.toContain('<aside');
     expect(wizardHtml).not.toContain('Orbitron');
 
-    // Modo Fone de Ouvido (hrtf) exibe Atraso Vídeo × Som + Luz de Batida, sem configuração de 3 caixas
+    // Headphones mode (hrtf) shows Video × Sound Delay + Beat Light, without 3-speaker configuration
     const headphonesHtml = renderToStaticMarkup(
       <StepAudioSetup
         isPt={true}
@@ -420,7 +420,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     expect(headphonesHtml).toContain('calib-visual-beat-flash');
     expect(headphonesHtml).not.toContain('room-speakers-panel');
 
-    // Modo 3 Caixas (room3) exibe toggles independentes (sem "Comparar c/ C1") e C1 + C2 ativas simultaneamente
+    // 3-Speaker mode (room3) shows independent toggles (without "Comparar c/ C1") and C1 + C2 active simultaneously
     const baseCalib = createDefaultAudioCalibration();
     const calibWithLanNode = {
       ...baseCalib,
@@ -474,7 +474,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     expect(speakersHtml).toContain('delay-panel-toggle');
     expect(speakersHtml).toContain('aria-expanded="false"');
 
-    // Estado de roteamento por dispositivo (erro, pending-gesture e troca de motor WebAudio/Media)
+    // Per-device routing state (error, pending-gesture, and WebAudio/Media engine switch)
     const sinkStatusHtml = renderToStaticMarkup(
       <StepAudioSetup
         isPt={true}
@@ -528,7 +528,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     expect(sinkStatusHtml).toContain('sink-status-speaker3');
     expect(sinkStatusHtml).toContain('Liberar saída');
 
-    // Pareamento mobile sem seletor de Adaptador Wi-Fi
+    // Mobile pairing without Wi-Fi Adapter selector
     const pairingRequiredHtml = renderToStaticMarkup(
       <StepControllerPairing
         isPt={true}
@@ -570,7 +570,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     expect(pairingOptionalHtml).toContain('btn-skip-controller');
     expect(pairingOptionalHtml).not.toContain('Adaptador Wi-Fi');
 
-    // Etapa final do setup direciona para o Painel Técnico (?view=admin) em vez do simulador
+    // Final setup step routes to the Technical Panel (?view=admin) instead of the simulator
     const readyRoomHtml = renderToStaticMarkup(
       <StepReadySummary
         lang="pt"
@@ -683,7 +683,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     expect(afterRight.rightWall).toEqual({ widthCm: 310, heightCm: 270 });
     expect(afterRight.ceiling).toEqual({ widthCm: 310, heightCm: 420 });
 
-    // Respeita limites mínimo (50 cm) e máximo (2000 cm)
+    // Respects minimum (50 cm) and maximum (2000 cm) limits
     const clampedMin = updateWallDimension(afterRight, 'leftWall', 'widthCm', '10');
     expect(clampedMin.leftWall.widthCm).toBe(50);
     expect(clampedMin.ceiling.heightCm).toBe(50);
@@ -714,7 +714,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     expect(projStepHtml).toContain('dim-ceiling-auto');
     expect(projStepHtml).toContain('310 × 420 cm');
 
-    // Círculos de proporção espalhados na grade permanecem sempre contidos na parede em qualquer aspect ratio
+    // Proportion circles spread across the grid always stay contained within the wall at any aspect ratio
     for (const [w, h] of [
       [1280, 960],
       [1600, 900],
@@ -794,7 +794,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
       expect(hostInitialTypes).toContain('speaker-calib');
       expect(hostInitialTypes).toContain('calib-signal');
 
-      // Simula entrada de novo computador na presença -> host empurra snapshot atualizado após 80ms
+      // Simulates a new computer joining presence -> host pushes updated snapshot after 80ms
       hostSock.sent.length = 0;
       hostSock.onmessage?.({
         data: JSON.stringify({
@@ -811,7 +811,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
         expect.arrayContaining(['sync', 'projection', 'speaker-calib', 'calib-signal'])
       );
 
-      // Guest (outro PC) pede snapshot e faz retry automático até receber o primeiro sync
+      // Guest (another PC) requests snapshot and auto-retries until receiving the first sync
       let receivedSyncCount = 0;
       const guestTransport = createRoomSyncTransport({
         mode: 'lan-ws',
@@ -836,7 +836,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
       ).length;
       expect(reqCountBeforeSync).toBe(2);
 
-      // Recebe sync do host -> cancela terceira retentativa
+      // Receives sync from host -> cancels third retry
       guestSock.onmessage?.({
         data: JSON.stringify({
           type: 'sync',
@@ -866,7 +866,7 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
 
     const baseState = applyProjectionPreset('3-projectors');
     baseState.outputs[1].delayMs = 40;
-    baseState.outputs[2].delayMs = -120; // OUT 2 chegando atrás: força OUT 1 (+160) e OUT 3 (+120) esperarem
+    baseState.outputs[2].delayMs = -120; // OUT 2 arriving late: forces OUT 1 (+160) and OUT 3 (+120) to wait
     baseState.outputs[3].delayMs = 0;
 
     const effective = computeEffectiveScreenDelays(baseState.outputs);
@@ -875,11 +875,11 @@ describe('Salas Exclusivas (?room=XXXXXX), Validação de Sala, QR Code ISO, Atr
     expect(effective[3]).toBe(120);
     expect(Object.keys(baseState.outputs)).toEqual(['1', '2', '3']);
 
-    // Quando apenas OUT 3 está com grade ativa, o botão global indica grade ativa (para ocultá-la)
+    // When only OUT 3 has an active grid, the global button indicates active grid (to hide it)
     baseState.showGrid = false;
     baseState.outputs[3].showGrid = true;
 
-    // Preserva delayMs ao alternar topologia
+    // Preserves delayMs when toggling topology
     const switched = applyProjectionPreset('2-projectors', baseState);
     expect(switched.outputs[1].delayMs).toBe(40);
     expect(switched.outputs[2].delayMs).toBe(-120);

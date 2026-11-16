@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Pipeline de Pré-Geração dos 5 PNGs (1024x1024 RGBA) + meta.json por país.
+ * Pre-generation pipeline for the 5 PNGs (1024x1024 RGBA) + meta.json per country.
  *
- * Uso:
- *   node scripts/generate_country_layers.mjs            # Gera os 3 Países Piloto: Brasil (076), Egito (818), China (156)
- *   node scripts/generate_country_layers.mjs --ids=076,818,156,840,484
- *   node scripts/generate_country_layers.mjs --all      # Gera todos os ~177 países habitados do mundo!
+ * Usage:
+ *   node scripts/generate_country_layers.mjs            # Generates Pilot Countries: Brazil (076), Egypt (818)
+ *   node scripts/generate_country_layers.mjs --ids=076,818,840,484
+ *   node scripts/generate_country_layers.mjs --all      # Generates all ~177 inhabited countries in the world!
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -49,7 +49,7 @@ const requestedIds = idsArg
       .split(',')
       .map((s) => s.trim())
       .filter((id) => Boolean(id) && !EXCLUDED_COUNTRY_IDS.has(id))
-  : ['076', '818']; // Default: Pilot Countries (Brasil, Egito) — China (156) excluída
+  : ['076', '818']; // Default: Pilot Countries (Brazil, Egypt) — China (156) excluded
 
 const PLAN_LAYERS = ['melody.png', 'chords.png', 'temperature.png', 'bass.png', 'wind.png', 'meta.json'];
 

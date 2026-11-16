@@ -126,9 +126,9 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
 
   return (
     <div className="flex flex-col gap-4" data-testid="admin-overview-module">
-      {/* Linha Superior: Monitor 3D (6 cols) + País / Volume / 5 Camadas (6 cols) */}
+      {/* Top Row: 3D Monitor (6 cols) + Country / Volume / 5 Layers (6 cols) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* Coluna Esquerda (6 cols): Simulador 3D ocupando toda a altura útil */}
+        {/* Left Column (6 cols): 3D Simulator occupying full available height */}
         <section className={`flex flex-col p-3 lg:col-span-6 ${ADMIN_PANEL_CLASS}`}>
           <LiveRoomMonitor
             heightClass="h-[440px] lg:h-full lg:min-h-[480px]"
@@ -136,11 +136,11 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
           />
         </section>
 
-        {/* Coluna Direita (6 cols): País no Ar + Volume Mesa + 5 Camadas NASA */}
+        {/* Right Column (6 cols): Country on Air + Console Volume + 5 NASA Layers */}
         <section className={`flex flex-col justify-between gap-4 p-4 lg:col-span-6 ${ADMIN_PANEL_CLASS}`}>
-          {/* Bloco Superior: País no Ar ao lado do Volume da Mesa */}
+          {/* Top Block: Country on Air next to Console Volume */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
-            {/* País no Ar + Telemetria Musical + Show Pronto */}
+            {/* Country on Air + Musical Telemetry + Show Ready */}
             <div className={`flex flex-col justify-between gap-3 p-3.5 sm:col-span-6 ${ADMIN_WELL_CLASS}`}>
               <div className="flex flex-col gap-2">
                 <span className="text-xs font-semibold text-slate-200">
@@ -185,7 +185,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
               </button>
             </div>
 
-            {/* Console Reduzido da Mesa: Música & Voz do Robô */}
+            {/* Compact Console Strip: Music & Robot Voice */}
             <div className={`flex flex-col justify-between p-3.5 sm:col-span-6 ${ADMIN_WELL_CLASS}`}>
               <div className="mb-2 flex items-center gap-1.5">
                 <Sliders size={13} className="text-[#7dd3fc]" />
@@ -225,7 +225,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
             </div>
           </div>
 
-          {/* 5 Camadas NASA */}
+          {/* 5 NASA Layers */}
           <div className="flex flex-col gap-2.5 border-t border-[#1e3a66]/45 pt-3.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -279,7 +279,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
         </section>
       </div>
 
-      {/* Linha Inferior (Full Width): Linha do Tempo da Missão (12 Quadros · 3 Fases) */}
+      {/* Bottom Row (Full Width): Mission Timeline (12 Frames · 3 Phases) */}
       <section className={`p-4 ${ADMIN_PANEL_CLASS}`} data-testid="shay-frames-director">
         <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
           <div>
@@ -328,7 +328,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
           </div>
         </div>
 
-        {/* Barra Conectada das 3 Macro-Fases */}
+        {/* Connected Bar of the 3 Macro-Phases */}
         <div className={`mb-3 grid grid-cols-1 gap-3 p-3 md:grid-cols-3 ${ADMIN_WELL_CLASS}`}>
           {FRAME_STAGE_GROUPS.map((stage, idx) => {
             const stageFrames = SHAY_MISSION_FRAMES.filter((f) => stage.orders.includes(f.order));
@@ -397,7 +397,7 @@ export const OverviewModule: React.FC<OverviewModuleProps> = ({
           })}
         </div>
 
-        {/* Detalhe do Quadro Ativo + 3 Superfícies + Voz do Robô */}
+        {/* Active Frame Detail + 3 Surfaces + Robot Voice */}
         <div className={`p-3.5 ${ADMIN_WELL_CLASS}`}>
           <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
             <div className="flex items-center gap-2.5">

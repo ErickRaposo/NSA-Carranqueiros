@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Plano determinístico do split híbrido de países (excluindo China '156'):
- * - Exatamente 100 países locais no repositório (`public/countries/<id>/`):
- *   os 11 destaques já gerados + os 89 maiores países habitados por área.
- * - Demais países habitados vão para staging externo (`outputs/supabase-countries/countries/<id>/`)
- *   para upload no Supabase Storage (`bucket: nasa-countries`).
+ * Deterministic plan for hybrid country split (excluding China '156'):
+ * - Exactly 100 local countries in the repository (`public/countries/<id>/`):
+ *   the 11 already-generated highlights + the 89 largest inhabited countries by area.
+ * - Remaining inhabited countries go to external staging (`outputs/supabase-countries/countries/<id>/`)
+ *   for upload to Supabase Storage (`bucket: nasa-countries`).
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -18,16 +18,16 @@ export const LOCAL_COUNTRIES_LIMIT = 100;
 export const EXCLUDED_COUNTRY_IDS = new Set(['156']);
 
 export const PRIORITY_LOCAL_IDS = [
-  '076', // Brasil
-  '840', // EUA
-  '250', // França
-  '392', // Japão
-  '276', // Alemanha
-  '818', // Egito
-  '356', // Índia
-  '484', // México
-  '036', // Austrália
-  '710', // África do Sul
+  '076', // Brazil
+  '840', // USA
+  '250', // France
+  '392', // Japan
+  '276', // Germany
+  '818', // Egypt
+  '356', // India
+  '484', // Mexico
+  '036', // Australia
+  '710', // South Africa
   '620', // Portugal
 ];
 

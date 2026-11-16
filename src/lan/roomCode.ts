@@ -6,15 +6,15 @@ import {
 } from '../experience/types';
 
 /**
- * Alfabeto sem caracteres ambíguos (sem 0/O/1/I) para leitura rápida em projetores, tablets e voz.
+ * Alphabet without ambiguous characters (no 0/O/1/I) for quick reading on projectors, tablets, and by voice.
  */
 const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export type { SyncNetworkMode };
 
 /**
- * Normaliza e valida um código de sala vindo da URL (`?room=XXXXXX`).
- * Aceita de 3 a 24 caracteres alfanuméricos/hífen; retorna `null` se vazio ou inválido.
+ * Normalizes and validates a room code from the URL (`?room=XXXXXX`).
+ * Accepts 3 to 24 alphanumeric/hyphen characters; returns `null` if empty or invalid.
  */
 export function normalizeRoomCode(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -24,7 +24,7 @@ export function normalizeRoomCode(raw: string | null | undefined): string | null
 }
 
 /**
- * Gera um código curto de 6 caracteres legíveis (ex.: `K7M4P9`) usando CSPRNG quando disponível.
+ * Generates a short 6-character readable code (e.g., `K7M4P9`) using CSPRNG when available.
  */
 export function generateRoomCode(length = 6): string {
   const n = Math.max(4, Math.min(12, Math.floor(length)));
@@ -44,7 +44,7 @@ export function generateRoomCode(length = 6): string {
 }
 
 /**
- * Lê o parâmetro `?room=` de uma string `window.location.search`.
+ * Reads the `?room=` parameter from a `window.location.search` string.
  */
 export function readRoomCodeFromSearch(search: string): string | null {
   const params = new URLSearchParams(search);
@@ -52,7 +52,7 @@ export function readRoomCodeFromSearch(search: string): string | null {
 }
 
 /**
- * Verifica se o host atual é um servidor local LAN / localhost HTTP (`npm run dev` / `npm run preview`).
+ * Checks whether the current host is a local LAN / localhost HTTP server (`npm run dev` / `npm run preview`).
  */
 export function isLocalLanHost(
   loc: Pick<Location, 'protocol' | 'hostname'> | null = typeof window !== 'undefined'
@@ -73,11 +73,11 @@ export function isLocalLanHost(
 }
 
 /**
- * Regra canônica dos Modos de Rede convivendo no mesmo domínio:
- * 1. Visitante Público (`demo` ou `portal` sem `?room=`): `'isolated'` (zero rede compartilhada).
- * 2. Sala com Supabase configurado no `.env` (ou `?transport=cloud`): `'cloud-room'` (Supabase Realtime + tabela `rooms`, inclusive em localhost).
- * 3. Servidor LAN Local sem Supabase configurado (`isLocalLanHost()`): `'lan-ws'` (`/ws-earth-sync` + `/api/rooms`).
- * 4. Domínio Público HTTPS com `?room=XXXXXX`: `'cloud-room'`.
+ * Canonical rule for Network Modes coexisting on the same domain:
+ * 1. Public Visitor (`demo` or `portal` without `?room=`): `'isolated'` (zero shared network).
+ * 2. Room with Supabase configured in `.env` (or `?transport=cloud`): `'cloud-room'` (Supabase Realtime + `rooms` table, including on localhost).
+ * 3. Local LAN Server without Supabase configured (`isLocalLanHost()`): `'lan-ws'` (`/ws-earth-sync` + `/api/rooms`).
+ * 4. Public HTTPS Domain with `?room=XXXXXX`: `'cloud-room'`.
  */
 export function resolveSyncNetworkMode(opts: {
   view: ViewRole;
@@ -94,7 +94,7 @@ export function resolveSyncNetworkMode(opts: {
     supabaseConfigured = false,
   } = opts;
 
-  // Visitante público explorando Portal ou Demo Web sem código de sala nunca entra em barramento compartilhado
+  // Public visitor exploring Portal or Web Demo without a room code never joins a shared bus
   if (!roomCode && (view === 'demo' || view === 'portal')) {
     return 'isolated';
   }
@@ -115,7 +115,7 @@ export function resolveSyncNetworkMode(opts: {
 }
 
 /**
- * Monta URL relativa ou absoluta preservando sempre `&room=XXXXXX` quando ativo.
+ * Builds a relative or absolute URL while always preserving `&room=XXXXXX` when active.
  */
 export function buildViewUrl(
   baseOrigin: string | null,

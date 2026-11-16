@@ -153,7 +153,7 @@ export const StepAudioSetup: React.FC<StepAudioSetupProps> = ({
   onStopCalibrationSignal,
   onCopyText,
 }) => {
-  // Regra fixa: o Tablet nunca emite áudio — o som sempre sai pelo PC / caixas da sala
+  // Fixed rule: the Tablet never emits audio — sound always plays from the PC / room speakers
   useEffect(() => {
     if (audioOwner !== 'pc') {
       onSetAudioOwner('pc');
@@ -314,7 +314,7 @@ export const StepAudioSetup: React.FC<StepAudioSetupProps> = ({
 
   return (
     <div className="flex flex-col gap-4 sm:gap-5" data-testid="setup-step-audio">
-      {/* Sub-bloco: Modo de Saída */}
+      {/* Sub-block: Output Mode */}
       {!audioModeConfirmed ? (
         <section
           className={`setup-block-enter p-5 sm:p-6 ${ADMIN_PANEL_CLASS}`}
@@ -461,7 +461,7 @@ export const StepAudioSetup: React.FC<StepAudioSetupProps> = ({
         />
       )}
 
-      {/* Calibração conforme modo */}
+      {/* Calibration according to mode */}
       {isHeadphones ? (
         <section
           className={`flex flex-col gap-4 p-5 sm:p-6 ${ADMIN_PANEL_CLASS}`}
@@ -519,7 +519,7 @@ export const StepAudioSetup: React.FC<StepAudioSetupProps> = ({
         </section>
       ) : (
         <div className="flex flex-col gap-3.5" data-testid="room-speakers-panel">
-          {/* Mapa Acústico 2D compacto */}
+          {/* Compact 2D Acoustic Map */}
           <section className={`p-5 sm:p-6 ${ADMIN_PANEL_CLASS}`}>
             <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
               <div>
@@ -553,7 +553,7 @@ export const StepAudioSetup: React.FC<StepAudioSetupProps> = ({
             />
           </section>
 
-          {/* Roteamento & Equalização de Nível */}
+          {/* Routing & Level Equalization */}
           <section className={`p-5 sm:p-6 ${ADMIN_PANEL_CLASS}`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -856,7 +856,7 @@ export const StepAudioSetup: React.FC<StepAudioSetupProps> = ({
               })}
             </div>
 
-            {/* Acordeão de atraso entre caixas + A/V Offset */}
+            {/* Speaker delay + A/V Offset accordion */}
             <div className={`mt-4 ${ADMIN_WELL_CLASS}`}>
               <button
                 type="button"

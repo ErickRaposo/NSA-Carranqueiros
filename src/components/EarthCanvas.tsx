@@ -381,7 +381,7 @@ export const EarthCanvas: React.FC<EarthCanvasProps> = ({
   showLabels,
   highContrast,
   hdEnhance = true,
-  lang = 'pt',
+  lang = 'en',
   backgroundHex = '#020617',
   frameOffsetRatio = 0,
   availableCountryIds,

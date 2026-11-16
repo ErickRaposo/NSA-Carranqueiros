@@ -9,7 +9,6 @@ export const COUNTRY_ID_TO_ALPHA2: Record<string, string> = {
   '392': 'JP',
   '276': 'DE',
   '818': 'EG',
-  '156': 'CN',
   '356': 'IN',
   '484': 'MX',
   '036': 'AU',

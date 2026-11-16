@@ -1,16 +1,16 @@
 """
-Motor Musical do Earth Jukebox: Plano de Controle Congelado + 3 Instrumentos Independentes.
+Earth Jukebox Music Engine: Frozen Control Plan + 3 Independent Instruments.
 
-Arquitetura:
-  - Fase 1 (`build_control_plan`): calcula e congela `session` (`base` e `region`),
-    `harmony_plan` (1 acorde/compasso ancorado no tom ativo) e curvas de controle isoladas
-    por camada (incluindo cursores de varredura da melodia e parâmetros do bus de vento).
-    O plano NUNCA muda ao ligar/desligar instrumentos ou o efeito de vento.
-  - Fase 2 (Composição independente por instrumento):
-      * `compose_chords_instrument`  (CO -> Pad 3–5 vozes, modo contínuo, voice-leading)
-      * `compose_bass_instrument`    (NO2 -> Linha de baixo contínua a partir das colunas da imagem)
-      * `compose_melody_instrument`  (Raios -> Pentatônica suspensa neutra, scan/time, memória/âncoras
-                                      e densidade adaptativa sem exceder o teto por compasso)
+Architecture:
+  - Phase 1 (`build_control_plan`): computes and freezes `session` (`base` and `region`),
+    `harmony_plan` (1 chord/bar anchored to the active key), and isolated control curves
+    per layer (including melody scan cursors and wind bus parameters).
+    The plan NEVER changes when toggling instruments or the wind effect on/off.
+  - Phase 2 (Independent per-instrument composition):
+      * `compose_chords_instrument`  (CO -> 3–5 voice pad, continuous mode, voice-leading)
+      * `compose_bass_instrument`    (NO2 -> Continuous bass line from image columns)
+      * `compose_melody_instrument`  (Lightning -> Neutral suspended pentatonic, scan/time,
+                                      memory/anchors, and adaptive density within bar cap)
 """
 
 from dataclasses import asdict, dataclass, field
@@ -39,13 +39,13 @@ NOTE_NAMES_PT = {
 
 CIRCLE_OF_FIFTHS_SEMITONES = [0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5]
 
-# Pentatônica suspensa neutra (1, 2, 4, 5, b7): sem terça nem sexta, consonante de Lídio a Frígio
+# Neutral suspended pentatonic (1, 2, 4, 5, b7): no third or sixth, consonant from Lydian to Phrygian
 NEUTRAL_SUSPENDED_PENTATONIC_IV = [0, 2, 5, 7, 10]
 
 
 @dataclass
 class NoteEvent:
-    """Nota musical individual vinculada à coordenada (source_x, source_y) da imagem."""
+    """Individual musical note linked to the image coordinate (source_x, source_y)."""
     pitch: int
     note_name: str
     start_beat: float
@@ -70,7 +70,7 @@ class NoteEvent:
 
 @dataclass
 class ChordSection:
-    """Acorde ativo em um compasso do `harmony_plan`."""
+    """Active chord in a bar of `harmony_plan`."""
     bar: int
     symbol: str
     degree_label: str
@@ -114,13 +114,13 @@ def resample_curve(series: List[float], target_len: int, default_val: float = 0.
 
 
 # ============================================================================
-# 1. Fase de Análise Congelada: Session (base/region) + Harmony Plan + Curvas
+# 1. Frozen Analysis Phase: Session (base/region) + Harmony Plan + Curves
 # ============================================================================
 
 def _continuous_scale_from_co(co_val: float) -> Tuple[str, str, List[int]]:
     """
-    Mapeamento CONTÍNUO do nível de CO [0..1] para a escala modal (Lídio -> Frígio):
-      #4->4J (Jônio) -> 7M->b7 (Mixolídio) -> 3M->b3 (Dórico) -> 6M->b6 (Eólio) -> 2M->b2 (Frígio).
+    CONTINUOUS mapping of CO level [0..1] to modal scale (Lydian -> Phrygian):
+      #4->P4 (Ionian) -> M7->b7 (Mixolydian) -> M3->b3 (Dorian) -> M6->b6 (Aeolian) -> M2->b2 (Phrygian).
     """
     scale = [0, 2, 4, 6, 7, 9, 11]
     alterations = [
@@ -154,7 +154,7 @@ def _voice_lead_chord(
     low_limit: int = 50,
     high_limit: int = 76,
 ) -> List[int]:
-    """Condução de vozes (voice-leading) minimizando saltos entre acordes consecutivos."""
+    """Voice-leading minimizing leaps between consecutive chords."""
     if not prev_voicing:
         base = 48 + chord_pcs[0]
         if base > 57:
@@ -200,9 +200,9 @@ def _voice_lead_chord(
 
 def build_sessions(temp_feat: LayerFeatures, total_bars: int = 8, tuning: str = "region") -> dict:
     """
-    Calcula os dois conjuntos congelados da sessão:
-      - `base`: Lá (A, pc=9) e BPM 90 (quando o olhinho da temperatura está desligado).
-      - `region`: tom pelo Círculo das Quintas a partir da temperatura média e
+    Computes the two frozen session sets:
+      - `base`: A (pc=9) and 90 BPM (when the temperature conductor eye is off).
+      - `region`: key via Circle of Fifths from mean temperature and
         `BPM = clip(round(68 + 40 * idx), 66, 110)`.
     """
     if tuning not in ("base", "region"):
@@ -256,8 +256,8 @@ def build_harmony_plan(
     total_bars: int = 8,
 ) -> dict:
     """
-    Constrói e congela o `harmony_plan` (1 acorde por compasso) derivado EXCLUSIVAMENTE do CO
-    e ancorado no tom da `session` ativa (sem qualquer modulação cruzada de temperatura ou fluxo global).
+    Builds and freezes `harmony_plan` (1 chord per bar) derived EXCLUSIVELY from CO
+    and anchored to the active `session` key (without any cross-modulation from temperature or global flow).
     """
     windows = co_feat.scan_windows
     if not windows:
@@ -407,8 +407,8 @@ def build_harmony_plan(
 
 def build_wind_bus_plan(wind_feat: LayerFeatures, active_session: dict, total_bars: int = 8) -> Tuple[dict, dict]:
     """
-    Constrói os parâmetros e curvas contínuas do Bus de Efeitos de Vento, derivados
-    EXCLUSIVAMENTE do vídeo de vento (sem geração de ruído próprio).
+    Builds the parameters and continuous curves for the Wind Effects Bus, derived
+    EXCLUSIVELY from the wind video (no self-generated noise).
     """
     slots = total_bars * 8
     w_mean = float(np.clip(wind_feat.mean_index, 0.0, 1.0))
@@ -507,8 +507,8 @@ def build_wind_bus_plan(wind_feat: LayerFeatures, active_session: dict, total_ba
 
 def _build_melody_scan_cursors(total_bars: int, bpm: float, lightning_map: str) -> List[dict]:
     """
-    Expõe a trajetória do cursor de varredura da melodia por compasso para sincronizar
-    com o mapa no vídeo e gravar em `manifest.json`.
+    Exposes the per-bar melody scan cursor trajectory to sync with the map
+    in the video and write to `manifest.json`.
     """
     beat_sec = 60.0 / max(1.0, float(bpm))
     cursors: List[dict] = []
@@ -542,8 +542,8 @@ def build_control_plan(
     lightning_map: str = "scan",
 ) -> dict:
     """
-    Fase 1 congelada: constrói `session` (`base` e `region`), `harmony_plan`,
-    `wind_bus_plan` e curvas isoladas por camada. Nunca depende de quais instrumentos estão ligados.
+    Frozen Phase 1: builds `session` (`base` and `region`), `harmony_plan`,
+    `wind_bus_plan`, and isolated per-layer curves. Never depends on which instruments are enabled.
     """
     sessions = build_sessions(features["temperature"], total_bars=total_bars, tuning=tuning)
     active_session = sessions["active"]
@@ -643,7 +643,7 @@ def build_control_plan(
 
 
 # ============================================================================
-# 2. Instrumento 1: ACORDES (CO) — Ancorado na Session + Fluxo Óptico Próprio
+# 2. Instrument 1: CHORDS (CO) — Anchored to Session + Own Optical Flow
 # ============================================================================
 
 def compose_chords_instrument(
@@ -727,7 +727,7 @@ def compose_chords_instrument(
 
 
 # ============================================================================
-# 3. Instrumento 2: BAIXO (NO2) — Linha Musical Contínua Construída da Imagem
+# 3. Instrument 2: BASS (NO2) — Continuous Musical Line Built from Image
 # ============================================================================
 
 def compose_bass_instrument(
@@ -736,19 +736,19 @@ def compose_bass_instrument(
     bass_follows_harmony: bool = True,
 ) -> Tuple[dict, List[NoteEvent], dict]:
     """
-    Constrói uma linha de baixo 100% harmônica e 100% guiada pela imagem de NO2 (8 colunas/compasso):
-      - Trilho harmônico:
-          * `bass_follows_harmony=True`: usa estritamente os tons do acorde (`root`, `3rd`, `5th`) nos tempos
-            de apoio/notas sustentadas e a escala exata do compasso (`scale_pcs` do `harmony_plan`) nas
-            colcheias de passagem, com aproximação cromática permitida apenas na última colcheia curta (`col 7`).
-          * `bass_follows_harmony=False`: ancora-se apenas na tônica/quinta e pentatônica neutra da `session`,
-            sem qualquer dependência do CO.
-      - Decisão 100% pela imagem de NO2:
-          * Densidade e contraste locais determinam o orçamento de notas do compasso (1 nota sustentada no
-            oceano limpo até linhas sincopadas articuladas de 5–6 notas nas megacidades, sem metralhadora fixa).
-          * A latitude da mancha (`1 - y_norm`) e o gradiente horizontal (`grad_x`) conduzem o voice-leading
-            (subindo quando a pluma cresce/sobe ao norte e descendo suavemente para a fundamental quando dissipa).
-          * Cutoff (120–560 Hz), drive (0.04–0.48) e ataque (8–48 ms) contínuos por nota.
+    Builds a bass line that is 100% harmonic and 100% driven by the NO2 image (8 columns/bar):
+      - Harmonic rail:
+          * `bass_follows_harmony=True`: strictly uses chord tones (`root`, `3rd`, `5th`) on strong
+            beats/sustained notes and the bar's exact scale (`scale_pcs` from `harmony_plan`) on
+            passing eighth-notes, with chromatic approach allowed only on the last short eighth (`col 7`).
+          * `bass_follows_harmony=False`: anchors only on tonic/fifth and neutral pentatonic of `session`,
+            with no dependency on CO.
+      - 100% NO2 image-driven decisions:
+          * Local density and contrast determine the bar's note budget (1 sustained note over
+            clean ocean up to articulated syncopated lines of 5–6 notes in megacities, no fixed machine-gun).
+          * Plume latitude (`1 - y_norm`) and horizontal gradient (`grad_x`) drive voice-leading
+            (rising when the plume grows/moves north and descending smoothly to the root when dissipating).
+          * Continuous per-note cutoff (120–560 Hz), drive (0.04–0.48), and attack (8–48 ms).
     """
     active_session = control_plan["session"]["active"]
     chords_list = control_plan["harmony_plan"]["chords"]
@@ -819,7 +819,7 @@ def compose_bass_instrument(
         )
         mot_b = float(no2_motion_bars[b_idx])
 
-        # Energia e saliência contínua de cada uma das 8 colunas da imagem de NO2
+        # Continuous energy and salience of each of the 8 NO2 image columns
         col_energy = [
             float(np.clip(0.58 * float(c["mean"]) + 0.42 * float(c["peak"]), 0.0, 1.0))
             for c in cols
@@ -829,7 +829,7 @@ def compose_bass_instrument(
         bar_contrast = float(np.mean([float(c["contrast"]) for c in cols]))
         bar_col_std = float(np.clip(np.std(col_energy) * 3.2, 0.0, 1.0))
 
-        # Orçamento de notas derivado continuamente da densidade/contraste da imagem (1 no oceano a 6 na megacidade)
+        # Note budget derived continuously from image density/contrast (1 over ocean to 6 in megacities)
         activity_idx = float(
             np.clip(
                 0.54 * bar_mean
@@ -858,7 +858,7 @@ def compose_bass_instrument(
             )
             col_salience.append(float(np.clip(sal, 0.0, 1.0)))
 
-        # Seleciona deterministicamente as colunas mais salientes da mancha de NO2
+        # Deterministically select the most salient columns of the NO2 plume
         picked_slots: List[int] = [0]
         while len(picked_slots) < target_hits:
             best_c = -1
@@ -885,9 +885,9 @@ def compose_bass_instrument(
 
             e_now = col_energy[c_slot]
             if len(active_slots) == 1:
-                gate_ratio = 0.97  # Ar limpo / oceano: fundamental sustentada pelo compasso inteiro
+                gate_ratio = 0.97  # Clean air / ocean: root sustained for the entire bar
             elif c_slot + 1 < next_slot and col_energy[c_slot + 1] < 0.52 * e_now and e_now > 0.18:
-                gate_ratio = 0.72  # Respiração musical quando a mancha de NO2 cai
+                gate_ratio = 0.72  # Musical breathing room when the NO2 plume drops
             else:
                 gate_ratio = float(np.clip(0.94 - 0.12 * float(cols[c_slot]["contrast"]), 0.78, 0.95))
 
@@ -904,7 +904,7 @@ def compose_bass_instrument(
             )
 
             if c_slot == 0:
-                # Tempo 1: ancora na fundamental (ou 5ª suave apenas se o acorde repetir e a mancha estiver ao norte)
+                # Beat 1: anchor on root (or soft 5th only if chord repeats and plume is to the north)
                 if (
                     prev_bar_root_pc == cur_root_pc
                     and prev_pitch is not None
@@ -916,7 +916,7 @@ def compose_bass_instrument(
                 else:
                     pitch = root_m
             elif is_short_pickup:
-                # Última colcheia curta (slot 7): nota de passagem diatônica (ou semitom urbano) preparando next_root_m
+                # Last short eighth (slot 7): diatonic passing tone (or urban semitone) leading to next_root_m
                 ref_prev = prev_pitch if prev_pitch is not None else root_m
                 diatonic_steps = [
                     p for p in scale_pitches if p != next_root_m and 1 <= abs(p - next_root_m) <= 2
@@ -932,7 +932,7 @@ def compose_bass_instrument(
                 else:
                     pitch = min(pillar_pitches, key=lambda p: abs(p - ref_prev))
             else:
-                # Voice-leading guiado por latitude (1 - y_norm), intensidade local e inclinação grad_x
+                # Voice-leading driven by latitude (1 - y_norm), local intensity, and grad_x slope
                 ref_prev = prev_pitch if prev_pitch is not None else root_m
                 slope_norm = 0.5 + 0.5 * float(np.clip(grad_x * 4.5, -1.0, 1.0))
                 img_contour = float(np.clip(0.48 * north_y + 0.37 * e_now + 0.15 * slope_norm, 0.0, 1.0))
@@ -940,7 +940,7 @@ def compose_bass_instrument(
                 step_bias = float(np.clip(grad_x * 18.0, -3.5, 3.5))
                 target_m = 0.62 * contour_target + 0.38 * (ref_prev + step_bias)
 
-                # Notas longas ou tempo 3 usam apenas tons puros do acorde; colcheias curtas podem caminhar na escala
+                # Long notes or beat 3 use only pure chord tones; short eighths can walk along the scale
                 if raw_dur_beats >= 1.5:
                     pool = pillar_pitches
                 elif raw_dur_beats >= 1.0 or c_slot == 4:
@@ -1057,7 +1057,7 @@ def compose_bass_instrument(
 
 
 # ============================================================================
-# 4. Instrumento 3: MELODIA (Raios) — Redesenho Completo c/ Memória e Scan
+# 4. Instrument 3: MELODY (Lightning) — Full Redesign w/ Memory and Scan
 # ============================================================================
 
 @dataclass
@@ -1071,12 +1071,12 @@ class _BarFlashCluster:
 
 def _build_neutral_pentatonic_pool(key_root_pc: int) -> List[int]:
     """
-    Constrói ~2 oitavas (11 graus consecutivos: 2 oitavas + tônica aguda) da pentatônica
-    suspensa neutra [0, 2, 5, 7, 10] ancorada em `key_root_pc`, no registro de Celesta/Rhodes.
+    Builds ~2 octaves (11 consecutive degrees: 2 octaves + high tonic) of the neutral
+    suspended pentatonic [0, 2, 5, 7, 10] anchored at `key_root_pc`, in the Celesta/Rhodes register.
     """
     base_root = 60 + (key_root_pc % 12)
     if base_root > 66:
-        base_root -= 12  # Mantém base entre G3 (55) e F#4 (66) -> 2 oitavas até ~G5..F#6
+        base_root -= 12  # Keeps base between G3 (55) and F#4 (66) -> 2 octaves up to ~G5..F#6
     pool: List[int] = []
     for oct_idx in range(2):
         for iv in NEUTRAL_SUSPENDED_PENTATONIC_IV:
@@ -1095,16 +1095,16 @@ def compose_melody_instrument(
     max_notes_per_bar: int = 8,
 ) -> Tuple[dict, List[NoteEvent], List[NoteEvent], dict]:
     """
-    Melodia 100% independente derivada dos raios da ISS:
-      - Escala pentatônica suspensa neutra (1, 2, 4, 5, b7) ancorada apenas no tom da `session`
-        (NÃO depende do modo nem dos acordes do CO).
-      - `--lightning-map scan`: divide o vídeo em N compassos pelo frame do evento e varre
-        esquerda->direita dentro de cada compasso (X -> colcheia 0..7 e pan).
-      - `--lightning-map time`: posiciona a nota na colcheia cronológica em que o clarão ocorreu.
-      - Altura Y (norte = agudo) em ~2 oitavas (`fixed` = latitude absoluta no recorte; `auto` =
-        ajustada à distribuição real dos eventos), dobrando de oitava saltos > 4 graus sem mudar a classe de altura.
-      - Memória anual: regiões persistentes viram notas-âncora em tempos fortes, com mais peso e duração.
-      - Densidade adaptativa respeitando estritamente o teto `max_notes_per_bar` (padrão 8).
+    100% independent melody derived from ISS lightning:
+      - Neutral suspended pentatonic scale (1, 2, 4, 5, b7) anchored only to the `session` key
+        (DOES NOT depend on CO mode or chords).
+      - `--lightning-map scan`: divides the video into N bars by event frame and scans
+        left->right within each bar (X -> eighth-note 0..7 and pan).
+      - `--lightning-map time`: places the note on the chronological eighth-note when the flash occurred.
+      - Y pitch (north = high) across ~2 octaves (`fixed` = absolute latitude in crop; `auto` =
+        fitted to actual event distribution), octave-folding leaps > 4 degrees without changing pitch class.
+      - Annual memory: persistent regions become anchor notes on strong beats, with more weight and duration.
+      - Adaptive density strictly respecting the `max_notes_per_bar` cap (default 8).
     """
     if lightning_map not in ("scan", "time"):
         raise ValueError(f"Modo inválido para lightning_map: {lightning_map} (use 'scan' ou 'time')")
@@ -1122,7 +1122,7 @@ def compose_melody_instrument(
     events = list(light_feat.lightning_events)
     mot_slots = resample_curve(light_feat.motion_series, total_bars * 8, light_feat.motion_mean)
 
-    # Sem eventos -> silêncio absoluto (nunca inventar notas)
+    # No events -> absolute silence (never invent notes)
     if not events:
         melody_params = {
             "role": "instrument",
@@ -1167,7 +1167,7 @@ def compose_melody_instrument(
         }
         return melody_params, [], [], explanation
 
-    # Faixa de altura (norte = 1.0 - y_norm)
+    # Pitch range (north = 1.0 - y_norm)
     north_vals = [1.0 - ev.y_norm for ev in events]
     if lightning_pitch_range == "auto" and len(north_vals) >= 2:
         n_lo = float(np.percentile(north_vals, 5.0))
@@ -1187,7 +1187,7 @@ def compose_melody_instrument(
         deg = _raw_degree(y_norm)
         pitch = scale_pool[deg]
 
-        # Saltos maiores que 4 graus na pentatônica: dobra de oitava mantendo exatamente a mesma classe de altura!
+        # Leaps > 4 degrees in the pentatonic: octave-fold while keeping the exact same pitch class!
         if prev_deg is not None and prev_pitch is not None and abs(deg - prev_deg) > 4:
             if deg > prev_deg and (deg - 5) >= 0:
                 deg -= 5
@@ -1197,7 +1197,7 @@ def compose_melody_instrument(
                 pitch = scale_pool[deg]
         return pitch, deg
 
-    # Agrupa eventos por compasso usando seu frame no vídeo
+    # Group events by bar using their video frame
     total_frames = max(1, events[0].total_frames)
     bars_events: List[List[LightningEvent]] = [[] for _ in range(total_bars)]
     for ev in events:
@@ -1219,7 +1219,7 @@ def compose_melody_instrument(
         bar_f0 = (b_idx / float(total_bars)) * total_frames
         bar_f1 = ((b_idx + 1) / float(total_bars)) * total_frames
 
-        # Seleciona até `max_anchors_per_bar` eventos-âncora mais persistentes em tempos fortes distintos (0, 2, 4, 6)
+        # Select up to `max_anchors_per_bar` most persistent anchor events on distinct strong beats (0, 2, 4, 6)
         anchor_candidates = sorted(
             [ev for ev in b_evs if ev.is_anchor],
             key=lambda ev: (round(ev.persistence, 4), round(ev.intensity, 4), -ev.frame),
@@ -1240,7 +1240,7 @@ def compose_melody_instrument(
                 used_strong_slots.add(pref_slot)
                 bar_anchor_slots[id(cand)] = pref_slot
 
-        # Determina o slot base (0..7 colcheias) de cada evento conforme scan vs time
+        # Determine the base slot (0..7 eighth-notes) of each event according to scan vs time
         ev_slots: List[Tuple[int, LightningEvent, bool]] = []
         for ev in b_evs:
             is_bar_anc = id(ev) in bar_anchor_slots
@@ -1263,18 +1263,18 @@ def compose_melody_instrument(
         is_excess = raw_count > max_notes_per_bar
         bar_is_sparse[b_idx] = is_sparse
 
-        # Grade de 16 semicolcheias (subslot 0..15 -> 0.25 beat cada) garante ZERO notas simultâneas
+        # 16th-note grid (subslot 0..15 -> 0.25 beat each) guarantees ZERO simultaneous notes
         occupied_subslots: Dict[int, _BarFlashCluster] = {}
 
         if not is_excess:
-            # Posiciona âncoras primeiro nos tempos fortes pares (subslot = slot * 2)
+            # Place anchors first on even strong beats (subslot = slot * 2)
             for slot, ev, is_bar_anc in ev_slots:
                 if is_bar_anc:
                     sub = slot * 2
                     occupied_subslots[sub] = _BarFlashCluster(
                         slot=slot, beat_offset=0.0, primary=ev, members=[ev], is_anchor=True
                     )
-            # Posiciona demais eventos priorizando colcheias livres (0.5b) antes de semicolcheias (0.25b)
+            # Place remaining events prioritizing free eighth-notes (0.5b) before sixteenth-notes (0.25b)
             for slot, ev, is_bar_anc in ev_slots:
                 if is_bar_anc:
                     continue
@@ -1295,7 +1295,7 @@ def compose_melody_instrument(
                 else:
                     occupied_subslots[base_sub].members.append(ev)
         else:
-            # Excesso (> max_notes_per_bar): consolida no máximo 1 cluster primário por colcheia (slot 0..7)
+            # Excess (> max_notes_per_bar): consolidate at most 1 primary cluster per eighth-note (slot 0..7)
             slot_buckets: Dict[int, List[Tuple[LightningEvent, bool]]] = {}
             for slot, ev, is_bar_anc in ev_slots:
                 slot_buckets.setdefault(slot, []).append((ev, is_bar_anc))
@@ -1324,18 +1324,18 @@ def compose_melody_instrument(
                 )
 
             if lightning_mode == "strum":
-                primary_cap = min(max_notes_per_bar, max(2, (max_notes_per_bar + 1) // 2 + 1))  # 5 para teto=8
+                primary_cap = min(max_notes_per_bar, max(2, (max_notes_per_bar + 1) // 2 + 1))  # 5 for cap=8
             elif lightning_mode == "harmonic_bloom":
-                primary_cap = min(max_notes_per_bar, max(2, max_notes_per_bar - 2))  # 6 para teto=8 (espaço para ressoar)
+                primary_cap = min(max_notes_per_bar, max(2, max_notes_per_bar - 2))  # 6 for cap=8 (room to resonate)
             else:
-                primary_cap = min(max_notes_per_bar, max(2, max_notes_per_bar - 2))  # 6 primárias + até 2 subdivisões = 8
+                primary_cap = min(max_notes_per_bar, max(2, max_notes_per_bar - 2))  # 6 primary + up to 2 subdivisions = 8
 
             anchor_slots_set = {cl.slot for cl in slot_clusters if cl.is_anchor}
             ranked_slots = sorted(
                 slot_clusters,
                 key=lambda cl: (
                     1 if cl.is_anchor else 0,
-                    # Pequena penalidade para colcheia imediatamente após uma âncora, deixando a âncora respirar 1 tempo
+                    # Small penalty for the eighth-note immediately after an anchor, letting the anchor breathe 1 beat
                     0 if (cl.is_anchor or (cl.slot - 1) not in anchor_slots_set) else -1,
                     round(cl.primary.persistence, 4) if cl.is_anchor else 0.0,
                     round(cl.primary.intensity * math.sqrt(max(1e-5, cl.primary.area_ratio)), 6),
@@ -1353,7 +1353,7 @@ def compose_melody_instrument(
             for k_cl in kept_clusters:
                 occupied_subslots[k_cl.slot * 2] = k_cl
 
-            # Em `strum` e `subdivision`, usa parte do orçamento restante em semicolcheias (+0.25b) LIVRES e com altura distinta
+            # In `strum` and `subdivision`, use part of remaining budget on FREE sixteenth-notes (+0.25b) with distinct pitch
             if lightning_mode in ("strum", "subdivision"):
                 max_extra = min(2, max(0, max_notes_per_bar - len(occupied_subslots)))
                 rich_kept = sorted(
@@ -1369,7 +1369,7 @@ def compose_melody_instrument(
                     if sub_off >= 16 or sub_off in occupied_subslots:
                         continue
                     prim_deg = _raw_degree(cl.primary.y_norm)
-                    # Escolhe clarão secundário com intervalo melódico cantável (1..4 graus, sem repetir a mesma nota)
+                    # Pick secondary flash with a singable melodic interval (1..4 degrees, without repeating the same note)
                     distinct_members = [
                         m for m in cl.members[1:] if _raw_degree(m.y_norm) != prim_deg
                     ]
@@ -1407,7 +1407,7 @@ def compose_melody_instrument(
             slot_global = min(total_bars * 8 - 1, b_idx * 8 + item.slot)
             local_mot = float(mot_slots[slot_global])
 
-            # Notas-âncora firmam o registro geográfico real nos tempos fortes; notas de passagem dobram saltos > 4 graus
+            # Anchor notes lock in the true geographic register on strong beats; passing notes fold leaps > 4 degrees
             ref_deg = None if item.is_anchor else prev_deg
             ref_pitch = None if item.is_anchor else prev_pitch
             pitch, deg = _quantize_pitch_and_degree(ev.y_norm, ref_deg, ref_pitch)
@@ -1417,7 +1417,7 @@ def compose_melody_instrument(
             area_norm = min(1.0, math.sqrt(max(0.0, ev.area_ratio * 45.0)))
 
             if is_sparse:
-                # Poucos eventos (1–2 no compasso): notas longas, ataque suave e release comprido
+                # Few events (1–2 in the bar): long notes, soft attack, and long release
                 dur_beats = 2.05 + 1.15 * area_norm + 0.55 * ev.intensity
                 atk_sec = 0.068
                 rel_sec = 1.65
@@ -1439,7 +1439,7 @@ def compose_melody_instrument(
             vel_base = 0.38 + 0.44 * ev.intensity + 0.06 * local_mot + (0.11 if item.is_anchor else 0.0)
             vel = round(float(np.clip(vel_base, 0.26, 0.94)), 3)
 
-            # Densidade local abre harmônicos no ataque e adiciona parciais (oitava/quinta) no próprio instrumento
+            # Local density opens attack harmonics and adds partials (octave/fifth) on the instrument itself
             density_ratio = min(1.0, (raw_count / float(max(1, max_notes_per_bar))) * 0.65 + 0.15 * (n_cluster - 1))
             bright = round(float(np.clip(0.26 + 0.48 * density_ratio + 0.20 * local_mot, 0.20, 0.98)), 3)
 
@@ -1475,7 +1475,7 @@ def compose_melody_instrument(
 
     melody_notes.sort(key=lambda n: (n.start_beat, n.pitch))
 
-    # Gate monofônico / legato limpo: impede empilhamento polifônico no MIDI (cada nota solta antes da próxima)
+    # Clean monophonic / legato gate: prevents polyphonic stacking in MIDI (each note releases before the next)
     for idx_n, note in enumerate(melody_notes):
         next_sb = melody_notes[idx_n + 1].start_beat if (idx_n + 1) < len(melody_notes) else total_beats
         avail_gap = max(0.16, next_sb - note.start_beat)
@@ -1491,11 +1491,11 @@ def compose_melody_instrument(
         note.duration_beats = round(max(0.16, capped), 3)
 
     # ------------------------------------------------------------------------
-    # Camada Híbrida em Tempo Real (`melody_sparkle`):
-    #   - Nível 1 (<=12 pontos amarelos no frame): timbre puro/fechado, sem dobras nem cintilação.
-    #   - Nível 2 (13..48 pontos amarelos): abre brilho metálico + dobras harmônicas de 5ª/4ª e 8ª.
-    #   - Nível 3 (>=49 pontos amarelos): adiciona cintilação cristalina contínua aguda (16ª/32ª)
-    #     extraindo X (pan) e Y (altura) diretamente dos pontos amarelos acesos naquele exato frame!
+    # Real-Time Hybrid Layer (`melody_sparkle`):
+    #   - Level 1 (<=12 yellow dots in frame): pure/closed timbre, no doublings or sparkle.
+    #   - Level 2 (13..48 yellow dots): opens metallic brightness + 5th/4th and 8ve harmonic doublings.
+    #   - Level 3 (>=49 yellow dots): adds continuous high crystalline sparkle (16th/32nd)
+    #     extracting X (pan) and Y (pitch) directly from the lit yellow dots in that exact frame!
     # ------------------------------------------------------------------------
     bursts = light_feat.frame_yellow_bursts
     neutral_pcs = {(key_root_pc + iv) % 12 for iv in NEUTRAL_SUSPENDED_PENTATONIC_IV}
@@ -1518,16 +1518,16 @@ def compose_melody_instrument(
         y_dens = float(b_info.get("yellow_density", 0.0))
 
         if dots <= 12:
-            # Poucos pontos amarelos: timbre puro, aveludado e fechado (sem dobras)
+            # Few yellow dots: pure, velvety, closed timbre (no doublings)
             note.brightness = round(0.18 + 0.14 * min(1.0, dots / 12.0), 3)
             note.harmonic_partials = 0.0
         else:
-            # Média a alta densidade de amarelo: abre peso, brilho metálico e dobras consonantes
+            # Medium to high yellow density: opens weight, metallic brightness, and consonant doublings
             mid_prog = float(np.clip((dots - 12.0) / 36.0, 0.0, 1.0))
             note.brightness = round(min(0.98, 0.48 + 0.30 * mid_prog + 0.20 * y_dens), 3)
             note.harmonic_partials = round(min(1.0, 0.38 + 0.32 * mid_prog + 0.30 * y_dens), 3)
 
-            # Quinta justa (+7) se pertencer à pentatônica suspensa neutra, senão quarta justa (+5)
+            # Perfect fifth (+7) if in the neutral suspended pentatonic, otherwise perfect fourth (+5)
             fifth_iv = 7 if ((note.pitch + 7) % 12) in neutral_pcs else 5
             fifth_pitch = min(92, note.pitch + fifth_iv)
             vel_5th = round(float(np.clip(note.velocity * (0.44 + 0.22 * mid_prog), 0.20, 0.68)), 3)
@@ -1576,7 +1576,7 @@ def compose_melody_instrument(
                 )
                 bloom_count += 1
 
-    # Cintilação cristalina contínua nos picos reais de pontos amarelos na tela (>= 49 pontos)
+    # Continuous crystalline sparkle at real yellow-dot peaks on screen (>= 49 dots)
     total_sub32 = int(total_bars * 32)
     last_sp_pitch: Optional[int] = None
     for s32 in range(total_sub32):
@@ -1588,7 +1588,7 @@ def compose_melody_instrument(
             last_sp_pitch = None
             continue
 
-        # 49..129 pontos -> semicolcheias (0.25b); >=130 pontos -> fusas cristalinas (0.125b)
+        # 49..129 dots -> sixteenth-notes (0.25b); >=130 dots -> crystalline thirty-second notes (0.125b)
         is_super_dense = dots >= 130
         if not is_super_dense and (s32 % 2 != 0):
             continue
@@ -1598,7 +1598,7 @@ def compose_melody_instrument(
         deg_sp = _raw_degree(float(pt["y_norm"]))
         sp_pitch = high_crystal_pool[deg_sp]
 
-        # Garante movimento cintilante de arpejo evitando repetir o mesmo sino agudo consecutivamente
+        # Ensure shimmering arpeggio movement by avoiding consecutive repeats of the same high bell
         if last_sp_pitch is not None and sp_pitch == last_sp_pitch:
             if len(pts) >= 2:
                 alt_pt = pts[(s32 + 1) % len(pts)]
@@ -1706,7 +1706,7 @@ def compose_melody_instrument(
 
 
 # ============================================================================
-# 5. Orquestração Completa da Partitura a partir do Plano Congelado
+# 5. Full Score Orchestration from the Frozen Plan
 # ============================================================================
 
 def compose_jukebox_score(
@@ -1722,7 +1722,7 @@ def compose_jukebox_score(
     control_plan: Optional[dict] = None,
 ) -> dict:
     """
-    Constrói o plano congelado (se ainda não fornecido) e compõe os 3 instrumentos independentes.
+    Builds the frozen plan (if not yet provided) and composes the 3 independent instruments.
     """
     plan = control_plan or build_control_plan(
         bbox=bbox,

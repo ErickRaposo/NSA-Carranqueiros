@@ -11,10 +11,10 @@ interface IdleStageRightWallProps {
 }
 
 /**
- * Palco de Espera (`idle`) da Parede Direita:
- * - Sol radiante + planetas bem espalhados pelos quadrantes (sem aglomerar e sem competir com o texto)
- * - Texto central mantido (`Vamos começar a sua imersão?`)
- * - Conectado ao `IdlePanoramaBridge` para faixas MINEIRØ, cometas e robô gigante cruzarem a quina em L
+ * Right Wall Idle Stage (`idle`):
+ * - Radiant sun + planets well spread across quadrants (no crowding or competing with text)
+ * - Central prompt preserved (`Vamos começar a sua imersão?`)
+ * - Connected to `IdlePanoramaBridge` so MINEIRØ strips, comets, and giant robot cross the L-corner
  */
 export const IdleStageRightWall: React.FC<IdleStageRightWallProps> = ({
   isPt,
@@ -23,7 +23,7 @@ export const IdleStageRightWall: React.FC<IdleStageRightWallProps> = ({
 }) => {
   return (
     <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
-      {/* 1. Sol radiante no quadrante superior direito com planeta satélite próximo */}
+      {/* 1. Radiant sun in the top-right quadrant with nearby satellite planet */}
       <div
         className="pointer-events-none absolute top-[21%] left-[84%] -translate-x-1/2 -translate-y-1/2"
         aria-hidden="true"
@@ -46,7 +46,7 @@ export const IdleStageRightWall: React.FC<IdleStageRightWallProps> = ({
               '0 0 32px rgba(251, 191, 36, 0.7), 0 0 72px rgba(245, 158, 11, 0.3)',
           }}
         />
-        {/* Planeta quente interno em órbita aberta do Sol */}
+        {/* Hot inner planet in wide orbit around the Sun */}
         <div
           className="absolute top-1/2 left-1/2 h-[156px] w-[156px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed border-amber-200/14"
         />
@@ -67,7 +67,7 @@ export const IdleStageRightWall: React.FC<IdleStageRightWallProps> = ({
         </div>
       </div>
 
-      {/* 2. Gigante com Anéis (Saturno estilizado) bem separado perto do quadrante superior esquerdo */}
+      {/* 2. Ringed Giant (stylized Saturn) well separated near the top-left quadrant */}
       <motion.div
         className="pointer-events-none absolute top-[24%] left-[15%]"
         animate={{ y: [-9, 9, -9], x: [-5, 7, -5] }}
@@ -95,7 +95,7 @@ export const IdleStageRightWall: React.FC<IdleStageRightWallProps> = ({
         </div>
       </motion.div>
 
-      {/* 3. Planeta Oceânico com Lua no meio-direito (abaixo do Sol, livre do texto) */}
+      {/* 3. Oceanic Planet with Moon at mid-right (below the Sun, clear of text) */}
       <motion.div
         className="pointer-events-none absolute top-[57%] left-[84%]"
         animate={{ y: [7, -8, 7], x: [4, -4, 4] }}
@@ -123,7 +123,7 @@ export const IdleStageRightWall: React.FC<IdleStageRightWallProps> = ({
         </div>
       </motion.div>
 
-      {/* 4. Planeta Coral-Marte flutuando na lateral esquerda média (próximo à quina) */}
+      {/* 4. Coral-Mars planet floating on the mid-left side (near the corner) */}
       <motion.div
         className="pointer-events-none absolute top-[55%] left-[12%]"
         animate={{ y: [-7, 8, -7] }}
@@ -140,7 +140,7 @@ export const IdleStageRightWall: React.FC<IdleStageRightWallProps> = ({
         />
       </motion.div>
 
-      {/* 5. Pequeno astro violeta distante no topo central */}
+      {/* 5. Small distant violet celestial body at top center */}
       <motion.div
         className="pointer-events-none absolute top-[17%] left-[48%]"
         animate={{ y: [4, -5, 4], x: [-6, 6, -6] }}
@@ -157,7 +157,7 @@ export const IdleStageRightWall: React.FC<IdleStageRightWallProps> = ({
         />
       </motion.div>
 
-      {/* Frase central original + Botão START estilo jogo acima da pista do MINEIRØ */}
+      {/* Original central headline + game-style START button above the MINEIRØ track */}
       <div className="relative z-20 flex h-full w-full flex-col items-center justify-center gap-7 px-10 pb-36 text-center">
         <h1
           className="max-w-[70%] font-bold tracking-[0.04em] text-slate-50 uppercase drop-shadow-[0_4px_24px_rgba(0,0,0,0.88)]"
@@ -180,7 +180,7 @@ export const IdleStageRightWall: React.FC<IdleStageRightWallProps> = ({
         />
       </div>
 
-      {/* Camada contínua compartilhada entre Parede Esquerda e Parede Direita */}
+      {/* Continuous layer shared between Left Wall and Right Wall */}
       <IdlePanoramaBridge surface="rightWall" />
     </div>
   );

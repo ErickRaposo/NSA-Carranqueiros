@@ -21,8 +21,8 @@ import momentVideo3 from '../assets/moments/IMG_0316.MOV?url';
 import momentVideo4 from '../assets/moments/IMG_0317.MOV?url';
 import momentVideo5 from '../assets/moments/IMG_0319.MOV?url';
 import momentVideo6 from '../assets/moments/IMG_0322.MOV?url';
-import { speakTextPt, stopSpeech } from '../accessibility/a11yEngine';
-import { LAYER_METAS, VISUAL_LAYER_ORDER } from '../experience/types';
+import { speakText, stopSpeech } from '../accessibility/a11yEngine';
+import { LAYER_METAS, Lang, VISUAL_LAYER_ORDER } from '../experience/types';
 import { Mineiro3D } from './Mineiro3D';
 import { StarfieldBackground } from './StarfieldBackground';
 
@@ -57,6 +57,8 @@ const TEAM_MEMBERS = [
 ] as const;
 
 interface EntryPortalProps {
+  lang?: Lang;
+  onToggleLang?: () => void;
   highContrast: boolean;
   onToggleHighContrast: () => void;
   fontScale: number;
@@ -68,6 +70,8 @@ interface EntryPortalProps {
 }
 
 export const EntryPortal: React.FC<EntryPortalProps> = ({
+  lang = 'en',
+  onToggleLang,
   highContrast,
   onToggleHighContrast,
   fontScale,
@@ -76,6 +80,7 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
   onOpenAuth,
   onOpenRegister,
 }) => {
+  const isPt = lang === 'pt';
   const [audioPreviewActive, setAudioPreviewActive] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [scrollY, setScrollY] = useState(0);
@@ -192,16 +197,15 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
       setIsSpeaking(false);
       return;
     }
-    speakTextPt(
-      'O planeta está esperando para ser ouvido. Em MINEIRØ, dados reais da NASA de raios, monóxido de carbono, temperatura, óxidos de nitrogênio e ventos ganham voz em cinco instrumentos. Clique em Explorar a Terra para navegar pelo globo vivo e acender camadas com a comunidade.',
-      true,
-      {
-        maleVoice: true,
-        onStart: () => setIsSpeaking(true),
-        onEnd: () => setIsSpeaking(false),
-      }
-    );
-  }, [isSpeaking]);
+    const introText = isPt
+      ? 'O planeta está esperando para ser ouvido. Em MINEIRØ, dados reais da NASA de raios, monóxido de carbono, temperatura, óxidos de nitrogênio e ventos ganham voz em cinco instrumentos. Clique em Entrar na Sala Sensorial para navegar pelo globo vivo e acender camadas com a comunidade.'
+      : 'The planet is waiting to be heard. In MINEIRØ, real NASA observations of lightning, carbon monoxide, temperature, nitrogen oxides, and wind come alive across five instruments. Click Enter Sensory Room to explore the living globe and mix layers.';
+    speakText(introText, lang, true, {
+      maleVoice: true,
+      onStart: () => setIsSpeaking(true),
+      onEnd: () => setIsSpeaking(false),
+    });
+  }, [isPt, isSpeaking, lang]);
 
   // Header starts transparent at scroll 0 and increases dark navy opacity on scroll
   const headerAlpha = highContrast ? 1 : Math.min(0.95, scrollY / 220);
@@ -212,10 +216,14 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
       onScroll={handleScroll}
       className={`entry-portal ${highContrast ? 'high-contrast' : ''}`}
       style={{ fontSize: `${Math.round(fontScale * 100)}%` }}
-      aria-label="Portal de entrada do MINEIRØ — Explorador Planetário Sonoro"
+      aria-label={
+        isPt
+          ? 'Portal de entrada do MINEIRØ — Explorador Planetário Sonoro'
+          : 'MINEIRØ Entry Portal — Planetary Sound Explorer'
+      }
     >
       <a href="#portal-inicio" className="skip-link">
-        Pular para o conteúdo principal
+        {isPt ? 'Pular para o conteúdo principal' : 'Skip to main content'}
       </a>
       {/* Sticky Top Menu (transparent at top, deepens to dark navy on scroll) */}
       <header
@@ -234,37 +242,54 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
           <img src={mineiroLogo} alt="MINEIRØ" className="h-8 w-auto object-contain" />
         </div>
 
-        <nav className="entry-nav" aria-label="Navegação principal">
+        <nav className="entry-nav" aria-label={isPt ? 'Navegação principal' : 'Main navigation'}>
           <button
             type="button"
             className={`entry-nav-link ${activeNav === 'inicio' ? 'is-active' : ''}`}
             onClick={() => scrollToSection('inicio')}
           >
-            Início
+            {isPt ? 'Início' : 'Home'}
           </button>
           <button
             type="button"
             className={`entry-nav-link ${activeNav === 'sobre' ? 'is-active' : ''}`}
             onClick={() => scrollToSection('sobre')}
           >
-            Sobre o App
+            {isPt ? 'Sobre o App' : 'About'}
           </button>
           <button
             type="button"
             className={`entry-nav-link ${activeNav === 'camadas' ? 'is-active' : ''}`}
             onClick={() => scrollToSection('camadas')}
           >
-            Equipe
+            {isPt ? 'Equipe' : 'Team'}
           </button>
         </nav>
 
-        <div className="entry-top-actions" role="group" aria-label="Acessibilidade e conta">
+        <div
+          className="entry-top-actions"
+          role="group"
+          aria-label={isPt ? 'Acessibilidade e conta' : 'Accessibility and controls'}
+        >
+          {onToggleLang && (
+            <button
+              type="button"
+              className="portal-outline-btn"
+              onClick={onToggleLang}
+              data-testid="portal-lang-toggle"
+              aria-label={isPt ? 'Mudar idioma para Inglês' : 'Switch language to Portuguese'}
+              title={isPt ? 'Mudar idioma para Inglês' : 'Switch language to Portuguese'}
+            >
+              <span>{isPt ? 'PT · BR' : 'EN · US'}</span>
+            </button>
+          )}
+
           <button
             type="button"
             className="portal-icon-btn entry-desktop-only"
             onClick={handleSpeakIntro}
             aria-pressed={isSpeaking}
-            title="Ouvir introdução falada em português"
+            title={isPt ? 'Ouvir introdução falada em português' : 'Listen to spoken intro in English'}
             data-testid="portal-speak-btn"
           >
             {isSpeaking ? <VolumeX size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}
@@ -276,7 +301,7 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
             onClick={onToggleHighContrast}
             aria-pressed={highContrast}
             aria-keyshortcuts="Alt+C"
-            title="Alternar Alto Contraste WCAG AAA (Alt+C)"
+            title={isPt ? 'Alternar Alto Contraste WCAG AAA (Alt+C)' : 'Toggle WCAG AAA High Contrast (Alt+C)'}
             data-testid="portal-contrast-btn"
           >
             <Contrast size={16} aria-hidden="true" />
@@ -287,7 +312,7 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
             className="portal-icon-btn entry-desktop-only"
             onClick={onCycleFontScale}
             aria-keyshortcuts="Alt+A"
-            title="Alterar tamanho do texto (Alt+A)"
+            title={isPt ? 'Alterar tamanho do texto (Alt+A)' : 'Cycle text size (Alt+A)'}
           >
             <span>A+</span>
           </button>
@@ -298,7 +323,7 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
             onClick={onOpenRegister ?? onExploreEarth}
             data-testid="open-register-btn"
           >
-            <span>Controle Tablet</span>
+            <span>{isPt ? 'Controle Tablet' : 'Tablet Controller'}</span>
           </button>
 
           <button
@@ -306,10 +331,10 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
             className="portal-login-btn"
             onClick={onOpenAuth ?? onExploreEarth}
             data-testid="open-login-btn"
-            title="Criar Sala Sensorial (Setup)"
+            title={isPt ? 'Criar Sala Sensorial (Setup)' : 'Create Sensory Room (Setup)'}
           >
             <LogIn size={15} aria-hidden="true" />
-            <span>Criar Sala Sensorial</span>
+            <span>{isPt ? 'Criar Sala Sensorial' : 'Create Sensory Room'}</span>
           </button>
 
           <button
@@ -317,7 +342,15 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
             className="portal-icon-btn entry-mobile-menu-btn"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-expanded={mobileMenuOpen}
-            aria-label={mobileMenuOpen ? 'Fechar menu' : 'Abrir menu'}
+            aria-label={
+              mobileMenuOpen
+                ? isPt
+                  ? 'Fechar menu'
+                  : 'Close menu'
+                : isPt
+                  ? 'Abrir menu'
+                  : 'Open menu'
+            }
             data-testid="mobile-menu-toggle"
           >
             {mobileMenuOpen ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
@@ -325,28 +358,32 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
         </div>
 
         {mobileMenuOpen && (
-          <div className="entry-mobile-drawer" role="region" aria-label="Menu mobile">
+          <div
+            className="entry-mobile-drawer"
+            role="region"
+            aria-label={isPt ? 'Menu mobile' : 'Mobile menu'}
+          >
             <div className="entry-mobile-nav-list">
               <button
                 type="button"
                 className={`entry-nav-link ${activeNav === 'inicio' ? 'is-active' : ''}`}
                 onClick={() => scrollToSection('inicio')}
               >
-                Início
+                {isPt ? 'Início' : 'Home'}
               </button>
               <button
                 type="button"
                 className={`entry-nav-link ${activeNav === 'sobre' ? 'is-active' : ''}`}
                 onClick={() => scrollToSection('sobre')}
               >
-                Sobre o App
+                {isPt ? 'Sobre o App' : 'About'}
               </button>
               <button
                 type="button"
                 className={`entry-nav-link ${activeNav === 'camadas' ? 'is-active' : ''}`}
                 onClick={() => scrollToSection('camadas')}
               >
-                Equipe
+                {isPt ? 'Equipe' : 'Team'}
               </button>
             </div>
 
@@ -359,7 +396,7 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
                   (onOpenRegister ?? onExploreEarth)();
                 }}
               >
-                <span>Controle Tablet</span>
+                <span>{isPt ? 'Controle Tablet' : 'Tablet Controller'}</span>
               </button>
               <div className="entry-mobile-a11y-row">
                 <button
@@ -369,7 +406,7 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
                   aria-pressed={isSpeaking}
                 >
                   {isSpeaking ? <VolumeX size={15} aria-hidden="true" /> : <Volume2 size={15} aria-hidden="true" />}
-                  <span>{isSpeaking ? 'Parar' : 'Ouvir'}</span>
+                  <span>{isSpeaking ? (isPt ? 'Parar' : 'Stop') : isPt ? 'Ouvir' : 'Listen'}</span>
                 </button>
                 <button
                   type="button"
@@ -377,17 +414,17 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
                   onClick={onToggleHighContrast}
                   aria-pressed={highContrast}
                   aria-keyshortcuts="Alt+C"
-                  title="Alternar Alto Contraste WCAG AAA (Alt+C)"
+                  title={isPt ? 'Alternar Alto Contraste WCAG AAA (Alt+C)' : 'Toggle WCAG AAA High Contrast (Alt+C)'}
                 >
                   <Contrast size={15} aria-hidden="true" />
-                  <span>Contraste</span>
+                  <span>{isPt ? 'Contraste' : 'Contrast'}</span>
                 </button>
                 <button
                   type="button"
                   className="portal-icon-btn flex-1"
                   onClick={onCycleFontScale}
                   aria-keyshortcuts="Alt+A"
-                  title="Alterar tamanho do texto (Alt+A)"
+                  title={isPt ? 'Alterar tamanho do texto (Alt+A)' : 'Cycle text size (Alt+A)'}
                 >
                   <span>A+</span>
                 </button>
@@ -414,13 +451,15 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
 
           <div className="entry-copy-col">
             <h1 className="entry-headline">
-              O PLANETA ESTÁ ESPERANDO PARA SER OUVIDO.
+              {isPt
+                ? 'O PLANETA ESTÁ ESPERANDO PARA SER OUVIDO.'
+                : 'THE PLANET IS WAITING TO BE HEARD.'}
             </h1>
 
             <p className="entry-lead">
-              Entre em uma sala sensorial projetada em duas paredes e teto, controlada por tablet em
-              tempo real. Escolha qualquer país e ouça dados reais da NASA ganharem vida em cinco
-              camadas musicais e áudio espacial 8D.
+              {isPt
+                ? 'Entre em uma sala sensorial projetada em duas paredes e teto, controlada por tablet em tempo real. Escolha qualquer país e ouça dados reais da NASA ganharem vida em cinco camadas musicais e áudio espacial 8D.'
+                : 'Step into a corner-projected sensory room across two walls and the ceiling, controlled in real time by tablet. Pick any country and hear real NASA data come alive across five musical layers and 8D spatial audio.'}
             </p>
 
             <div className="entry-cta-group">
@@ -435,7 +474,7 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
                 data-testid="explore-earth-btn"
               >
                 <Compass size={20} aria-hidden="true" />
-                <span>Entrar na Sala Sensorial</span>
+                <span>{isPt ? 'Entrar na Sala Sensorial' : 'Enter Sensory Room'}</span>
               </button>
 
               <button
@@ -446,7 +485,15 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
                 data-testid="portal-audio-preview-btn"
               >
                 <Music2 size={18} aria-hidden="true" />
-                <span>{audioPreviewActive ? 'Ouvindo acorde planetário...' : 'Ouvir prévia sonora'}</span>
+                <span>
+                  {audioPreviewActive
+                    ? isPt
+                      ? 'Ouvindo acorde planetário...'
+                      : 'Playing planetary chord...'
+                    : isPt
+                      ? 'Ouvir prévia sonora'
+                      : 'Listen to audio preview'}
+                </span>
               </button>
             </div>
           </div>
@@ -468,18 +515,18 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
           <div className="entry-about-grid">
             <div className="entry-about-copy">
               <h2 className="entry-section-title">
-                O MINEIRØ
+                {isPt ? 'O MINEIRØ' : 'ABOUT MINEIRØ'}
               </h2>
               <div className="entry-title-accent" aria-hidden="true" />
               <p className="entry-about-text">
-                O MINEIRØ transforma observações reais de satélites da NASA — raios detectados pela
-                ISS, monóxido de carbono, temperatura superficial, óxidos de nitrogênio e ventos —
-                em uma instalação audiovisual imersiva projetada em canto (duas paredes e teto).
+                {isPt
+                  ? 'O MINEIRØ transforma observações reais de satélites da NASA — raios detectados pela ISS, monóxido de carbono, temperatura superficial, óxidos de nitrogênio e ventos — em uma instalação audiovisual imersiva projetada em canto (duas paredes e teto).'
+                  : 'MINEIRØ transforms real NASA satellite observations — ISS lightning strikes, carbon monoxide, surface temperature, nitrogen oxides, and winds — into an immersive audiovisual corner-projected installation (two walls and ceiling).'}
               </p>
               <p className="entry-about-text">
-                Pelo controle do tablet, você escolhe qualquer país e mistura as cinco camadas como
-                no Photoshop: o globo gira na parede esquerda, o guia MINEIRØ conduz a jornada na
-                parede direita, o teto acende os mapas do território e o áudio 8D envolve toda a sala.
+                {isPt
+                  ? 'Pelo controle do tablet, você escolhe qualquer país e mistura as cinco camadas como no Photoshop: o globo gira na parede esquerda, o guia MINEIRØ conduz a jornada na parede direita, o teto acende os mapas do território e o áudio 8D envolve toda a sala.'
+                  : 'From the tablet controller, you choose any country and mix the five layers like Photoshop: the globe spins on the left wall, guide MINEIRØ leads the mission on the right wall, the ceiling illuminates territory data maps, and 8D audio surrounds the room.'}
               </p>
               <div className="entry-cta-group">
                 <button
@@ -492,14 +539,14 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
                   }}
                 >
                   <Compass size={19} aria-hidden="true" />
-                  <span>Entrar na Sala Sensorial</span>
+                  <span>{isPt ? 'Entrar na Sala Sensorial' : 'Enter Sensory Room'}</span>
                 </button>
               </div>
             </div>
 
             <div className="entry-about-mascot-col">
               <div className="entry-speech-bubble" role="note">
-                <span>Vamos entrar na sala sensorial!</span>
+                <span>{isPt ? 'Vamos entrar na sala sensorial!' : "Let's enter the sensory room!"}</span>
               </div>
 
               <div className="entry-mascot-stage entry-mascot-stage--lg" aria-hidden="true">
@@ -511,7 +558,7 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
                   {VISUAL_LAYER_ORDER.map((id, index) => {
                     const meta = LAYER_METAS[id];
                     const angle = index * (360 / VISUAL_LAYER_ORDER.length);
-                    const label = meta.labelPt;
+                    const label = isPt ? meta.labelPt : meta.labelEn;
                     return (
                       <div
                         key={id}
@@ -532,7 +579,7 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
 
         <section id="portal-camadas" className="entry-team-section">
           <div className="entry-team-header">
-            <h2 className="entry-team-title">EQUIPE</h2>
+            <h2 className="entry-team-title">{isPt ? 'EQUIPE' : 'TEAM'}</h2>
           </div>
 
           <div className="entry-team-grid">
@@ -551,8 +598,8 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     className="entry-social-btn"
-                    aria-label={`LinkedIn de ${member.name}`}
-                    title={`LinkedIn de ${member.name}`}
+                    aria-label={isPt ? `LinkedIn de ${member.name}` : `${member.name} on LinkedIn`}
+                    title={isPt ? `LinkedIn de ${member.name}` : `${member.name} on LinkedIn`}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                       <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z" />
@@ -564,8 +611,8 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     className="entry-social-btn"
-                    aria-label={`GitHub de ${member.name}`}
-                    title={`GitHub de ${member.name}`}
+                    aria-label={isPt ? `GitHub de ${member.name}` : `${member.name} on GitHub`}
+                    title={isPt ? `GitHub de ${member.name}` : `${member.name} on GitHub`}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                       <path d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5c.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34c-.46-1.16-1.11-1.47-1.11-1.47c-.91-.62.07-.6.07-.6c1 .07 1.53 1.03 1.53 1.03c.87 1.52 2.34 1.07 2.91.83c.09-.65.35-1.09.63-1.34c-2.22-.25-4.55-1.11-4.55-4.92c0-1.11.38-2 1.03-2.71c-.1-.25-.45-1.29.1-2.64c0 0 .84-.27 2.75 1.02c.79-.22 1.65-.33 2.5-.33c.85 0 1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02c.55 1.35.2 2.39.1 2.64c.65.71 1.03 1.6 1.03 2.71c0 3.82-2.34 4.66-4.57 4.91c.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z" />
@@ -580,13 +627,17 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
         <section
           id="portal-video"
           className="entry-video-section"
-          aria-label="Vídeo oficial do projeto MINEIRØ"
+          aria-label={isPt ? 'Vídeo oficial do projeto MINEIRØ' : 'MINEIRØ official project video'}
         >
           <div className="entry-video-frame">
             <iframe
               className="entry-video-iframe"
               src="https://www.youtube.com/embed/KCzPyhl4ewY?rel=0&modestbranding=1"
-              title="MINEIRØ — Vídeo de Apresentação (NASA Space Apps Challenge)"
+              title={
+                isPt
+                  ? 'MINEIRØ — Vídeo de Apresentação (NASA Space Apps Challenge)'
+                  : 'MINEIRØ — Presentation Video (NASA Space Apps Challenge)'
+              }
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
               loading="lazy"
@@ -631,9 +682,19 @@ export const EntryPortal: React.FC<EntryPortalProps> = ({
         </section>
 
         <footer className="entry-footer">
-          <img src={mineiroLogo} alt="MINEIRØ" className="h-6 w-auto object-contain opacity-90" />
-          <span className="entry-footer-copy">
-            MINEIRØ · The Earth Information Jukebox · NASA Space Apps Challenge
+          <div className="flex flex-wrap items-center gap-3">
+            <img src={mineiroLogo} alt="MINEIRØ" className="h-6 w-auto object-contain opacity-90" />
+            <span className="entry-footer-copy">
+              MINEIRØ · The Earth Information Jukebox · NASA Space Apps Challenge
+            </span>
+          </div>
+          <span
+            className="text-[11px] text-slate-400/80"
+            data-testid="ai-disclosure-badge"
+          >
+            {isPt
+              ? 'Artes com IA: globo inicial, robô MINEIRØ e fotos da equipe.'
+              : 'AI-generated visuals: Home globe, MINEIRØ mascot & team portraits.'}
           </span>
         </footer>
       </div>

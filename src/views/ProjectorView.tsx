@@ -50,14 +50,14 @@ const SURFACE_META: Record<
 };
 
 /**
- * Saída fullscreen 100% limpa para os projetores (`?view=projector&out=1..4`), fundo `#000000` absoluto.
- * Renderiza dinamicamente apenas as superfícies atribuídas na Matriz Patchbay (`useProjectionAdmin`),
- * sincronizada em tempo real via `BroadcastChannel` e WebSocket LAN (`/ws-earth-sync`).
+ * 100% clean fullscreen output for projectors (`?view=projector&out=1..4`), pure `#000000` background.
+ * Dynamically renders only the surfaces assigned in the Patchbay Matrix (`useProjectionAdmin`),
+ * synchronized in real time via `BroadcastChannel` and LAN WebSocket (`/ws-earth-sync`).
  *
- * Atalhos locais na janela do projetor:
- * - Tecla `C`: liga/desliga Grade de Calibração Corner-Pin desta saída.
- * - Tecla `R`: reseta os 4 vértices desta saída para ocupação automática.
- * - Tecla `B`: liga/desliga Blackout #000 desta saída.
+ * Local shortcuts in the projector window:
+ * - `C` key: toggles the Corner-Pin calibration grid for this output.
+ * - `R` key: resets the 4 vertices of this output to automatic fill.
+ * - `B` key: toggles #000 blackout for this output.
  */
 export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
   const { roomDimensions, lang, sceneReplayKey } = useExperience();
@@ -435,7 +435,7 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
           })}
       </ProjectorDelayBoundary>
 
-      {/* Handles arrastáveis de Corner-Pin (com pins compartilhados soldados em 1 única alça limpa) */}
+      {/* Draggable Corner-Pin handles (with shared pins welded into 1 clean handle) */}
       {!isBlackout &&
         isGridVisible &&
         getUniquePinHandlesForOutput(outId, outputCfg.surfaces, projectionState.quads).map(
@@ -469,7 +469,7 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
           }
         )}
 
-      {/* Flash Visual de Sincronia Vídeo × Som (ativo apenas durante Pulso Rítmico de Calibração) */}
+      {/* Visual Video × Sound Sync Flash (active only during Calibration Rhythm Pulse) */}
       {isClickSyncActive && !isBlackout && (
         <div
           data-testid="projector-sync-beat-flash"
@@ -520,7 +520,7 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({ outId }) => {
         </div>
       )}
 
-      {/* Overlay Técnico Temporário "Identificar Projetores" acionado pelo Admin */}
+      {/* Temporary Technical Overlay "Identify Projectors" triggered by Admin */}
       {isIdentifying && !isBlackout && (
         <div className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center border-4 border-sky-400/80 bg-black/80 p-8 text-center">
           <div className="rounded-2xl border border-sky-400/40 bg-[#050811]/95 px-10 py-8">

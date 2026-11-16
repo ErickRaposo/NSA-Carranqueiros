@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Renderizador multiplataforma (Windows/Linux/macOS) dos 5 PNGs 1024x1024 RGBA recortados na silhueta
-de cada país + meta.json inicial, espelhando 1:1 a especificação de `render_country_layers.swift`.
+Cross-platform renderer (Windows/Linux/macOS) for the 5 1024x1024 RGBA PNGs clipped to each
+country's silhouette + initial meta.json, mirroring the `render_country_layers.swift` spec 1:1.
 """
 
 from __future__ import annotations

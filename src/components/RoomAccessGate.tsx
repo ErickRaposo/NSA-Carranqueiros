@@ -30,7 +30,7 @@ export const RoomAccessGate: React.FC<RoomAccessGateProps> = ({
   const [inputCode, setInputCode] = useState<string>(normalizedRoom ?? '');
   const [retryNonce, setRetryNonce] = useState<number>(0);
 
-  // Uma vez validada nesta aba, a sala permanece liberada mesmo que o Setup feche depois (Regra A5)
+  // Once validated in this tab, the room stays unlocked even if Setup closes later (Rule A5)
   const validatedRoomRef = useRef<string | null>(null);
   const lastCheckScopeRef = useRef<string>('');
   const settledScopeRef = useRef<string>('');
@@ -98,7 +98,7 @@ export const RoomAccessGate: React.FC<RoomAccessGateProps> = ({
     };
   }, [lanClients, normalizedRoom, retryNonce, syncNetworkMode]);
 
-  // Heartbeat periódico para sustentar a sala ativa enquanto Projetores/Controle seguem abertos
+  // Periodic heartbeat to keep the room active while Projectors/Controller remain open
   useEffect(() => {
     if (gateState !== 'valid' || !normalizedRoom) return;
     void touchActiveRoom(normalizedRoom, syncNetworkMode);

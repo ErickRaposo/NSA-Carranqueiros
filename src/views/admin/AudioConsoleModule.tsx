@@ -149,7 +149,7 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-      {/* Planta Acústica 2D + Motor + Origem da Sala (4 cols) */}
+      {/* 2D Acoustic Floor Plan + Engine + Room Origin (4 cols) */}
       <section className={`flex flex-col justify-between p-4 xl:col-span-4 ${ADMIN_PANEL_CLASS}`}>
         <div>
           <div className="mb-3 flex items-center justify-between gap-2">
@@ -243,7 +243,7 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
         </div>
       </section>
 
-      {/* Mesa de Som Real: C1 | C2 | C3 | Master (8 cols) */}
+      {/* Live Sound Console: C1 | C2 | C3 | Master (8 cols) */}
       <section className={`p-4 xl:col-span-8 ${ADMIN_PANEL_CLASS}`}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 pb-1">
           <div>
@@ -335,7 +335,7 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
           </div>
         </div>
 
-        {/* Diagnósticos de Contexto Inseguro / Não Suportado */}
+        {/* Insecure / Unsupported Context Diagnostics */}
         {outputSupportStatus === 'insecure-context' && (
           <div className={`mb-3 flex flex-wrap items-center justify-between gap-3 p-3 text-xs text-slate-200 ${ADMIN_WELL_CLASS}`}>
             <div className="max-w-xl font-medium">
@@ -361,7 +361,7 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
           </div>
         )}
 
-        {/* 4 Channel Strips Verticais Paralelos: C1 | C2 | C3 | Master */}
+        {/* 4 Parallel Vertical Channel Strips: C1 | C2 | C3 | Master */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {SPEAKER_IDS.map((spkId, idx) => {
             const spkNum = (idx + 1) as 1 | 2 | 3;
@@ -421,7 +421,7 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
                     </button>
                   </div>
 
-                  {/* Seletor PC Local vs Nó LAN */}
+                  {/* Local PC vs LAN Node Selector */}
                   <div className={`mt-2.5 grid-cols-2 ${ADMIN_SEGMENT_WRAP_CLASS}`}>
                     <button
                       type="button"
@@ -447,7 +447,7 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
                     </button>
                   </div>
 
-                  {/* Seletor de Saída Customizado (Zero native <select>) */}
+                  {/* Custom Output Selector (Zero native <select>) */}
                   <div className="mt-2">
                     {spk.routeTarget === 'local' ? (
                       outputSupportStatus === 'permission-needed' ? (
@@ -554,7 +554,7 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
                     )}
                   </div>
 
-                  {/* Geradores Independentes de Teste Acústico */}
+                  {/* Independent Acoustic Test Generators */}
                   <div className="mt-2.5 grid grid-cols-2 gap-1.5">
                     <button
                       type="button"
@@ -583,7 +583,7 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
                   </div>
                 </div>
 
-                {/* Fader Vertical de Ganho + Delay BT (divisor plano sem 3º nível) + Mute */}
+                {/* Vertical Gain Fader + BT Delay (flat divider without 3rd level) + Mute */}
                 <div className="mt-3 flex flex-col gap-3 border-t border-[#1e3a66]/45 pt-3">
                   <FaderControl
                     orientation="vertical"
@@ -660,7 +660,7 @@ export const AudioConsoleModule: React.FC<AudioConsoleModuleProps> = ({
             );
           })}
 
-          {/* 4ª Coluna: Buses NASA Ao Vivo & Saída PC (Master & Voz vivem na Visão Geral para zero duplicação) */}
+          {/* 4th Column: Live NASA Buses & PC Output (Master & Voice live in Overview for zero duplication) */}
           <div className={`flex flex-col justify-between p-3 ${ADMIN_WELL_CLASS}`}>
             <div>
               <div className="mb-3 flex items-center justify-between">

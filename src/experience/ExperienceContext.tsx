@@ -474,6 +474,7 @@ const ZERO_VU: AudioLevelsMap = {
 export interface ExperienceProviderProps {
   activeView?: ViewRole;
   routeView?: ViewRole;
+  initialLang?: Lang;
   initialMissionPhase?: MissionPhase;
   initialStoryStep?: number;
   roomCode?: string | null;
@@ -484,6 +485,7 @@ export interface ExperienceProviderProps {
 export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   activeView,
   routeView,
+  initialLang = 'en',
   initialMissionPhase = 'idle',
   initialStoryStep = 0,
   roomCode: propRoomCode,
@@ -527,7 +529,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     [effectiveRoomCode, effectiveView, forceCloud]
   );
 
-  // Registra oficialmente a sala quando criada/aberta no Setup ou Painel Técnico (com retry + heartbeat)
+  // Officially register the room when created/opened in Setup or Technical Panel (with retry + heartbeat)
   useEffect(() => {
     if ((effectiveView !== 'setup' && effectiveView !== 'admin') || !effectiveRoomCode) {
       return;
@@ -626,7 +628,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   const world = useMemo(() => loadWorldCountries(), []);
   const pilotSet = useMemo<ReadonlySet<string>>(() => new Set(PILOT_COUNTRY_IDS), []);
 
-  // Lista estrita de países com pacote pré-gerado real (sem fallback sintético!)
+  // Strict list of countries with a real pre-generated package (no synthetic fallback!)
   const [generatedIdsList, setGeneratedIdsList] = useState<readonly string[]>(
     GENERATED_COUNTRY_IDS
   );
@@ -672,7 +674,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
         }
       })
       .catch(() => {
-        // Mantém GENERATED_COUNTRY_IDS estático quando offline/sem index.json extra
+        // Keep static GENERATED_COUNTRY_IDS when offline/without extra index.json
       });
     return () => {
       cancelled = true;
@@ -707,7 +709,13 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   }, [generatedIdsList, pilotSet, world.countries]);
 
   const [selectedCountryId, setSelectedCountryId] = useState<string | null>('076');
-  const [lang, setLangState] = useState<Lang>('pt');
+  const [lang, setLangState] = useState<Lang>(initialLang);
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = lang === 'pt' ? 'pt-BR' : 'en';
+    }
+  }, [lang]);
   const [storyStep, setStoryStepState] = useState<number>(initialStoryStep);
   const [missionPhase, setMissionPhaseState] = useState<MissionPhase>(initialMissionPhase);
   const [isPickingCountry, setIsPickingCountryState] = useState<boolean>(false);
@@ -1098,7 +1106,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   const currentRouteViewRef = useRef<ViewRole | undefined>(resolvedRouteView);
   currentRouteViewRef.current = resolvedRouteView;
 
-  // Silencia imediatamente fala, efeitos e música ao desmontar, trocar de página SPA ou sair/ocultar a aba
+  // Immediately silence speech, effects, and music on unmount, SPA route change, or leaving/hiding the tab
   useEffect(() => {
     const prevView = prevRouteViewRef.current;
     prevRouteViewRef.current = resolvedRouteView;
@@ -1163,7 +1171,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     };
   }, []);
 
-  // Loop 60fps sincronizado com o relógio sample-accurate Web Audio (ou relógio sincronizado LAN/Broadcast)
+  // 60fps loop synchronized with the sample-accurate Web Audio clock (or LAN/Broadcast synced clock)
   useEffect(() => {
     if (!isPlaying) {
       setLiveMetersState({ vu: ZERO_VU, masterDbFs: -99 });
@@ -1353,7 +1361,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
   const applyIncomingSync = useCallback((data: SyncPayload) => {
     if (!data || data.senderId === senderIdRef.current) return;
 
-    // Heartbeat de reprodução contínua: apenas corrige drift de playhead entre PCs (> 2.5% da faixa)
+    // Continuous playback heartbeat: only corrects playhead drift between PCs (> 2.5% of track)
     if (data.syncKind === 'heartbeat') {
       if (!data.isPlaying || data.countryId !== selectedCountryIdRef.current) return;
       const rawAgeMs =
@@ -1493,7 +1501,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       return;
     }
 
-    // Abas silenciosas (como ?view=projector) refletem o estado visual do Pulso Rítmico sem emitir som
+    // Silent tabs (such as ?view=projector) mirror the Rhythmic Pulse visual state without emitting sound
     if (localAudioMutedRef.current) {
       if (cmd.action === 'stop') {
         setScreenSyncPulseActive(false);
@@ -1538,16 +1546,16 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     }
   }, []);
 
-  // Mantém refs dos últimos snapshots atualizados para responder Late Join (request-state)
+  // Keep refs of latest snapshots updated to respond to Late Join (request-state)
   latestProjectionRef.current = projectionState;
   latestSpeakerCalibRef.current = speakerCalibration;
 
   const isUnifiedDemoMode = effectiveView === 'demo' && !effectiveRoomCode;
 
-  // Multi-tab 1-PC sync via BroadcastChannel (escopado por ?room= para isolar salas diferentes e a Demo pública)
+  // Multi-tab 1-PC sync via BroadcastChannel (scoped by ?room= to isolate different rooms and the public Demo)
   useEffect(() => {
     if (isUnifiedDemoMode || typeof BroadcastChannel === 'undefined') return;
-    // Visitante público isolado não compartilha BroadcastChannel com salas de instalação
+    // Isolated public visitor does not share BroadcastChannel with installation rooms
     const scopeSuffix = effectiveRoomCode ? `room-${effectiveRoomCode}` : 'isolated';
 
     const ch = new BroadcastChannel(`${SYNC_CHANNEL_NAME}:${scopeSuffix}`);
@@ -1589,7 +1597,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     };
   }, [applyIncomingSync, applyRemoteCalibSignal, effectiveRoomCode, isUnifiedDemoMode]);
 
-  // Barramento Unificado Multi-Sala: Isolado vs LAN Local (/ws-earth-sync) vs Sala Online (Supabase Realtime)
+  // Unified Multi-Room Bus: Isolated vs Local LAN (/ws-earth-sync) vs Online Room (Supabase Realtime)
   useEffect(() => {
     if (isUnifiedDemoMode) return;
     const role = detectCurrentRole(effectiveView);
@@ -1689,7 +1697,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     };
     latestSyncSnapshotRef.current = payload;
 
-    // Evita eco após aplicar estado remoto
+    // Prevent echo after applying remote state
     if (suppressBroadcastRef.current) {
       suppressBroadcastRef.current = false;
       return;
@@ -1700,7 +1708,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
       return;
     }
 
-    // Telas passivas / recém-abertas em outro computador (ex: ?view=projector) nunca sobrescrevem o host ao montar
+    // Passive / newly opened screens on another computer (e.g., ?view=projector) never overwrite the host on mount
     const isInitialMount = !didMountSyncEffectRef.current;
     didMountSyncEffectRef.current = true;
     const isPrimaryHost = effectiveView === 'setup' || effectiveView === 'admin';
@@ -1743,7 +1751,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     voiceVolume,
   ]);
 
-  // Heartbeat leve de sincronia temporal durante reprodução para manter outros PCs travados no compasso
+  // Lightweight time-sync heartbeat during playback to keep other PCs locked to the bar
   useEffect(() => {
     if (!isPlaying || syncNetworkMode === 'isolated' || isUnifiedDemoMode) return;
     const isPrimaryHost = effectiveView === 'setup' || effectiveView === 'admin';
@@ -1771,7 +1779,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     return () => window.clearInterval(timer);
   }, [effectiveView, isPlaying, syncNetworkMode]);
 
-  // --- Sincronização do Motor Web Audio 8D (100% Stems Pré-Gerados — Zero Fallback) ---
+  // --- 8D Web Audio Engine Synchronization (100% Pre-Rendered Stems — Zero Fallback) ---
   useEffect(() => {
     const eng = audioEngineRef.current;
     if (!eng) return;
@@ -2819,7 +2827,7 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     broadcastCalibCommand({ action: 'stop' });
   }, [broadcastCalibCommand]);
 
-  // --- Áudio Espacial Multi-Caixa da Nave e Narração Piper nas views mestre/nós sem RightWallScene ---
+  // --- Multi-Speaker Spacecraft Spatial Audio and Piper Narration on master/node views without RightWallScene ---
 
   useEffect(() => {
     if (localAudioMuted) return;
@@ -2851,13 +2859,13 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     prevMissionPhaseForAudioRef.current = missionPhase;
     if (localAudioMuted || prev === missionPhase) return;
 
-    // Decolagem 8D toca centralizada em todas as abas de áudio não-mutadas (PC 3 caixas + audio-nodes)
+    // 8D liftoff plays centered across all unmuted audio tabs (3-speaker PC + audio-nodes)
     if (missionPhase === 'countdown') {
       playLaunchThrust8D(10.0);
     }
 
-    // Nas views sem RightWallScene montada (setup, admin, audio-node, controller não-mutado),
-    // dispara também os efeitos mecânicos sincronizados com as fases da missão
+    // On views without RightWallScene mounted (setup, admin, audio-node, unmuted controller),
+    // also trigger mechanical effects synchronized with the mission phases
     if (!hasMountedRightWallScene && effectiveView !== 'projector') {
       if (missionPhase === 'boarding') {
         playBlastDoorSlamSfx();
@@ -2910,7 +2918,13 @@ export const ExperienceProvider: React.FC<ExperienceProviderProps> = ({
     const normStep = ((storyStep % 6) + 6) % 6;
     const activeLayerLabel =
       lang === 'pt' ? (layerLabelPtByStep[normStep] ?? '') : (layerLabelEnByStep[normStep] ?? '');
-    const countryName = country ? (lang === 'pt' ? country.namePt : country.nameEn) : 'Terra';
+    const countryName = country
+      ? lang === 'pt'
+        ? country.namePt
+        : country.nameEn
+      : lang === 'pt'
+        ? 'Terra'
+        : 'Earth';
 
     const prompts = resolveFramePrompts(frameId, {
       lang,
@@ -3441,9 +3455,9 @@ function buildDiscreteSnapshotSignature(s: DelayedDiscreteSnapshot): string {
 }
 
 /**
- * Aplica atraso temporal por saída física (`delayMs >= 0`) em `ProjectorView`:
- * atrasa eventos discretos (fase, país, storyStep, play/pause, camadas) em fila FIFO
- * e desloca o cursor temporal de `getLiveFrame()` e `playback.progress01` em exatos `delayMs` ms.
+ * Applies per-physical-output time delay (`delayMs >= 0`) in `ProjectorView`:
+ * delays discrete events (phase, country, storyStep, play/pause, layers) in a FIFO queue
+ * and shifts the time cursor of `getLiveFrame()` and `playback.progress01` by exact `delayMs` ms.
  */
 export const ProjectorDelayBoundary: React.FC<{
   delayMs: number;

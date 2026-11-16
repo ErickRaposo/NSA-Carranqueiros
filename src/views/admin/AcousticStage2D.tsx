@@ -76,7 +76,7 @@ function isSpeakerReceivingTest(
 }
 
 /**
- * Planta Arquitetônica 2D minimalista e não-interativa da sala em canto 90° + teto.
+ * Minimalist, non-interactive 2D architectural floor plan of the 90° corner room + ceiling.
  */
 export const AcousticStage2D: React.FC<AcousticStage2DProps> = ({
   isPt,
@@ -107,11 +107,11 @@ export const AcousticStage2D: React.FC<AcousticStage2DProps> = ({
           </radialGradient>
         </defs>
 
-        {/* Fundo com grade arquitetônica leve */}
+        {/* Background with light architectural grid */}
         <rect x="0" y="0" width="420" height="264" fill="#040b1a" />
         <rect x="0" y="0" width="420" height="264" fill="url(#ej-blueprint-grid)" />
 
-        {/* Canto arquitetônico 90° limpo */}
+        {/* Clean 90° architectural corner */}
         <polyline
           points="56,112 210,32 364,112"
           fill="none"
@@ -125,7 +125,7 @@ export const AcousticStage2D: React.FC<AcousticStage2DProps> = ({
           90°
         </text>
 
-        {/* Rótulos discretos das paredes e teto */}
+        {/* Subtle labels for walls and ceiling */}
         <text
           x="122"
           y="63"
@@ -151,7 +151,7 @@ export const AcousticStage2D: React.FC<AcousticStage2DProps> = ({
           {surfaceToOutLabels.rightWall.length > 0 ? ` · ${surfaceToOutLabels.rightWall[0]}` : ''}
         </text>
 
-        {/* Contorno tracejado sutil da área de projeção do Teto */}
+        {/* Subtle dashed outline of the Ceiling projection area */}
         <polygon
           points="146,124 210,88 274,124 210,174"
           fill="#0c1a36"
@@ -165,12 +165,12 @@ export const AcousticStage2D: React.FC<AcousticStage2DProps> = ({
           {surfaceToOutLabels.ceiling.length > 0 ? ` · ${surfaceToOutLabels.ceiling[0]}` : ''}
         </text>
 
-        {/* Eixos sutis convergente ao ponto doce */}
+        {/* Subtle axes converging on the sweet spot */}
         <line x1="98" y1="130" x2="210" y2="138" stroke="#1e3a66" strokeWidth="0.9" strokeOpacity="0.55" strokeDasharray="2 4" />
         <line x1="322" y1="130" x2="210" y2="138" stroke="#1e3a66" strokeWidth="0.9" strokeOpacity="0.55" strokeDasharray="2 4" />
         <line x1="210" y1="190" x2="210" y2="138" stroke="#1e3a66" strokeWidth="0.9" strokeOpacity="0.55" strokeDasharray="2 4" />
 
-        {/* Ponto doce central 8D */}
+        {/* Central 8D sweet spot */}
         <circle cx="210" cy="138" r="44" fill="url(#ej-sweetspot-minimal)" />
         <circle
           cx="210"
@@ -184,7 +184,7 @@ export const AcousticStage2D: React.FC<AcousticStage2DProps> = ({
           8D
         </text>
 
-        {/* Fontes sonoras ativas */}
+        {/* Active sound sources */}
         {activeSoundObjects.map((ev, idx) => {
           const left = 96 + Math.max(0, Math.min(1, ev.sourceX)) * 228;
           const top = 86 + Math.max(0, Math.min(1, ev.sourceY)) * 88;
@@ -201,7 +201,7 @@ export const AcousticStage2D: React.FC<AcousticStage2DProps> = ({
           );
         })}
 
-        {/* As 3 caixas acústicas minimalistas: C1, C2 e C3 */}
+        {/* The 3 minimalist acoustic speakers: C1, C2, and C3 */}
         {SPEAKER_IDS.map((spkId) => {
           const anchor = CABINET_ANCHORS[spkId];
           const cfg = speakerCalibration.speakers[spkId];
@@ -219,7 +219,7 @@ export const AcousticStage2D: React.FC<AcousticStage2DProps> = ({
 
           return (
             <g key={spkId}>
-              {/* Arco discreto de dispersão sonora */}
+              {/* Subtle sound dispersion arc */}
               {!cfg.muted && (
                 <g
                   transform={`translate(${anchor.x}, ${anchor.y}) rotate(${anchor.waveAngleDeg})`}
@@ -244,7 +244,7 @@ export const AcousticStage2D: React.FC<AcousticStage2DProps> = ({
                 </g>
               )}
 
-              {/* Silhueta geométrica limpa da caixa de som */}
+              {/* Clean geometric silhouette of the speaker */}
               <g transform={`translate(${anchor.x}, ${anchor.y}) rotate(${anchor.tiltDeg})`}>
                 <rect
                   x="-13"
@@ -257,14 +257,14 @@ export const AcousticStage2D: React.FC<AcousticStage2DProps> = ({
                   strokeWidth={isTesting ? 1.8 : 1.3}
                   opacity={cfg.muted ? 0.5 : 1}
                 />
-                {/* Tweeter superior */}
+                {/* Upper tweeter */}
                 <circle
                   cx="0"
                   cy="-8"
                   r="2.6"
                   fill={cfg.muted ? '#475569' : isTesting ? '#7dd3fc' : '#1e3a66'}
                 />
-                {/* Woofer principal */}
+                {/* Main woofer */}
                 <circle
                   cx="0"
                   cy="5"
@@ -281,7 +281,7 @@ export const AcousticStage2D: React.FC<AcousticStage2DProps> = ({
                 />
               </g>
 
-              {/* Tag minimalista da caixa */}
+              {/* Minimalist speaker tag */}
               <g transform={`translate(${anchor.x + anchor.badgeDx}, ${anchor.y + anchor.badgeDy})`}>
                 <rect
                   x="-46"

@@ -17,12 +17,12 @@ export function clampScreenDelayMs(value: unknown): number {
 }
 
 /**
- * Converte os delays assinados configurados por saída (-400..+400 ms) em atrasos reais
- * não-negativos (em ms) para sincronizar múltiplas telas/projetores entre si.
+ * Converts per-output signed delays (-400..+400 ms) into actual non-negative delays
+ * (in ms) to synchronize multiple screens/projectors with each other.
  *
- * - Valores positivos atrasam diretamente a saída selecionada.
- * - Valores negativos indicam que a saída física/rede está atrasada, deslocando
- *   automaticamente as demais saídas ativas para esperarem por ela.
+ * - Positive values directly delay the selected output.
+ * - Negative values indicate that the physical/network output is delayed, automatically
+ *   shifting the other active outputs to wait for it.
  */
 export function computeEffectiveScreenDelays(
   outputs: Record<ProjectorOutId, ScreenDelayOutputLike>

@@ -3,7 +3,7 @@ import { normalizeRoomCode } from './roomCode';
 import { getSupabaseClient } from './roomRealtimeClient';
 
 const LOCAL_CREATED_ROOMS_KEY = 'earth-jukebox-created-rooms-v1';
-const ROOM_TTL_MS = 1000 * 60 * 60 * 24; // 24 horas
+const ROOM_TTL_MS = 1000 * 60 * 60 * 24; // 24 hours
 
 export type RoomValidationResult =
   | { status: 'valid'; missingSchema?: boolean }
@@ -36,7 +36,7 @@ function writeLocalRoomRecord(code: string, active: boolean): void {
   if (typeof window === 'undefined') return;
   try {
     const map = readLocalRoomsMap();
-    // Limpa entradas antigas (> 24h)
+    // Purge expired entries (> 24h)
     for (const [k, v] of Object.entries(map)) {
       if (!v || now - v.updatedAt > ROOM_TTL_MS) {
         delete map[k];
@@ -118,8 +118,8 @@ async function checkLocalApiRoomExists(code: string): Promise<boolean> {
 }
 
 /**
- * Registra oficialmente uma sala criada pelo Setup ou Painel Técnico (`setup` / `admin`)
- * na tabela `public.rooms` do Supabase e/ou no registro local LAN (`/api/rooms`).
+ * Officially registers a room created by Setup or Technical Panel (`setup` / `admin`)
+ * in the Supabase `public.rooms` table and/or in the local LAN registry (`/api/rooms`).
  */
 export async function registerActiveRoom(
   rawRoomCode: string | null | undefined,
@@ -163,8 +163,8 @@ export async function registerActiveRoom(
 }
 
 /**
- * Mantém a sala viva (`updated_at`) enquanto Projetores ou Controle já validados seguem abertos,
- * permitindo que a aba do Setup seja fechada sem derrubar a apresentação.
+ * Keeps the room alive (`updated_at`) while already-validated Projectors or Controller remain open,
+ * allowing the Setup tab to be closed without interrupting the presentation.
  */
 export async function touchActiveRoom(
   rawRoomCode: string | null | undefined,
@@ -191,8 +191,8 @@ export async function touchActiveRoom(
 }
 
 /**
- * Verifica se um código de sala realmente foi criado e está ativo antes de liberar
- * telas clientes (`?view=projector`, `?view=controller`, `?view=audio-node`).
+ * Verifies whether a room code was actually created and is active before unlocking
+ * client screens (`?view=projector`, `?view=controller`, `?view=audio-node`).
  */
 export async function validateRoomAccess(
   rawRoomCode: string | null | undefined,
@@ -245,7 +245,7 @@ export async function validateRoomAccess(
     return { status: 'not-found' };
   }
 
-  // Modo LAN Local (/api/rooms) ou preview offline
+  // Local LAN Mode (/api/rooms) or offline preview
   if (await checkLocalApiRoomExists(code)) {
     return { status: 'valid' };
   }

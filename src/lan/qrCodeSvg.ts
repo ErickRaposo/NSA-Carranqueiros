@@ -1,6 +1,6 @@
 /**
- * Gerador QR Code ISO/IEC 18004 nativo em TypeScript puro (Offline-First, Zero Dependências).
- * Suporta URLs de até 271 bytes UTF-8 (Versões 1 a 10, Nível L, Byte Mode, Multi-Block RS + Auto-Mask 0..7).
+ * Native ISO/IEC 18004 QR Code generator in pure TypeScript (Offline-First, Zero Dependencies).
+ * Supports URLs up to 271 UTF-8 bytes (Versions 1 to 10, Level L, Byte Mode, Multi-Block RS + Auto-Mask 0..7).
  */
 
 interface QrVersionSpec {
@@ -134,16 +134,16 @@ function writeFormatBitsToMatrix(
     isFunction[r][c] = true;
   };
 
-  // Cópia 1 ao redor do Finder superior-esquerdo:
-  // LSB (bit 0) em (0, 8) -> MSB (bit 14) em (8, 0)
+  // Copy 1 around the top-left Finder:
+  // LSB (bit 0) at (0, 8) -> MSB (bit 14) at (8, 0)
   for (let i = 0; i <= 5; i++) setF(i, 8, getBit(formatBits, i));
   setF(7, 8, getBit(formatBits, 6));
   setF(8, 8, getBit(formatBits, 7));
   setF(8, 7, getBit(formatBits, 8));
   for (let i = 9; i < 15; i++) setF(8, 14 - i, getBit(formatBits, i));
 
-  // Cópia 2: bits 0..7 na linha 8 abaixo do Finder superior-direito;
-  // bits 8..14 na coluna 8 ao lado do Finder inferior-esquerdo (preservando Dark Module em (n - 8, 8))
+  // Copy 2: bits 0..7 on row 8 below the top-right Finder;
+  // bits 8..14 on column 8 next to the bottom-left Finder (preserving Dark Module at (n - 8, 8))
   for (let i = 0; i < 8; i++) setF(8, n - 1 - i, getBit(formatBits, i));
   for (let i = 8; i < 15; i++) setF(n - 15 + i, 8, getBit(formatBits, i));
   setF(n - 8, 8, true);
@@ -153,7 +153,7 @@ function computePenaltyScore(modules: boolean[][]): number {
   const n = modules.length;
   let score = 0;
 
-  // Regra 1: 5+ módulos consecutivos da mesma cor em linhas e colunas
+  // Rule 1: 5+ consecutive modules of the same color in rows and columns
   for (let r = 0; r < n; r++) {
     let runColor = modules[r][0];
     let runLen = 1;
@@ -183,7 +183,7 @@ function computePenaltyScore(modules: boolean[][]): number {
     }
   }
 
-  // Regra 2: blocos 2x2 da mesma cor
+  // Rule 2: 2x2 blocks of the same color
   for (let r = 0; r < n - 1; r++) {
     for (let c = 0; c < n - 1; c++) {
       const v = modules[r][c];
@@ -193,7 +193,7 @@ function computePenaltyScore(modules: boolean[][]): number {
     }
   }
 
-  // Regra 4: equilíbrio entre módulos escuros e claros
+  // Rule 4: balance between dark and light modules
   let darkCount = 0;
   for (let r = 0; r < n; r++) {
     for (let c = 0; c < n; c++) {
@@ -250,7 +250,7 @@ function interleaveBlocks(dataBytes: Uint8Array, spec: QrVersionSpec): Uint8Arra
 export function encodeQrMatrix(text: string): boolean[][] {
   const utf8 = new TextEncoder().encode(text);
 
-  // Versões 1..9 usam 8 bits para tamanho em Byte Mode (+2 bytes overhead); Versão 10+ usa 16 bits (+3 bytes overhead)
+  // Versions 1..9 use 8 bits for length in Byte Mode (+2 bytes overhead); Version 10+ uses 16 bits (+3 bytes overhead)
   const spec =
     VERSION_SPECS_L.find((s) => {
       const headerOverheadBytes = s.version >= 10 ? 3 : 2;
@@ -340,7 +340,7 @@ export function encodeQrMatrix(text: string): boolean[][] {
     }
   }
 
-  // Version Information (Versões >= 7 possuem dois blocos 6x3)
+  // Version Information (Versions >= 7 have two 6x3 blocks)
   if (spec.version >= 7) {
     const vBits = computeVersionBits(spec.version);
     for (let i = 0; i < 18; i++) {
@@ -352,10 +352,10 @@ export function encodeQrMatrix(text: string): boolean[][] {
     }
   }
 
-  // Reserva módulos de Format Info + Dark Module antes do preenchimento em ziguezague
+  // Reserve Format Info + Dark Module cells before zigzag placement
   writeFormatBitsToMatrix(baseModules, isFunction, 0b01, 0);
 
-  // Preenchimento em ziguezague dos codewords (dados + EC) sem máscara inicial
+  // Zigzag placement of codewords (data + EC) without initial mask
   let bitIdx = 0;
   const totalBits = allCodewords.length * 8;
   let upward = true;
@@ -379,7 +379,7 @@ export function encodeQrMatrix(text: string): boolean[][] {
     upward = !upward;
   }
 
-  // Seleciona automaticamente a melhor máscara (0..7) segundo penalidade ISO/IEC 18004
+  // Automatically select the best mask (0..7) according to ISO/IEC 18004 penalty
   let bestMask = 0;
   let bestPenalty = Number.POSITIVE_INFINITY;
   let bestMatrix: boolean[][] = baseModules;
@@ -402,7 +402,7 @@ export function encodeQrMatrix(text: string): boolean[][] {
     }
   }
 
-  // Garante os format bits finais para bestMask
+  // Ensure final format bits for bestMask
   writeFormatBitsToMatrix(bestMatrix, isFunction, 0b01, bestMask);
   return bestMatrix;
 }

@@ -7,8 +7,8 @@ interface SpeechBubbleOvalProps {
 }
 
 /**
- * Balão de fala oval clássico (estilo HQ/ilustração) com cauda pontuda diagonal
- * apontando para baixo-esquerda em direção ao robô MINEIRØ.
+ * Classic oval speech bubble (comic/illustration style) with a diagonal pointed tail
+ * aiming bottom-left toward the MINEIRØ robot.
  */
 export const SpeechBubbleOval: React.FC<SpeechBubbleOvalProps> = ({
   title,
@@ -17,7 +17,7 @@ export const SpeechBubbleOval: React.FC<SpeechBubbleOvalProps> = ({
 }) => {
   return (
     <div className="relative flex w-[148px] items-center justify-center px-5 pt-3.5 pb-6 text-center sm:w-[164px]">
-      {/* Forma SVG oval exata com pontinha diagonal inferior esquerda */}
+      {/* Exact oval SVG shape with bottom-left diagonal tip */}
       <svg
         viewBox="0 0 260 170"
         preserveAspectRatio="none"

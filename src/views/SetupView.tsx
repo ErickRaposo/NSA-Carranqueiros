@@ -165,7 +165,7 @@ export const SetupView: React.FC<SetupViewProps> = ({ onOpenSetupWizard }) => {
     playWithAudibleLayers();
   };
 
-  // Atalhos de teclado FOH (Space: Play/Pause, B: Blackout, Escape: Cortar Testes/Grades)
+  // FOH keyboard shortcuts (Space: Play/Pause, B: Blackout, Escape: Stop Tests/Grids)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -253,7 +253,7 @@ export const SetupView: React.FC<SetupViewProps> = ({ onOpenSetupWizard }) => {
         setLanInfo(info);
       })
       .catch(() => {
-        // Fallback silencioso em ambiente estático
+        // Silent fallback in static environment
       });
   };
 
@@ -269,7 +269,7 @@ export const SetupView: React.FC<SetupViewProps> = ({ onOpenSetupWizard }) => {
     };
   }, [stopCalibrationSignal]);
 
-  // Drag global no Editor Remoto 16:9 de Corner-Pin (canto, barra/aresta inteira ou malha completa)
+  // Global drag in the 16:9 Remote Corner-Pin Editor (corner, whole bar/edge, or full mesh)
   useEffect(() => {
     if (!draggingRemoteWarp) return;
     const edgePairs: ReadonlyArray<readonly [0 | 1 | 2 | 3, 0 | 1 | 2 | 3]> = [

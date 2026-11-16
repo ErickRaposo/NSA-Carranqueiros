@@ -11,7 +11,7 @@ interface ConfirmedRackBarProps {
 }
 
 /**
- * Barra compacta de módulo confirmado com marcadores e contraste da Matriz Patchbay (?view=admin).
+ * Compact confirmed module bar with markers and contrast matching the Patchbay Matrix (?view=admin).
  */
 export const ConfirmedRackBar: React.FC<ConfirmedRackBarProps> = ({
   label,

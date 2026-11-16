@@ -18,10 +18,10 @@ export function clampRoomDimensionCm(value: unknown, fallback = 360): number {
 }
 
 /**
- * Normaliza as dimensões do quarto em canto (2 paredes + teto).
- * O teto é sempre derivado geometricamente pela largura das duas paredes:
- * - ceiling.widthCm  = rightWall.widthCm (borda superior da Parede Direita no eixo X)
- * - ceiling.heightCm = leftWall.widthCm  (borda superior da Parede Esquerda no eixo Z)
+ * Normalizes the corner room dimensions (2 walls + ceiling).
+ * The ceiling is always derived geometrically from the width of the two walls:
+ * - ceiling.widthCm  = rightWall.widthCm (top edge of the Right Wall on the X axis)
+ * - ceiling.heightCm = leftWall.widthCm  (top edge of the Left Wall on the Z axis)
  */
 export function normalizeRoomDimensions(
   dims?: Partial<RoomDimensions> | null

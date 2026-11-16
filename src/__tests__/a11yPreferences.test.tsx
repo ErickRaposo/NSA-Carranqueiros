@@ -64,14 +64,14 @@ describe('a11yPreferences — Global Shortcuts, Persistence & Non-Invasive Propa
     expect(getNextFontScale(1.15)).toBe(1.3);
     expect(getNextFontScale(1.3)).toBe(1);
 
-    // Sem window / localStorage: fallback seguro
+    // Without window / localStorage: safe fallback
     Reflect.deleteProperty(globalThis, 'window');
     expect(readStoredHighContrast()).toBe(false);
     expect(readStoredFontScale()).toBe(1);
     expect(() => writeStoredHighContrast(true)).not.toThrow();
     expect(() => writeStoredFontScale(1.3)).not.toThrow();
 
-    // Com localStorage simulado
+    // With mocked localStorage
     const localStorage = createMemoryStorage();
     Object.defineProperty(globalThis, 'window', {
       configurable: true,
@@ -163,8 +163,24 @@ describe('a11yPreferences — Global Shortcuts, Persistence & Non-Invasive Propa
 
     expect(html).toContain('aria-keyshortcuts="Alt+C"');
     expect(html).toContain('aria-keyshortcuts="Alt+A"');
-    expect(html).toContain('Alternar Alto Contraste WCAG AAA (Alt+C)');
-    expect(html).toContain('Alterar tamanho do texto (Alt+A)');
+    expect(html).toContain('Toggle WCAG AAA High Contrast (Alt+C)');
+    expect(html).toContain('Cycle text size (Alt+A)');
+    expect(html).toContain('data-testid="ai-disclosure-badge"');
+    expect(html).toContain('AI-generated visuals: Home globe, MINEIRØ mascot &amp; team portraits.');
+
+    const htmlPt = renderToStaticMarkup(
+      <EntryPortal
+        lang="pt"
+        highContrast={false}
+        onToggleHighContrast={() => {}}
+        fontScale={1}
+        onCycleFontScale={() => {}}
+        onExploreEarth={() => {}}
+      />
+    );
+    expect(htmlPt).toContain('Alternar Alto Contraste WCAG AAA (Alt+C)');
+    expect(htmlPt).toContain('Alterar tamanho do texto (Alt+A)');
+    expect(htmlPt).toContain('Artes com IA: globo inicial, robô MINEIRØ e fotos da equipe.');
   });
 
   it('propagates high-contrast and fontScale non-invasively to WebDemoView and TabletControllerView', () => {

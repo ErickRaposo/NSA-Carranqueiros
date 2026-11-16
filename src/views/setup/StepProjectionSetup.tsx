@@ -165,7 +165,7 @@ export const StepProjectionSetup: React.FC<StepProjectionSetupProps> = ({
 
   return (
     <div className="flex flex-col gap-4 sm:gap-5" data-testid="setup-step-projection">
-      {/* Sub-bloco 2A: Abrir janelas dos projetores e identificar cabos */}
+      {/* Sub-block 2A: Open projector windows and identify cables */}
       {!outputsConfirmed ? (
         <section
           className={`setup-block-enter p-5 sm:p-6 ${ADMIN_PANEL_CLASS}`}
@@ -301,7 +301,7 @@ export const StepProjectionSetup: React.FC<StepProjectionSetupProps> = ({
         />
       )}
 
-      {/* Sub-bloco 2B: Tamanho real das paredes (Teto derivado automaticamente das larguras) */}
+      {/* Sub-block 2B: Real wall dimensions (Ceiling automatically derived from widths) */}
       <section className={`p-5 sm:p-6 ${ADMIN_PANEL_CLASS}`} data-testid="setup-wall-dimensions-panel">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-2xl">
@@ -414,7 +414,7 @@ export const StepProjectionSetup: React.FC<StepProjectionSetupProps> = ({
         </div>
       </section>
 
-      {/* Sub-bloco 2C: Corner-Pin nas Quinas Reais da Sala */}
+      {/* Sub-block 2C: Corner-Pin on Real Room Corners */}
       <section
         className={`setup-block-enter p-5 sm:p-6 ${ADMIN_PANEL_CLASS}`}
         data-testid="substep-projection-warp"
@@ -498,7 +498,7 @@ export const StepProjectionSetup: React.FC<StepProjectionSetupProps> = ({
             </div>
           )}
 
-          {/* Palco visual 16:9 */}
+          {/* 16:9 visual stage */}
           <div
             ref={stageRef}
             className="relative mx-auto mt-4 aspect-video w-full max-w-2xl overflow-hidden rounded-xl border border-[#1e3a66]/65 bg-black select-none touch-none"
@@ -635,7 +635,7 @@ export const StepProjectionSetup: React.FC<StepProjectionSetupProps> = ({
           </div>
         </section>
 
-      {/* Sub-bloco 2D: Controlador de Delay entre as Telas */}
+      {/* Sub-block 2D: Inter-Screen Delay Controller */}
       <ScreenDelayControlPanel
         isPt={isPt}
         projectionState={projectionState}

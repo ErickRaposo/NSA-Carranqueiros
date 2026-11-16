@@ -145,7 +145,7 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
     [scenario]
   );
 
-  // Se o usuário mudar para 0 projetores e estivesse em 'projection', volta com segurança
+  // If the user switches to 0 projectors while on 'projection', safely fall back
   useEffect(() => {
     if (!steps.includes(activeStep)) {
       setActiveStep('welcome');
@@ -327,7 +327,7 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
       className="flex h-dvh w-screen flex-col overflow-hidden bg-[#060913] font-['Poppins',system-ui,sans-serif] text-slate-100"
       data-testid="setup-wizard-view"
     >
-      {/* Cabeçalho superior alinhado ao Painel (100% Poppins) */}
+      {/* Top header aligned with the Panel (100% Poppins) */}
       <header className="flex min-h-[58px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#1e3a66]/55 bg-[#040b1a] px-4 py-2 lg:px-6">
         <div className="flex items-center gap-2.5">
           <img src={symbollLogo} alt="" className="h-7 w-7 object-contain" aria-hidden="true" />
@@ -387,7 +387,7 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
         </div>
       </header>
 
-      {/* Trilho Horizontal Limpo de Etapas */}
+      {/* Clean Horizontal Step Rail */}
       <nav
         aria-label={isPt ? 'Etapas da configuração' : 'Setup steps'}
         className="shrink-0 border-b border-[#1e3a66]/45 bg-[#040b1a]/80 px-4 py-3 sm:px-8"
@@ -446,7 +446,7 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
         </ol>
       </nav>
 
-      {/* Conteúdo Principal Ampliado (max-w-5xl) */}
+      {/* Expanded Main Content (max-w-5xl) */}
       <main className="admin-scroll min-h-0 flex-1 px-4 py-6 sm:px-8 lg:py-9">
         <div className="mx-auto w-full max-w-5xl">
           {activeStep === 'welcome' && (
@@ -573,7 +573,7 @@ export const SetupWizardView: React.FC<SetupWizardViewProps> = ({
         </div>
       </main>
 
-      {/* Rodapé Fixo de Transporte Voltar / Continuar */}
+      {/* Fixed Transport Footer Back / Continue */}
       <footer className="shrink-0 border-t border-[#1e3a66]/55 bg-[#040b1a] px-4 py-3.5 sm:px-8">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <button

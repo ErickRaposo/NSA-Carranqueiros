@@ -12,8 +12,8 @@ export interface Point2D {
 }
 
 /**
- * Quad de 4 vértices em coordenadas normalizadas [0..1] da área alvo:
- * Ordem horária: Top-Left, Top-Right, Bottom-Right, Bottom-Left.
+ * 4-vertex quad in normalized [0..1] coordinates of the target area:
+ * Clockwise order: Top-Left, Top-Right, Bottom-Right, Bottom-Left.
  */
 export type QuadCorners = [Point2D, Point2D, Point2D, Point2D];
 
@@ -30,7 +30,7 @@ export interface ProjectorOutputConfig {
   surfaces: SurfaceId[];
   showGrid: boolean;
   blackout: boolean;
-  /** Compensação de atraso entre telas (-400 a +400 ms). */
+  /** Inter-screen delay compensation (-400 to +400 ms). */
   delayMs?: number;
 }
 
@@ -135,9 +135,9 @@ function createAllIdentityQuads(): Record<CalibrationSurfaceKey, QuadCorners> {
 }
 
 /**
- * Distribui automaticamente os quadriláteros das superfícies atribuídas a uma saída HDMI
- * aproveitando 100% da resolução quando há 1 superfície, 50/50 soldado no meio quando há 2,
- * ou Canto 3D Isométrico (Teto em losango + Parede Esq + Parede Dir com pins soldados) quando há 3.
+ * Automatically distributes the quads of surfaces assigned to an HDMI output
+ * using 100% of the resolution for 1 surface, 50/50 welded in the middle for 2,
+ * or 3D Isometric Corner (diamond Ceiling + Left Wall + Right Wall with welded pins) for 3.
  */
 export function buildAutoQuadsForSurfaces(
   outId: ProjectorOutId,
@@ -157,7 +157,7 @@ export function buildAutoQuadsForSurfaces(
       surfaces.includes('rightWall');
 
     if (hasAllThreeRoomSurfaces) {
-      // Canto 3D Isométrico para 1 Projetor Grande-Angular (pins compartilhados 100% soldados)
+      // 3D Isometric Corner for 1 Wide-Angle Projector (100% welded shared pins)
       const pCeilingPeak: Point2D = { x: 0.5, y: 0.06 };
       const pLeftTop: Point2D = { x: 0.21, y: 0.35 };
       const pRightTop: Point2D = { x: 0.79, y: 0.35 };
@@ -200,7 +200,7 @@ export function buildAutoQuadsForSurfaces(
 }
 
 /**
- * Retorna os grupos de vértices soldados entre paredes que dividem a mesma saída física (`outId`).
+ * Returns the groups of welded vertices between walls that share the same physical output (`outId`).
  */
 export function getSharedCornerGroupsForSurfaces(
   surfaces: readonly SurfaceId[]
@@ -212,23 +212,23 @@ export function getSharedCornerGroupsForSurfaces(
 
   if (hasAllThree) {
     return [
-      // Junta Tripla Central: Parede Esq TR [1] === Parede Dir TL [0] === Teto BL [3]
+      // Central Triple Joint: Left Wall TR [1] === Right Wall TL [0] === Ceiling BL [3]
       [
         { surfaceId: 'leftWall', cornerIdx: 1 },
         { surfaceId: 'rightWall', cornerIdx: 0 },
         { surfaceId: 'ceiling', cornerIdx: 3 },
       ],
-      // Base Central: Parede Esq BR [2] === Parede Dir BL [3]
+      // Central Base: Left Wall BR [2] === Right Wall BL [3]
       [
         { surfaceId: 'leftWall', cornerIdx: 2 },
         { surfaceId: 'rightWall', cornerIdx: 3 },
       ],
-      // Quina Superior Esquerda: Teto TL [0] === Parede Esq TL [0]
+      // Top-Left Corner: Ceiling TL [0] === Left Wall TL [0]
       [
         { surfaceId: 'ceiling', cornerIdx: 0 },
         { surfaceId: 'leftWall', cornerIdx: 0 },
       ],
-      // Quina Superior Direita: Teto BR [2] === Parede Dir TR [1]
+      // Top-Right Corner: Ceiling BR [2] === Right Wall TR [1]
       [
         { surfaceId: 'ceiling', cornerIdx: 2 },
         { surfaceId: 'rightWall', cornerIdx: 1 },
@@ -258,8 +258,8 @@ function cloneQuadCorners(q: QuadCorners): QuadCorners {
 }
 
 /**
- * Atualiza um quadrilátero propagando automaticamente qualquer movimento nos pins soldados
- * entre paredes compartilhadas na mesma saída (`2-projectors` e `1-projector`).
+ * Updates a quad by automatically propagating any movement on welded pins
+ * between shared walls on the same output (`2-projectors` and `1-projector`).
  */
 export function updateQuadWithSharedSeams(
   state: ProjectionCalibrationState,
@@ -308,8 +308,8 @@ export function updateQuadWithSharedSeams(
 }
 
 /**
- * Translada solidariamente todas as superfícies conectadas em uma mesma saída (`outId`),
- * preservando a união das quinas ao arrastar o interior da malha.
+ * Jointly translates all connected surfaces on the same output (`outId`),
+ * preserving corner alignment when dragging the interior of the mesh.
  */
 export function translateOutputSurfacesTogether(
   outId: ProjectorOutId,
@@ -356,8 +356,8 @@ export function translateOutputSurfacesTogether(
 }
 
 /**
- * Deduplica visualmente as alças de Corner-Pin para que vértices soldados exibam 1 único pino limpo
- * em vez de 2 ou 3 botões empilhados na mesma coordenada.
+ * Visually deduplicates Corner-Pin handles so welded vertices display 1 single clean pin
+ * instead of 2 or 3 buttons stacked at the same coordinate.
  */
 export function getUniquePinHandlesForOutput(
   outId: ProjectorOutId,
@@ -427,14 +427,14 @@ export function applyProjectionPreset(
   let outputs: Record<ProjectorOutId, ProjectorOutputConfig>;
 
   if (preset === '3-projectors') {
-    // 1 Projetor dedicado por superfície (100% da resolução nativa em cada parede e teto)
+    // 1 dedicated projector per surface (100% native resolution on each wall and ceiling)
     outputs = {
       1: { outId: 1, surfaces: ['leftWall'], showGrid: false, blackout: false },
       2: { outId: 2, surfaces: ['rightWall'], showGrid: false, blackout: false },
       3: { outId: 3, surfaces: ['ceiling'], showGrid: false, blackout: false },
     };
   } else if (preset === '1-projector') {
-    // 1 Projetor único grande-angular cobrindo Canto em L + Teto
+    // 1 single wide-angle projector covering L-Corner + Ceiling
     outputs = {
       1: {
         outId: 1,
@@ -446,7 +446,7 @@ export function applyProjectionPreset(
       3: { outId: 3, surfaces: [], showGrid: false, blackout: false },
     };
   } else {
-    // Default '2-projectors': Out 1 = Canto em L (Esq + Dir), Out 2 = Teto
+    // Default '2-projectors': Out 1 = L-Corner (Left + Right), Out 2 = Ceiling
     outputs = {
       1: { outId: 1, surfaces: ['leftWall', 'rightWall'], showGrid: false, blackout: false },
       2: { outId: 2, surfaces: ['ceiling'], showGrid: false, blackout: false },
@@ -486,8 +486,8 @@ const SURFACE_SORT_ORDER: Record<SurfaceId, number> = {
 };
 
 /**
- * Liga/desliga uma superfície em uma saída física `Out 1..4` na matriz Patchbay,
- * redistribuindo automaticamente os quads daquela saída para ocupar 100% da área útil.
+ * Toggles a surface on a physical output `Out 1..4` in the Patchbay matrix,
+ * automatically redistributing that output's quads to fill 100% of the usable area.
  */
 export function toggleSurfaceOnOutput(
   state: ProjectionCalibrationState,
@@ -612,7 +612,7 @@ export function saveCalibrationState(state: ProjectionCalibrationState): void {
 }
 
 /**
- * Resolve sistema linear Ax = b (eliminação gaussiana com pivoteamento parcial).
+ * Solves linear system Ax = b (Gaussian elimination with partial pivoting).
  */
 function solveLinearSystem(A: number[][], b: number[]): number[] | null {
   const n = b.length;
@@ -655,8 +655,8 @@ function solveLinearSystem(A: number[][], b: number[]): number[] | null {
 }
 
 /**
- * Calcula a string CSS `matrix3d(...)` exata que mapeia um retângulo de origem `(width × height)`
- * (com `transform-origin: 0 0`) para os 4 pontos arbitrários `dstPixels` em pixels na tela.
+ * Computes the exact CSS `matrix3d(...)` string that maps a source rectangle `(width × height)`
+ * (with `transform-origin: 0 0`) to the 4 arbitrary `dstPixels` points in screen pixels.
  */
 export function computeHomographyMatrix3d(
   srcWidth: number,
@@ -673,7 +673,7 @@ export function computeHomographyMatrix3d(
     { x: 0, y: h },
   ];
 
-  // Sistema 8x8 para homografia 2D H = [[h0, h1, h2], [h3, h4, h5], [h6, h7, 1]]
+  // 8x8 system for 2D homography H = [[h0, h1, h2], [h3, h4, h5], [h6, h7, 1]]
   const A: number[][] = [];
   const b: number[] = [];
 
@@ -704,9 +704,9 @@ export function computeHomographyMatrix3d(
 }
 
 /**
- * Preserva a proporção 1:1 (`srcWidth / srcHeight`) dentro de um slot retangular padrão
- * (evitando esmagar/esticar o Globo e o Robô em telas 16:9 ou slots 50%), mas libera
- * a homografia livre assim que o operador arrasta qualquer pino de Corner-Pin.
+ * Preserves the 1:1 aspect ratio (`srcWidth / srcHeight`) inside a standard rectangular slot
+ * (preventing squashing/stretching the Globe and Robot on 16:9 screens or 50% slots), while allowing
+ * free homography as soon as the operator drags any Corner-Pin handle.
  */
 export function fitQuadAspectContain(
   srcWidth: number,

@@ -29,8 +29,8 @@ const ICON_SIZES: Record<'sm' | 'md' | 'lg', number> = {
 };
 
 /**
- * Botão canônico com estética de controle/videogame compartilhado 1:1
- * entre a Parede Direita (Robô MINEIRØ) e o Tablet Controle (`?view=controller`).
+ * Canonical button with gamepad/video-game aesthetic shared 1:1
+ * between the Right Wall (Robot MINEIRØ) and the Tablet Controller (`?view=controller`).
  */
 export const MissionGameButton: React.FC<MissionGameButtonProps> = ({
   label,

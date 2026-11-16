@@ -29,8 +29,8 @@ let cachedClient: SupabaseClient | null = null;
 let cachedCredentialsKey = '';
 
 /**
- * Garante apenas a origem limpa do projeto Supabase (ex.: `https://xyz.supabase.co`),
- * removendo sufixos colados por engano como `/rest/v1/` que quebram REST e Realtime.
+ * Ensures only the clean origin of the Supabase project (e.g., `https://xyz.supabase.co`),
+ * stripping accidentally pasted suffixes like `/rest/v1/` that break REST and Realtime.
  */
 export function normalizeSupabaseOrigin(rawUrl: string | null | undefined): string | null {
   if (!rawUrl) return null;
@@ -166,7 +166,7 @@ export function subscribeCloudRoom(opts: CloudRoomSubscriptionOptions): CloudRoo
             connectedAt: Date.now(),
           })
           .catch(() => {});
-        // Envia mensagens enfileiradas enquanto o canal ainda estava conectando
+        // Send messages queued while the channel was still connecting
         for (const queued of pendingByType.values()) {
           transmit(queued);
         }

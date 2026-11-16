@@ -25,9 +25,9 @@ interface WebDemoViewProps {
 }
 
 /**
- * Experiência Web Unificada (`?view=demo`):
- * Combina a Maquete 3D/2D do Quarto Projetado com o Controle estilo Tablet + Áudio 8D Binaural,
- * em um único header alinhado à identidade visual do Painel Técnico.
+ * Unified Web Experience (`?view=demo`):
+ * Combines the 3D/2D Mockup of the Projected Room with the Tablet-style Controller + 8D Binaural Audio,
+ * in a single header aligned with the Technical Panel visual identity.
  */
 export const WebDemoView: React.FC<WebDemoViewProps> = ({
   onBackToHub,
@@ -54,7 +54,7 @@ export const WebDemoView: React.FC<WebDemoViewProps> = ({
       onBackToHub();
       return;
     }
-    // TODO(erick): apontar para a tela intermediária do Erick quando entrar no repositório
+    // TODO(erick): point to Erick's intermediate screen once it lands in the repository
     if (typeof window !== 'undefined') {
       window.location.search = '?view=hub';
     }
@@ -92,9 +92,9 @@ export const WebDemoView: React.FC<WebDemoViewProps> = ({
       <a href="#demo-main-content" className="skip-link">
         {isPt ? 'Pular para o conteúdo principal' : 'Skip to main content'}
       </a>
-      {/* Header único alinhado à identidade visual do Painel Técnico (CockpitHeader) */}
+      {/* Single header aligned with the Technical Panel visual identity (CockpitHeader) */}
       <header className="flex min-h-[56px] shrink-0 flex-wrap items-center justify-between gap-2.5 border-b border-[#1e3a66]/55 bg-[#040b1a] px-3.5 py-2 lg:px-5">
-        {/* Esquerda: Seta Voltar (tela intermediária do Erick / Portal) + Marca + Áudio 8D */}
+        {/* Left: Back Arrow (Erick's intermediate screen / Portal) + Brand + 8D Audio */}
         <div className="flex items-center gap-2.5">
           <button
             type="button"
@@ -127,7 +127,7 @@ export const WebDemoView: React.FC<WebDemoViewProps> = ({
           </span>
         </div>
 
-        {/* Centro: Modos de Visualização (Dividido / Estender Tablet / Estender Simulação 2D) */}
+        {/* Center: View Modes (Split / Expand Tablet / Expand 2D Simulation) */}
         <div
           role="group"
           aria-label={isPt ? 'Modo de exibição da Demo' : 'Demo layout mode'}
@@ -186,7 +186,7 @@ export const WebDemoView: React.FC<WebDemoViewProps> = ({
           })}
         </div>
 
-        {/* Direita: Voz + Idioma + Painel Técnico */}
+        {/* Right: Voice + Language + Technical Panel */}
         <div className="flex items-center gap-2">
           <button
             type="button"

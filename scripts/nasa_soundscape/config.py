@@ -1,5 +1,5 @@
 """
-Configurações globais, papéis das camadas do Earth Jukebox, ganhos fixos e presets geográficos.
+Global settings, Earth Jukebox layer roles, fixed gains, and geographic presets.
 """
 
 from dataclasses import dataclass
@@ -8,7 +8,7 @@ from typing import Dict, Tuple
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-# Arquitetura Earth Jukebox: 3 instrumentos, 1 regente e 1 bus de efeitos
+# Earth Jukebox architecture: 3 instruments, 1 conductor, and 1 effects bus
 INSTRUMENT_LAYERS: Tuple[str, ...] = ("chords", "bass", "melody")
 CONDUCTOR_LAYER: str = "temperature"
 EFFECT_LAYER: str = "wind"
@@ -30,7 +30,7 @@ VIDEO_FILES: Dict[str, str] = {
     "wind": "public/nasa/svs5148_wind_2048x1024.mp4",
 }
 
-# Aliases de compatibilidade com nomes antigos
+# Compatibility aliases for legacy names
 LEGACY_LAYER_ALIASES: Dict[str, str] = {
     "harmony_co": "chords",
     "harmony": "chords",
@@ -45,17 +45,17 @@ LEGACY_LAYER_ALIASES: Dict[str, str] = {
     "fx": "wind",
 }
 
-# Ganho fixo por stem (constantes imutáveis — sem normalização relativa entre camadas)
+# Fixed gain per stem (immutable constants — no relative normalization across layers)
 STEM_GAINS: Dict[str, float] = {
     "chords": 0.720,
     "bass": 1.050,
     "melody": 0.880,
 }
 
-# Sub-ganho relativo da camada de tempestade/cintilação (5ª/8ª + shimmer agudo) dentro do stem da melodia
+# Relative sub-gain for the storm/sparkle layer (5th/8th + high shimmer) inside the melody stem
 MELODY_SPARKLE_GAIN: float = 1.000
 
-# Constantes da sessão "base" (quando o regente Temperatura está desligado: --tuning base)
+# "base" session constants (when the Temperature conductor is off: --tuning base)
 BASE_SESSION_DEFAULTS: Dict[str, object] = {
     "tuning_mode": "base",
     "key_root": "A",
@@ -65,7 +65,7 @@ BASE_SESSION_DEFAULTS: Dict[str, object] = {
     "bpm": 90,
 }
 
-# Limiar do limitador suave aplicado exclusivamente no master
+# Soft limiter threshold applied exclusively on the master bus
 MASTER_LIMITER_THRESHOLD: float = 0.94
 
 
@@ -76,11 +76,11 @@ def normalize_layer_id(name: str) -> str:
 
 @dataclass(frozen=True)
 class GeoBoundingBox:
-    """Caixa delimitadora geográfica em graus decimais (WGS84 / Plate Carrée)."""
-    lat_min: float  # Sul (-90 a +90)
-    lat_max: float  # Norte (-90 a +90)
-    lon_min: float  # Oeste (-180 a +180)
-    lon_max: float  # Leste (-180 a +180)
+    """Geographic bounding box in decimal degrees (WGS84 / Plate Carrée)."""
+    lat_min: float  # South (-90 to +90)
+    lat_max: float  # North (-90 to +90)
+    lon_min: float  # West (-180 to +180)
+    lon_max: float  # East (-180 to +180)
     name: str = "Região Selecionada"
     description: str = ""
 
@@ -129,14 +129,6 @@ PRESET_REGIONS: Dict[str, GeoBoundingBox] = {
         lon_max=30.0,
         name="Bacia do Congo (África Central)",
         description="Epicentro mundial de relâmpagos, clima quente equatorial e alta concentração de CO.",
-    ),
-    "leste_china": GeoBoundingBox(
-        lat_min=28.0,
-        lat_max=40.0,
-        lon_min=112.0,
-        lon_max=123.0,
-        name="Leste da China (Xangai / Pequim)",
-        description="Concentração urbana/industrial extrema de NO2 e CO (baixo e harmonia densos), clima temperado-quente e monções.",
     ),
     "saara": GeoBoundingBox(
         lat_min=18.0,

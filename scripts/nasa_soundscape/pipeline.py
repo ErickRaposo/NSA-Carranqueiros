@@ -1,14 +1,14 @@
 """
-Orquestrador do Earth Jukebox: separa estritamente Análise Congelada (`analyze_region`)
-de Composição/Renderização Seletiva (`render_from_analysis` / `generate_region_soundscape`).
+Earth Jukebox Orchestrator: strictly separates Frozen Analysis (`analyze_region`)
+from Selective Composition/Rendering (`render_from_analysis` / `generate_region_soundscape`).
 
-Saídas geradas em `output_dir`:
-  - `chords.wav`, `bass.wav`, `melody.wav` (stems secos com ganho fixo dos instrumentos ligados)
-  - `mix_dry.wav`   (soma exata dos stems secos ligados)
-  - `mix_wind.wav`  (bus linear de vento aplicado sobre `mix_dry` quando `wind='on'`)
-  - `manifest.json` (session base/region, harmony_plan, stem_gains, mapeamento camada->vídeo,
-                     dependências e cursores de varredura da melodia por compasso)
-  - `score.json`, `explanation.md`, `music.mid` e `videos/*.mp4` (quando habilitados)
+Outputs generated in `output_dir`:
+  - `chords.wav`, `bass.wav`, `melody.wav` (dry stems with fixed gains for enabled instruments)
+  - `mix_dry.wav`   (exact sum of enabled dry stems)
+  - `mix_wind.wav`  (linear wind bus applied over `mix_dry` when `wind='on'`)
+  - `manifest.json` (base/region session, harmony_plan, stem_gains, layer->video mapping,
+                     dependencies, and per-bar melody scan cursors)
+  - `score.json`, `explanation.md`, `music.mid`, and `videos/*.mp4` (when enabled)
 """
 
 from dataclasses import dataclass
@@ -41,15 +41,15 @@ from .video_renderer import MAP_H, PANEL_W, render_synchronized_videos
 
 @dataclass
 class FrozenRegionAnalysis:
-    """Estado congelado da análise física e plano de controle (independe do olhinho das camadas)."""
+    """Frozen state of physical analysis and control plan (independent of layer visibility toggles)."""
     bbox: GeoBoundingBox
     streams: Dict[str, SynchronizedLayerStream]
     features: Dict[str, LayerFeatures]
-    control_plans_by_tuning: Dict[str, dict]  # 'base' e 'region' pré-congelados
+    control_plans_by_tuning: Dict[str, dict]  # Pre-frozen 'base' and 'region'
 
 
 def parse_enabled_layers(layers_spec: Optional[Iterable[str] | str]) -> List[str]:
-    """Interpreta `--layers` retornando subconjunto ordenado de `('chords', 'bass', 'melody')`."""
+    """Parses `--layers` and returns an ordered subset of `('chords', 'bass', 'melody')`."""
     if layers_spec is None:
         return list(INSTRUMENT_LAYERS)
     if isinstance(layers_spec, str):
@@ -125,7 +125,7 @@ def build_manifest(
     temperature_color: bool,
     audio_files: dict,
 ) -> dict:
-    """Constrói `manifest.json` conforme especificação da Seção 8."""
+    """Builds `manifest.json` per the Section 8 specification."""
     layer_video_map = {}
     for lid in ALL_LAYERS:
         feat = features[lid]
@@ -225,8 +225,8 @@ def analyze_region(
     lightning_map: str = "scan",
 ) -> FrozenRegionAnalysis:
     """
-    Fase 1 isolada: extrai os 5 vídeos na linha do tempo comum e pré-congela o `ControlPlan`
-    para ambos os modos de regência (`base` e `region`).
+    Isolated Phase 1: extracts the 5 videos onto the common timeline and pre-freezes the `ControlPlan`
+    for both conductor modes (`base` and `region`).
     """
     bbox = bbox.validate()
     streams = extract_all_layer_streams(
@@ -277,8 +277,8 @@ def render_from_analysis(
     seamless_loop: bool = False,
 ) -> dict:
     """
-    Fase 2: usa o `FrozenRegionAnalysis` congelado (sem reanalisar vídeos) para renderizar
-    qualquer combinação de camadas (`--layers`), `--tuning` e `--wind`.
+    Phase 2: uses the frozen `FrozenRegionAnalysis` (without re-analyzing videos) to render
+    any combination of layers (`--layers`), `--tuning`, and `--wind`.
     """
     t0 = time.perf_counter()
     if tuning not in ("base", "region"):
@@ -291,7 +291,7 @@ def render_from_analysis(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Usa o plano congelado (atualizando apenas o metadado de cursor caso lightning_map difira)
+    # Use the frozen plan (updating only the cursor metadata if lightning_map differs)
     frozen_plan = dict(analysis.control_plans_by_tuning[tuning])
     if frozen_plan["melody_scan_cursors"][0]["mapping_mode"] != lightning_map:
         frozen_plan = build_control_plan(
@@ -437,7 +437,7 @@ def generate_region_soundscape(
     save_preview: bool = True,
     seamless_loop: bool = False,
 ) -> dict:
-    """Executa Análise Congelada + Renderização completa do Earth Jukebox."""
+    """Runs Frozen Analysis + full Earth Jukebox rendering."""
     t0 = time.perf_counter()
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

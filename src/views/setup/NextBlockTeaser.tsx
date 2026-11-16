@@ -8,9 +8,9 @@ interface NextBlockTeaserProps {
 }
 
 /**
- * Prévia silenciosa do próximo passo abaixo do bloco ativo.
- * Usa opacidade reduzida + máscara vertical em fade para passar noção de continuidade
- * sem competir por atenção nem interceptar cliques/foco.
+ * Silent preview of the next step below the active block.
+ * Uses reduced opacity + vertical fade mask to convey continuity
+ * without competing for attention or intercepting clicks/focus.
  */
 export const NextBlockTeaser: React.FC<NextBlockTeaserProps> = ({
   title,

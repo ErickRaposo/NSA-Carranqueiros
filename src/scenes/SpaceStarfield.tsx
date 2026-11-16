@@ -1,11 +1,11 @@
 import React, { useMemo } from 'react';
 
 interface SpaceStarfieldProps {
-  /** Offset determinístico para que cada superfície mostre uma região contínua do mesmo cosmos */
+  /** Deterministic offset so each surface displays a continuous region of the same cosmos */
   seedOffset?: number;
-  /** Quantidade de estrelas */
+  /** Number of stars */
   count?: number;
-  /** Cor sutil de destaque opcional (ex.: camada ativa) */
+  /** Optional subtle accent color (e.g., active layer) */
   accentHex?: string;
 }
 
@@ -26,8 +26,8 @@ function pseudoRandom(seed: number): number {
 }
 
 /**
- * Fundo espacial contínuo em `#000000` absoluto para as 3 superfícies projetadas.
- * O preto puro evita vazamento de luz cinza da lâmpada do projetor nas paredes e no teto.
+ * Continuous absolute `#000000` space backdrop for the 3 projected surfaces.
+ * Pure black prevents gray projector lamp light spill on the walls and ceiling.
  */
 export const SpaceStarfield: React.FC<SpaceStarfieldProps> = ({
   seedOffset = 0,

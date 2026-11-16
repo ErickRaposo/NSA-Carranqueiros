@@ -9,8 +9,8 @@ import {
 import { ExperienceLayersState } from '../experience/types';
 
 /**
- * Converte o estado dos 5 Olhinhos + Solo do `useExperience()` no stack `LayerConfig[]`
- * consumido pelo shader do `EarthCanvas`.
+ * Converts the state of the 5 Eyes + Solo from `useExperience()` into the `LayerConfig[]` stack
+ * consumed by the `EarthCanvas` shader.
  */
 export function buildGlobeLayerStack(layers: ExperienceLayersState): LayerConfig[] {
   const spkSolo = layers.melody.sparkleSolo;
@@ -38,10 +38,10 @@ export function buildGlobeLayerStack(layers: ExperienceLayersState): LayerConfig
 }
 
 /**
- * Gerencia de forma preguiçosa e segura os 5 `<video>` globais da NASA para o `EarthCanvas`:
- * - Resolve URLs via `VITE_ASSETS_BASE_URL` (suportando LAN local `/nasa/*.mp4` e CDN/R2 na Vercel);
- * - Só inicializa/decodifica vídeos cujo Olhinho estiver habilitado;
- * - Pausa automaticamente vídeos desligados para proteger GPU e bateria no Tablet.
+ * Lazily and safely manages the 5 global NASA `<video>` elements for `EarthCanvas`:
+ * - Resolves URLs via `VITE_ASSETS_BASE_URL` (supporting local LAN `/nasa/*.mp4` and CDN/R2 on Vercel);
+ * - Only initializes/decodes videos whose Eye toggle is enabled;
+ * - Automatically pauses disabled videos to protect GPU and battery on the Tablet.
  */
 export function useNasaVideoPool(
   layerStack: LayerConfig[],
@@ -88,7 +88,7 @@ export function useNasaVideoPool(
         if (shouldBeActive && isPlaying) {
           if (vid.paused) {
             void vid.play().catch(() => {
-              // Ignora caso o arquivo MP4 ainda não esteja presente ou autoplay aguarde gesto
+              // Ignore if the MP4 file is not yet present or autoplay awaits user gesture
             });
           }
         } else if (!vid.paused) {

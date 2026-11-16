@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-Earth Jukebox — Pipeline Batch de Áudio & Partitura MIDI (nasa-geo-sonification) por País.
+Earth Jukebox — Batch Audio & MIDI Score Pipeline (nasa-geo-sonification) per Country.
 
-Gera, para cada país em `public/countries/<id>/`:
+Generates, for each country in `public/countries/<id>/`:
   - `region/{chords,bass,melody_main,melody_sparkle}_{dry,wind}.ogg`
   - `base/{chords,bass,melody_main,melody_sparkle}_{dry,wind}.ogg`
-  - Atualiza `meta.json` com `hasAudioStems: true`, `audioFormat: "ogg"`,
-    `session` (`region` & `base`), `beatEvents` e `studio` (partitura MIDI completa p/ Piano-Roll
-    da Parede Direita + telemetria `yellowCounts` e `persistentPeaks` idêntica ao `jukebox_studio.py`).
-  - Atualiza `public/countries/index.json` com a lista estrita de países 100% gerados (zero fallback).
+  - Updates `meta.json` with `hasAudioStems: true`, `audioFormat: "ogg"`,
+    `session` (`region` & `base`), `beatEvents`, and `studio` (full MIDI score for the
+    Right Wall Piano-Roll + `yellowCounts` and `persistentPeaks` telemetry matching `jukebox_studio.py`).
+  - Updates `public/countries/index.json` with the strict list of 100% generated countries (zero fallback).
 
-Uso:
-  python scripts/generate_country_audio.py                 # Gera os 12 países em destaque
-  python scripts/generate_country_audio.py --ids=076,818   # Países específicos
-  python scripts/generate_country_audio.py --all           # Todos os países com pasta em public/countries/
+Usage:
+  python scripts/generate_country_audio.py                 # Generates the 12 featured countries
+  python scripts/generate_country_audio.py --ids=076,818   # Specific countries
+  python scripts/generate_country_audio.py --all           # All countries with folders in public/countries/
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 import cv2
 import numpy as np
 
-# Garante import de `scripts/nasa_soundscape`
+# Ensure import of `scripts/nasa_soundscape`
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
@@ -63,7 +63,7 @@ from nasa_soundscape.synth_renderer import (
 
 TOTAL_BARS = 8
 FRAMES_PER_BAR = 12
-NUM_FRAMES = TOTAL_BARS * FRAMES_PER_BAR  # 96 quadros canônicos
+NUM_FRAMES = TOTAL_BARS * FRAMES_PER_BAR  # 96 canonical frames
 ATLAS_W = 2048
 ATLAS_H = 1024
 TILE_W = 320
@@ -232,9 +232,9 @@ def extract_layer_from_atlas(layer_id: str, bbox: GeoBoundingBox) -> tuple[str, 
 
 def export_country_video_sheets(country_dir: Path, raw_bbox: list[float], sheet_quality: int = DEFAULT_SHEET_QUALITY) -> None:
     """
-    Gera 5 sprite sheets JPEG (12x8 = 96 quadros, 160x160 px cada) em `video/<layer>_sheet.jpg`
-    diretamente dos 5 vídeos originais da NASA SVS (`global_atlas_96f`), alinhados 1:1 com a
-    projeção Plate Carrée (`cos_lat`, MARGIN_RATIO=0.08) da silhueta `1024x1024` do país.
+    Generates 5 JPEG sprite sheets (12x8 = 96 frames, 160x160 px each) in `video/<layer>_sheet.jpg`
+    directly from the 5 original NASA SVS videos (`global_atlas_96f`), aligned 1:1 with the
+    Plate Carrée projection (`cos_lat`, MARGIN_RATIO=0.08) of the country's `1024x1024` silhouette.
     """
     min_lon, min_lat, max_lon, max_lat = [float(v) for v in raw_bbox]
     mid_lat_rad = ((min_lat + max_lat) * 0.5) * math.pi / 180.0
@@ -259,7 +259,7 @@ def export_country_video_sheets(country_dir: Path, raw_bbox: list[float], sheet_
     map_x = ((((lon_grid + 180.0) / 360.0) % 1.0) * (ATLAS_W - 1)).astype(np.float32)
     map_y = (np.clip((90.0 - lat_grid) / 180.0, 0.0, 1.0) * (ATLAS_H - 1)).astype(np.float32)
 
-    # Máscara da silhueta do país vinda do PNG 1024x1024 para destacar fronteiras sem perder contexto externo
+    # Country silhouette mask from the 1024x1024 PNG to highlight borders without losing outer context
     mask_weight = np.ones((fsz, fsz, 1), dtype=np.float32)
     border_mask = np.zeros((fsz, fsz), dtype=bool)
     ref_png = country_dir / "melody.png"
@@ -268,7 +268,7 @@ def export_country_video_sheets(country_dir: Path, raw_bbox: list[float], sheet_
         if bgra is not None and bgra.shape[2] == 4:
             alpha = cv2.resize(bgra[:, :, 3], (fsz, fsz), interpolation=cv2.INTER_AREA)
             inside = (alpha > 8).astype(np.float32)
-            # Fora do país fica mais escuro (0.20x) para destacar a silhueta, mas mantém nuvens/raios ao redor visíveis
+            # Outside the country is darker (0.20x) to highlight the silhouette while keeping surrounding clouds/lightning visible
             mask_weight = (0.20 + 0.80 * inside)[:, :, None].astype(np.float32)
             kernel = np.ones((3, 3), dtype=np.uint8)
             inside_u8 = (alpha > 8).astype(np.uint8)

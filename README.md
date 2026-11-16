@@ -1,6 +1,6 @@
 # MINEIRØ · Earth Jukebox (NASA SVS Planetarium & Geo-Sonification)
 
-An immersive corner-projected planetary installation (**Left Wall + Right Wall + Ceiling**), **Tablet Remote Controller**, and **Unified Web Demo** that turns real **NASA Scientific Visualization Studio (SVS)** atmospheric datasets into synchronized spatial music (8D Binaural HRTF & 3-speaker VBAP room audio) and layered visual art—designed from the ground up with **WCAG AAA accessibility** and **PT-BR / EN** support.
+An immersive corner-projected planetary installation (**Left Wall + Right Wall + Ceiling**), **Tablet Remote Controller**, and **Unified Web Demo** that turns real **NASA Scientific Visualization Studio (SVS)** atmospheric datasets into synchronized spatial music (8D Binaural HRTF & 3-speaker VBAP room audio) and layered visual art—designed from the ground up with **WCAG AAA accessibility** and **EN (default) / PT-BR** support.
 
 ## Scientific Datasets (NASA SVS)
 
@@ -74,9 +74,12 @@ You do **not** need Supabase or Python just to run and develop the app—100 cou
 
 ```bash
 npm run dev
+
+# Or expose on your local Wi-Fi so a physical tablet/phone can connect:
+npm run dev -- --host
 ```
 
-Open `http://localhost:5173/` in your browser (add `-- --host` or open your machine's LAN IP shown in `?view=setup` to connect a physical tablet/phone on the same Wi-Fi).
+Open `http://localhost:5173/` in your browser (or open your machine's LAN URL shown in `?view=setup` on your tablet/phone over the same Wi-Fi).
 
 ---
 
@@ -85,7 +88,7 @@ Open `http://localhost:5173/` in your browser (add `-- --host` or open your mach
 Follow these steps to enable online `?room=XXXXXX` synchronization across networks and serve the 142 extra countries from Supabase Storage:
 
 1. **Create a free Supabase project** at [supabase.com](https://supabase.com/).
-2. **Create the `rooms` table:** Open the **SQL Editor** in your Supabase dashboard, paste the contents of [`supabase/rooms.sql`](supabase/rooms.sql), and run it.
+2. **(Optional) Create the `rooms` table:** Realtime Broadcast + Presence and Supabase Storage work without creating tables; if you also want persisted room records, open the **SQL Editor** in your Supabase dashboard, paste [`supabase/rooms.sql`](supabase/rooms.sql), and run it.
 3. **Create `.env.local`:**
    ```bash
    cp .env.example .env.local

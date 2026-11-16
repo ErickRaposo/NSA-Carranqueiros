@@ -64,7 +64,7 @@ describe('Show Control Admin (?view=admin), Matriz de Projetores Out 1..3, Nós 
     expect(twoProj.quads[makeSurfaceQuadKey(1, 'leftWall')][1].x).toBe(0.5);
     expect(twoProj.quads[makeSurfaceQuadKey(1, 'rightWall')][0].x).toBe(0.5);
 
-    // 3 Projetores Dedicados: cada parede ganha 100% (0..1 x 0..1) do seu próprio projetor
+    // 3 Dedicated Projectors: each wall gets 100% (0..1 x 0..1) of its own projector
     const threeProj = applyProjectionPreset('3-projectors');
     expect(threeProj.outputs[1].surfaces).toEqual(['leftWall']);
     expect(threeProj.outputs[2].surfaces).toEqual(['rightWall']);
@@ -73,7 +73,7 @@ describe('Show Control Admin (?view=admin), Matriz de Projetores Out 1..3, Nós 
     expect(threeProj.quads[makeSurfaceQuadKey(2, 'rightWall')][0].x).toBe(0);
     expect(threeProj.quads[makeSurfaceQuadKey(2, 'rightWall')][1].x).toBe(1);
 
-    // Custom Matrix: adicionar ceiling no Out 3 sobre '2-projectors' marca preset 'custom' e dá tela cheia ao Out 3
+    // Custom Matrix: adding ceiling on Out 3 over '2-projectors' sets preset 'custom' and gives Out 3 full screen
     const custom = toggleSurfaceOnOutput(twoProj, 3, 'ceiling');
     expect(custom.preset).toBe('custom');
     expect(custom.outputs[3].surfaces).toEqual(['ceiling']);
@@ -154,7 +154,7 @@ describe('Show Control Admin (?view=admin), Matriz de Projetores Out 1..3, Nós 
     expect(buildBeatTimeline(null)).toEqual([]);
     expect(buildBeatTimeline([])).toEqual([]);
 
-    // Loop congelado no Compasso 3 (barIndex = 2 -> intervalo [0.25, 0.375))
+    // Loop frozen on Bar 3 (barIndex = 2 -> range [0.25, 0.375))
     const wrapped = advanceLoopProgress(0.37, 0.2, 16, 2, 8);
     expect(wrapped).toBeGreaterThanOrEqual(0.25);
     expect(wrapped).toBeLessThan(0.375);
@@ -226,10 +226,10 @@ describe('Show Control Admin (?view=admin), Matriz de Projetores Out 1..3, Nós 
       speakerCalibration: calib,
     });
 
-    // Raio na borda Oeste (Parede Esquerda) precisa iluminar muito mais C1 do que C2
+    // Lightning on the West edge (Left Wall) must illuminate C1 much more than C2
     expect(levelsLeft.speaker1).toBeGreaterThan(levelsLeft.speaker2 * 3);
 
-    // Se C1 estiver mutada, nível ao vivo de C1 cai imediatamente para 0
+    // If C1 is muted, C1 live level drops immediately to 0
     const mutedC1 = computeSpeakerLiveLevels({
       events: [
         {
@@ -347,12 +347,12 @@ describe('Show Control Admin (?view=admin), Matriz de Projetores Out 1..3, Nós 
       expect(cancelSpy).toHaveBeenCalled();
       expect(onEndSpy).toHaveBeenCalledTimes(1);
 
-      // Com a aba oculta, nenhuma fala atrasada pode ser disparada
+      // With the tab hidden, no delayed speech may be triggered
       g.document = { visibilityState: 'hidden' };
       speakTextPt('Fala fantasma em background', true);
       expect(speakSpy).toHaveBeenCalledTimes(1);
 
-      // Volta para visible e valida pauseSpeech / resumeSpeech / setSpeechGateOpen(false)
+      // Return to visible and validate pauseSpeech / resumeSpeech / setSpeechGateOpen(false)
       g.document = { visibilityState: 'visible' };
       speakTextPt('Segunda fala', true);
       expect(speakSpy).toHaveBeenCalledTimes(2);

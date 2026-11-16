@@ -48,7 +48,7 @@ export const NetworkModule: React.FC<NetworkModuleProps> = ({
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-      {/* Coluna Esquerda: Código da Sala + QR Pairing */}
+      {/* Left Column: Room Code + QR Pairing */}
       <div className="flex flex-col gap-4 lg:col-span-5">
         <section className={`flex flex-col gap-3.5 p-4 ${ADMIN_PANEL_CLASS}`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -182,7 +182,7 @@ export const NetworkModule: React.FC<NetworkModuleProps> = ({
         </section>
       </div>
 
-      {/* Coluna Direita: Barramento WS + Lote Global */}
+      {/* Right Column: WS Bus + Global Batch */}
       <div className="flex flex-col gap-4 lg:col-span-7">
         <section className={`p-4 ${ADMIN_PANEL_CLASS}`}>
           <div className="mb-3 flex items-center justify-between gap-2">

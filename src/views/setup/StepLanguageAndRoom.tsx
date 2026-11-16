@@ -212,7 +212,7 @@ export const StepLanguageAndRoom: React.FC<StepLanguageAndRoomProps> = ({
 
   return (
     <div className="flex flex-col gap-5" data-testid="setup-step-welcome">
-      {/* Sub-bloco: Idioma */}
+      {/* Sub-block: Language */}
       {activeWelcomeSubStep === 'lang' ? (
         <section
           className={`setup-block-enter p-6 sm:p-8 lg:p-9 ${ADMIN_PANEL_CLASS}`}
@@ -309,7 +309,7 @@ export const StepLanguageAndRoom: React.FC<StepLanguageAndRoomProps> = ({
         )
       )}
 
-      {/* Sub-bloco: Sala Exclusiva (?room=XXXXXX) */}
+      {/* Sub-block: Exclusive Room (?room=XXXXXX) */}
       {activeWelcomeSubStep === 'room' ? (
         <section
           className={`setup-block-enter p-6 sm:p-8 lg:p-9 ${ADMIN_PANEL_CLASS}`}
@@ -393,7 +393,7 @@ export const StepLanguageAndRoom: React.FC<StepLanguageAndRoomProps> = ({
         )
       )}
 
-      {/* Sub-bloco: Cenário / Quantidade de Telas */}
+      {/* Sub-block: Scenario / Screen Count */}
       {activeWelcomeSubStep === 'scenario' ? (
         <section
           className={`setup-block-enter p-6 sm:p-8 lg:p-9 ${ADMIN_PANEL_CLASS}`}
@@ -503,7 +503,7 @@ export const StepLanguageAndRoom: React.FC<StepLanguageAndRoomProps> = ({
         )
       )}
 
-      {/* Prévia da próxima pergunta em fade de continuidade */}
+      {/* Next question preview with continuity fade */}
       <NextBlockTeaser
         title={teaserMeta.title}
         subtitle={teaserMeta.subtitle}

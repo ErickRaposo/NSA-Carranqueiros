@@ -22,11 +22,11 @@ const SMOKE_CLOUDS = [
 ];
 
 /**
- * Overlay físico e responsivo da nave espacial em 3 superfícies usando `motion/react`:
- * - `boarding` / `countdown` na Parede Direita: comportas metálicas fecham + fumaça espalhada.
- * - `boarding` / `countdown` na Parede Esquerda: chapa metálica com vigia circular responsiva para o campo de areia.
- * - `boarding` / `countdown` no Teto: duas comportas formando o topo cônico do foguete que abrem devagar em `zero_g`.
- * - `zero_g` -> `exploring`: painéis da cabine nas paredes laterais deslizam e abrem devagar para o espaço.
+ * Physical, responsive spaceship overlay across 3 surfaces using `motion/react`:
+ * - `boarding` / `countdown` on the Right Wall: metal blast doors close + dispersed smoke.
+ * - `boarding` / `countdown` on the Left Wall: metal bulkhead with responsive circular porthole overlooking the sand field.
+ * - `boarding` / `countdown` on the Ceiling: two hatches forming the rocket nosecone that slowly open in `zero_g`.
+ * - `zero_g` -> `exploring`: side-wall cabin panels slide open slowly into space.
  */
 export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
   surface,
@@ -57,7 +57,7 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
       aria-hidden="true"
     >
       {/* =====================================================================
-          PAREDE DIREITA: Comportas metálicas fechando + fumaça espalhada
+          RIGHT WALL: Metal blast doors closing + dispersed smoke
           ===================================================================== */}
       <AnimatePresence>
         {surface === 'rightWall' && showShipShell && (
@@ -110,7 +110,7 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
               <div className="absolute right-5 bottom-5 h-2 w-2 rounded-full bg-slate-400/50" />
             </motion.div>
 
-            {/* Fumaça espalhada ao fechar/abrir as comportas */}
+            {/* Dispersed smoke while closing/opening the blast doors */}
             {SMOKE_CLOUDS.map((puff, idx) => (
               <motion.div
                 key={`right-smoke-${idx}`}
@@ -146,7 +146,7 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
       </AnimatePresence>
 
       {/* =====================================================================
-          PAREDE ESQUERDA: Chapa metálica + vigia circular responsiva para o campo de areia
+          LEFT WALL: Metal bulkhead + responsive circular porthole overlooking the sand field
           ===================================================================== */}
       <AnimatePresence>
         {surface === 'leftWall' && showShipShell && (
@@ -181,7 +181,7 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
             <span className="absolute bottom-4 left-4 h-2 w-2 rounded-full bg-slate-400/50" />
             <span className="absolute right-4 bottom-4 h-2 w-2 rounded-full bg-slate-400/50" />
 
-            {/* Vigia circular 100% responsiva a qualquer proporção de tela */}
+            {/* Circular porthole 100% responsive to any screen aspect ratio */}
             <div className="relative flex aspect-square h-[min(74vw,74vh)] w-[min(74vw,74vh)] max-h-[82%] max-w-[82%] items-center justify-center rounded-full p-2 ring-2 ring-sky-400/45 shadow-[0_0_45px_rgba(56,189,248,0.22)]">
               <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border-[5px] border-slate-600/90 bg-[#030712] shadow-[inset_0_0_34px_rgba(0,0,0,0.9)]">
                 <motion.div
@@ -287,7 +287,7 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
       </AnimatePresence>
 
       {/* =====================================================================
-          ÓRBITA / ZERO-G: Cabine lateral permanece e depois abre devagar para fora
+          ORBIT / ZERO-G: Side cabin remains and then slowly opens outward
           ===================================================================== */}
       <AnimatePresence>
         {isZeroGCabin && (
@@ -299,7 +299,7 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
             exit={{ opacity: 0 }}
             transition={{ duration: 2.0, ease: 'easeInOut' }}
           >
-            {/* Moldura esquerda e direita abrindo suavemente para fora ao entrar em exploração */}
+            {/* Left and right frames smoothly opening outward when entering exploration */}
             <motion.div
               className="h-full w-6 border-r border-sky-400/25 sm:w-9"
               style={BRUSHED_METAL_STYLE}
@@ -328,7 +328,7 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
       </AnimatePresence>
 
       {/* =====================================================================
-          TETO: Duas comportas do topo do foguete que se abrem devagar em Zero-G
+          CEILING: Two rocket nosecone hatches that slowly open in Zero-G
           ===================================================================== */}
       <AnimatePresence>
         {surface === 'ceiling' && showShipShell && (
@@ -355,7 +355,7 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
                 : { duration: 2.4 }
             }
           >
-            {/* Metade esquerda do teto abrindo devagar para cima e esquerda */}
+            {/* Left half of the ceiling slowly opening up and to the left */}
             <motion.div
               className="relative h-full w-1/2 overflow-hidden border-r border-sky-400/30"
               style={BRUSHED_METAL_STYLE}
@@ -383,7 +383,7 @@ export const SpaceshipLaunchOverlay: React.FC<SpaceshipLaunchOverlayProps> = ({
               </svg>
             </motion.div>
 
-            {/* Metade direita do teto abrindo devagar para cima e direita */}
+            {/* Right half of the ceiling slowly opening up and to the right */}
             <motion.div
               className="relative h-full w-1/2 overflow-hidden border-l border-sky-400/30"
               style={BRUSHED_METAL_STYLE}

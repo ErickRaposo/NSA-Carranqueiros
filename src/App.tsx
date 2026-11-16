@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { stopSpeech, stopUiAudioTones } from './accessibility/a11yEngine';
-import { useA11yPreferences } from './accessibility/a11yPreferences';
+import { A11yFontScale, useA11yPreferences } from './accessibility/a11yPreferences';
 import { stopAllSpaceAudio } from './audio/spaceAmbient';
 import { EntryPortal } from './components/EntryPortal';
 import {
@@ -8,8 +8,8 @@ import {
   shouldShowAccessibilityWidget,
 } from './components/AccessibilityWidget';
 import { RoomAccessGate } from './components/RoomAccessGate';
-import { ExperienceProvider } from './experience/ExperienceContext';
-import { ProjectorOutId, SpeakerNodeIndex, ViewRole } from './experience/types';
+import { ExperienceProvider, useExperience } from './experience/ExperienceContext';
+import { Lang, ProjectorOutId, SpeakerNodeIndex, ViewRole } from './experience/types';
 import {
   generateRoomCode,
   normalizeRoomCode,
@@ -79,7 +79,20 @@ export function parseSpeakerIndexFromSearch(search: string): SpeakerNodeIndex {
   return rawSpk === 2 ? 2 : rawSpk === 3 ? 3 : 1;
 }
 
+const ExperienceAccessibilityWidget: React.FC<{
+  highContrast: boolean;
+  onToggleHighContrast: () => void;
+  fontScale: A11yFontScale;
+  onCycleFontScale: () => void;
+  reduceMotion: boolean;
+  onToggleReduceMotion: () => void;
+}> = (props) => {
+  const { lang } = useExperience();
+  return <AccessibilityWidget {...props} lang={lang} />;
+};
+
 export function App(): React.ReactElement {
+  const [appLang, setAppLang] = useState<Lang>('en');
   const [route, setRoute] = useState<ParsedRoute>(() =>
     typeof window !== 'undefined'
       ? parseRouteFromSearch(window.location.search)
@@ -139,7 +152,7 @@ export function App(): React.ReactElement {
     };
   }, [route.view]);
 
-  // Auto-gera código exclusivo de sala (?room=XXXXXX) ao entrar no Setup ou no Admin sem código
+  // Auto-generate a unique room code (?room=XXXXXX) when entering Setup or Admin without a code
   useEffect(() => {
     if ((route.view === 'setup' || route.view === 'admin') && !roomCode) {
       const nextCode = generateRoomCode();
@@ -204,6 +217,12 @@ export function App(): React.ReactElement {
     [roomCode]
   );
 
+  useEffect(() => {
+    if (route.view === 'portal' && typeof document !== 'undefined') {
+      document.documentElement.lang = appLang === 'pt' ? 'pt-BR' : 'en';
+    }
+  }, [appLang, route.view]);
+
   const {
     highContrast,
     fontScale,
@@ -212,7 +231,7 @@ export function App(): React.ReactElement {
     toggleHighContrast,
     cycleFontScale,
     toggleReduceMotion,
-  } = useA11yPreferences();
+  } = useA11yPreferences(appLang);
 
   const a11yAnnouncer = (
     <div
@@ -227,22 +246,15 @@ export function App(): React.ReactElement {
   );
 
   const currentSearch = typeof window !== 'undefined' ? window.location.search : '';
-  const a11yWidget = shouldShowAccessibilityWidget(route.view, currentSearch) ? (
-    <AccessibilityWidget
-      highContrast={highContrast}
-      onToggleHighContrast={toggleHighContrast}
-      fontScale={fontScale}
-      onCycleFontScale={cycleFontScale}
-      reduceMotion={reduceMotion}
-      onToggleReduceMotion={toggleReduceMotion}
-    />
-  ) : null;
+  const showA11yWidget = shouldShowAccessibilityWidget(route.view, currentSearch);
 
   if (route.view === 'portal') {
     return (
       <>
         {a11yAnnouncer}
         <EntryPortal
+          lang={appLang}
+          onToggleLang={() => setAppLang((prev) => (prev === 'en' ? 'pt' : 'en'))}
           highContrast={highContrast}
           onToggleHighContrast={toggleHighContrast}
           fontScale={fontScale}
@@ -251,7 +263,17 @@ export function App(): React.ReactElement {
           onOpenAuth={() => navigateTo('setup')}
           onOpenRegister={() => navigateTo('controller')}
         />
-        {a11yWidget}
+        {showA11yWidget && (
+          <AccessibilityWidget
+            lang={appLang}
+            highContrast={highContrast}
+            onToggleHighContrast={toggleHighContrast}
+            fontScale={fontScale}
+            onCycleFontScale={cycleFontScale}
+            reduceMotion={reduceMotion}
+            onToggleReduceMotion={toggleReduceMotion}
+          />
+        )}
       </>
     );
   }
@@ -259,11 +281,21 @@ export function App(): React.ReactElement {
   return (
     <ExperienceProvider
       activeView={route.view}
+      initialLang={appLang}
       roomCode={roomCode}
       onRegenerateRoomCode={handleRegenerateRoomCode}
     >
       {a11yAnnouncer}
-      {a11yWidget}
+      {showA11yWidget && (
+        <ExperienceAccessibilityWidget
+          highContrast={highContrast}
+          onToggleHighContrast={toggleHighContrast}
+          fontScale={fontScale}
+          onCycleFontScale={cycleFontScale}
+          reduceMotion={reduceMotion}
+          onToggleReduceMotion={toggleReduceMotion}
+        />
+      )}
       {route.view === 'setup' && (
         <SetupWizardView
           onOpenAdmin={() => navigateTo('admin')}

@@ -24,15 +24,15 @@ export interface CountryNasaLayerMetric {
   sensorLabel: string;
   accentHex: string;
   enabled: boolean;
-  /** Valor principal medido para este país na camada oficial NASA */
+  /** Primary value measured for this country in the official NASA layer */
   metricHeadline: string;
-  /** Contexto complementar extraído do meta.json / escala oficial SVS */
+  /** Complementary context extracted from meta.json / official SVS scale */
   metricSubline: string;
-  /** Rótulo enxuto para blocos e cards compactos */
+  /** Concise label for compact blocks and cards */
   compactLabel: string;
-  /** Escala / unidade oficial NASA SVS */
+  /** Official NASA SVS scale / unit */
   scaleLabel: string;
-  /** Valor normalizado [0..1] para barra visual proporcional */
+  /** Normalized value [0..1] for proportional visual bar */
   normalized01: number | null;
   sourceUrl: string;
 }

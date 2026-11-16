@@ -35,7 +35,7 @@ export const CockpitHeader: React.FC<CockpitHeaderProps> = ({
 
   return (
     <header className="flex min-h-[56px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#1e3a66]/55 bg-[#040b1a] px-4 py-2 lg:px-5">
-      {/* Esquerda: Marca do Painel Técnico */}
+      {/* Left: Technical Panel Brand */}
       <div className="flex items-center gap-2.5">
         <img src={symbollLogo} alt="" className="h-7 w-7 object-contain" aria-hidden="true" />
         <h1 className="font-['Orbitron','Poppins',sans-serif] text-sm font-bold tracking-[0.04em] text-slate-50">
@@ -43,7 +43,7 @@ export const CockpitHeader: React.FC<CockpitHeaderProps> = ({
         </h1>
       </div>
 
-      {/* Direita: Único Transporte Global + Segurança da Sala + Idioma */}
+      {/* Right: Single Global Transport + Room Safety + Language */}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"

@@ -13,8 +13,8 @@ export interface ThrottledSender<T> {
 }
 
 /**
- * Throttle com envio imediato na borda de subida + envio garantido do último valor (trailing)
- * após `intervalMs` (~35–45 ms), evitando inundar o barramento Realtime ao arrastar Corner-Pin ou faders.
+ * Throttle with immediate leading-edge send + guaranteed trailing send of the last value
+ * after `intervalMs` (~35–45 ms), preventing flooding the Realtime bus while dragging Corner-Pin or faders.
  */
 export function createTrailingThrottle<T>(
   intervalMs: number,
@@ -106,8 +106,8 @@ export interface RoomSyncTransportHandle {
 }
 
 /**
- * Unifica os 3 modos de operação (Isolado, LAN WebSocket `/ws-earth-sync` e Sala Online Supabase Realtime)
- * mantendo os mesmos 4 eventos (`sync`, `projection`, `speaker-calib`, `calib-signal`) + `presence` e Late Join (`request-state`).
+ * Unifies the 3 operation modes (Isolated, LAN WebSocket `/ws-earth-sync`, and Online Supabase Realtime Room)
+ * keeping the same 4 events (`sync`, `projection`, `speaker-calib`, `calib-signal`) + `presence` and Late Join (`request-state`).
  */
 export function createRoomSyncTransport(
   opts: RoomSyncTransportCallbacks
@@ -229,7 +229,7 @@ export function createRoomSyncTransport(
     } else if (msg.type === 'calib-signal' && msg.cmd) {
       opts.onCalibSignal(msg.cmd);
     } else if (msg.type === 'request-state') {
-      // Late Join: o host ativo (setup/admin imediatamente, controller com pequeno atraso) envia o snapshot completo
+      // Late Join: the active host (setup/admin immediately, controller with a short delay) sends the full snapshot
       if (!isHostCapableRole(opts.role) || !opts.getHostSnapshot) return;
       if (msg.requesterId === opts.peerId) return;
       const delayMs = opts.role === 'controller' ? 110 : 15;

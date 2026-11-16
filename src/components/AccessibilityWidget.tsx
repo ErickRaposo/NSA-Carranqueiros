@@ -13,8 +13,8 @@ const HIDDEN_RAW_VIEWS = new Set([
 ]);
 
 /**
- * Garante que o widget flutuante nunca apareça em telas de projeção ou nós de áudio,
- * apenas em interfaces interativas com o usuário (Portal, Demo, Controller, Setup, Admin).
+ * Ensures the floating widget never appears on projection screens or audio nodes,
+ * only in user-interactive interfaces (Portal, Demo, Controller, Setup, Admin).
  */
 export function shouldShowAccessibilityWidget(view: ViewRole, search = ''): boolean {
   if (view === 'projector' || view === 'audio-node') {

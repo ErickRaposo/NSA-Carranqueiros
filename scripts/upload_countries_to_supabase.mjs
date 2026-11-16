@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Upload dos países excedentes (fora dos 100 locais do repositório) para o Supabase Storage.
+ * Upload overflow countries (beyond the 100 local ones in the repo) to Supabase Storage.
  *
- * Pré-requisitos em `.env.local` (ou variáveis de ambiente):
- *   VITE_SUPABASE_URL=https://<seu-projeto>.supabase.co
- *   SUPABASE_SERVICE_ROLE_KEY=<service_role_secret>   (NUNCA com prefixo VITE_)
- *   VITE_SUPABASE_COUNTRIES_BUCKET=nasa-countries     (opcional, padrão: nasa-countries)
+ * Prerequisites in `.env.local` (or environment variables):
+ *   VITE_SUPABASE_URL=https://<your-project>.supabase.co
+ *   SUPABASE_SERVICE_ROLE_KEY=<service_role_secret>   (NEVER with VITE_ prefix)
+ *   VITE_SUPABASE_COUNTRIES_BUCKET=nasa-countries     (optional, default: nasa-countries)
  *
- * Uso:
+ * Usage:
  *   node scripts/upload_countries_to_supabase.mjs
  *   node scripts/upload_countries_to_supabase.mjs --dry-run
  *   node scripts/upload_countries_to_supabase.mjs --ids=246,752
@@ -124,7 +124,7 @@ const supabase = createClient(supabaseUrl, serviceKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-// Garantir bucket público
+// Ensure public bucket exists
 const { data: existingBucket } = await supabase.storage.getBucket(bucket);
 if (!existingBucket) {
   const { error: createErr } = await supabase.storage.createBucket(bucket, {

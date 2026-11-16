@@ -488,7 +488,7 @@ function speakWithWebSpeechFallback(
 }
 
 /**
- * Pré-carrega e armazena em cache OPFS a voz neural Piper (`en_US-bryce-medium` ou `pt_BR-faber-medium`).
+ * Preloads and caches the Piper neural voice (`en_US-bryce-medium` or `pt_BR-faber-medium`) in OPFS.
  */
 export function preloadPiperVoice(lang: 'pt' | 'en'): Promise<boolean> {
   if (typeof window === 'undefined') return Promise.resolve(false);

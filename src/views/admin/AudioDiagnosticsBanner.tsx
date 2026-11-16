@@ -71,10 +71,10 @@ function isMonitoredLanRole(role: string): boolean {
 }
 
 /**
- * Faixa de Diagnóstico Físico da Sala (Hardware & Rede):
- * - Ignora estado das 5 Camadas (controlado pelo participante no Tablet).
- * - Usa "latch de sessão" + debounce para só alertar quedas reais (caixa BT/USB, PC/projetor ou Tablet),
- *   evitando falsos positivos ao abrir o Setup antes dos equipamentos ou em deploy Web/Vercel.
+ * Room Physical Diagnostics Banner (Hardware & Network):
+ * - Ignores the state of the 5 Layers (controlled by the participant on the Tablet).
+ * - Uses a "session latch" + debounce to only alert on real drops (BT/USB speaker, PC/projector, or Tablet),
+ *   avoiding false positives when opening Setup before hardware is connected or on Web/Vercel deploys.
  */
 export const AudioDiagnosticsBanner: React.FC<AudioDiagnosticsBannerProps> = ({
   lang,
@@ -100,22 +100,22 @@ export const AudioDiagnosticsBanner: React.FC<AudioDiagnosticsBannerProps> = ({
 }) => {
   const isPt = lang === 'pt';
 
-  // Latch de caixas locais configuradas que já foram vistas online nesta sessão
+  // Latch of configured local speakers that have already been seen online in this session
   const seenSinksRef = useRef<Map<SpeakerSlotId, string>>(new Map());
   const sinkTimersRef = useRef<Map<SpeakerSlotId, number>>(new Map());
   const [disconnectedSpeakers, setDisconnectedSpeakers] = useState<SpeakerSlotId[]>([]);
 
-  // Latch de dispositivos LAN (projetores, tablet, audio-nodes) vistos online nesta sessão
+  // Latch of LAN devices (projectors, tablet, audio-nodes) seen online in this session
   const seenRolesRef = useRef<Set<string>>(new Set());
   const roleTimersRef = useRef<Map<string, number>>(new Map());
   const [droppedRoles, setDroppedRoles] = useState<string[]>([]);
 
-  // Latch do servidor LAN mestre (/ws-earth-sync)
+  // Latch of the master LAN server (/ws-earth-sync)
   const wasLanConnectedRef = useRef<boolean>(false);
   const lanDropTimerRef = useRef<number | null>(null);
   const [lanHostDropped, setLanHostDropped] = useState<boolean>(false);
 
-  // Monitoramento de queda física de caixas (C1/C2/C3 locais com setSinkId)
+  // Physical speaker drop monitoring (local C1/C2/C3 with setSinkId)
   useEffect(() => {
     const availableIds = new Set(outputDevices.map((d) => d.deviceId));
     const hasEnumerated = outputDevices.length > 0;
@@ -167,7 +167,7 @@ export const AudioDiagnosticsBanner: React.FC<AudioDiagnosticsBannerProps> = ({
     }
   }, [audioMode, outputDevices, speakerCalibration]);
 
-  // Monitoramento de queda de PCs/Projetores, Tablet e Nós LAN (debounce 3.5s para tolerar F5)
+  // Drop monitoring for PCs/Projectors, Tablet, and LAN Nodes (3.5s debounce to tolerate F5)
   useEffect(() => {
     if (!lanConnected && seenRolesRef.current.size === 0) return;
 
@@ -200,7 +200,7 @@ export const AudioDiagnosticsBanner: React.FC<AudioDiagnosticsBannerProps> = ({
     }
   }, [lanClients, lanConnected]);
 
-  // Monitoramento de queda do próprio servidor WebSocket LAN
+  // Drop monitoring for the LAN WebSocket server itself
   useEffect(() => {
     if (lanConnected) {
       wasLanConnectedRef.current = true;
@@ -220,7 +220,7 @@ export const AudioDiagnosticsBanner: React.FC<AudioDiagnosticsBannerProps> = ({
     }
   }, [lanConnected]);
 
-  // Limpeza de timers no unmount
+  // Timer cleanup on unmount
   useEffect(() => {
     const sinkTimers = sinkTimersRef.current;
     const roleTimers = roleTimersRef.current;
@@ -256,7 +256,7 @@ export const AudioDiagnosticsBanner: React.FC<AudioDiagnosticsBannerProps> = ({
     setDroppedRoles((prev) => prev.filter((r) => r !== role));
   };
 
-  // Condições técnicas limpas (sem falso-positivo quando o Tablet controla camadas/áudio)
+  // Clean technical conditions (no false positives when the Tablet controls layers/audio)
   const isCtxBlocked = audioOwner !== 'tablet' && isPlaying && audioContextState !== 'running';
   const isPcMutedUnintentionally = audioOwner !== 'tablet' && localAudioMuted;
   const isMasterZero = masterGain <= 0.02;
@@ -288,7 +288,7 @@ export const AudioDiagnosticsBanner: React.FC<AudioDiagnosticsBannerProps> = ({
         <span>{isPt ? 'Alertas da Sala:' : 'Room Alerts:'}</span>
       </span>
 
-      {/* 1. Caixa física desconectada (BT / USB) */}
+      {/* 1. Physical speaker disconnected (BT / USB) */}
       {disconnectedSpeakers.map((spkId) => {
         const spk = speakerCalibration.speakers[spkId];
         const shortLabel = isPt ? spk.shortLabelPt : spk.shortLabelEn;
@@ -331,7 +331,7 @@ export const AudioDiagnosticsBanner: React.FC<AudioDiagnosticsBannerProps> = ({
         );
       })}
 
-      {/* 2. PC/Projetor, Tablet ou Nó LAN que caiu após estar conectado */}
+      {/* 2. PC/Projector, Tablet, or LAN Node that dropped after being connected */}
       {droppedRoles.map((role) => {
         const roleLabel = formatPeerRoleLabel(role, isPt);
         return (
@@ -360,7 +360,7 @@ export const AudioDiagnosticsBanner: React.FC<AudioDiagnosticsBannerProps> = ({
         );
       })}
 
-      {/* 3. Servidor WebSocket LAN do PC Mestre caiu */}
+      {/* 3. Master PC LAN WebSocket server dropped */}
       {lanHostDropped && (
         <button
           type="button"
@@ -372,7 +372,7 @@ export const AudioDiagnosticsBanner: React.FC<AudioDiagnosticsBannerProps> = ({
         </button>
       )}
 
-      {/* 4. Blackout ativo enquanto a música toca */}
+      {/* 4. Blackout active while music is playing */}
       {isBlackoutWhilePlaying && (
         <button
           type="button"
@@ -384,7 +384,7 @@ export const AudioDiagnosticsBanner: React.FC<AudioDiagnosticsBannerProps> = ({
         </button>
       )}
 
-      {/* 5. Recuperação real de bloqueio de áudio local (somente se PC é o dono) */}
+      {/* 5. Real recovery from local audio block (only if PC is the owner) */}
       {isCtxBlocked && (
         <button
           type="button"

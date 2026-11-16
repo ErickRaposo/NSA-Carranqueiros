@@ -98,7 +98,7 @@ export function midiToFreq(midi: number): number {
 }
 
 /**
- * Converte cifra (ex.: 'Dadd9', 'Am7', 'F#m9', 'Esus4') em notas MIDI na região central (C3..E4).
+ * Converts a chord symbol (e.g., 'Dadd9', 'Am7', 'F#m9', 'Esus4') into MIDI notes in the middle register (C3..E4).
  */
 export function parseChordToMidiVoicing(chordSymbol: string, fallbackRoot = 'A'): number[] {
   const match = chordSymbol.trim().match(/^([A-G][#b]?)(.*)$/);
@@ -255,8 +255,8 @@ export interface SpatialSfxTarget {
 }
 
 /**
- * Retorna a instância principal não-mutada do SpatialAudioEngine na aba atual
- * (permitindo rotear nave/SFX e falas Piper pelas 3 caixas físicas com setSinkId e calibração).
+ * Returns the primary unmuted SpatialAudioEngine instance in the current tab
+ * (allowing spacecraft/SFX and Piper speech to be routed through the 3 physical speakers with setSinkId and calibration).
  */
 export function getActiveUnmutedAudioEngine(): SpatialAudioEngine | null {
   for (const engine of activeAudioEngines) {
@@ -703,8 +703,8 @@ export class SpatialAudioEngine {
   }
 
   /**
-   * Direciona dinamicamente a espacialização 8D/VBAP das notas ativas de raios (`melody_main` e `melody_sparkle`)
-   * usando `source_x` (Oeste->Leste) e `source_y` (Sul->Norte/Teto) reais do `meta.json`.
+   * Dynamically routes 8D/VBAP spatialization of active lightning notes (`melody_main` and `melody_sparkle`)
+   * using real `source_x` (West->East) and `source_y` (South->North/Ceiling) from `meta.json`.
    */
   public steerMelodySpatialFocus(sourceX01: number, sourceY01: number): void {
     if (!this.ctx || !this.componentBuses) return;
@@ -726,8 +726,8 @@ export class SpatialAudioEngine {
   }
 
   /**
-   * Move o barramento 8D do Vento de um lado para o outro (Oeste <-> Leste) e profundidade
-   * com base na direção e concentração reais do vento extraídas do vídeo `svs5148` da NASA.
+   * Moves the 8D Wind bus side-to-side (West <-> East) and in depth
+   * based on real wind direction and concentration extracted from NASA's `svs5148` video.
    */
   public steerWindByTelemetry(
     panX: number,
@@ -833,8 +833,8 @@ export class SpatialAudioEngine {
   }
 
   /**
-   * Abaixa suavemente apenas os barramentos musicais e pad espacial enquanto o Robô MINEIRØ fala,
-   * sem abafar a própria voz, os efeitos mecânicos nem os sinais de calibração.
+   * Smoothly ducks only the music buses and space pad while Robot MINEIRØ speaks,
+   * without muffling the voice itself, mechanical effects, or calibration signals.
    */
   public setVoiceDucking(ducked: boolean): void {
     this.voiceDuckMultiplier = ducked ? 0.22 : 1.0;
@@ -1176,7 +1176,7 @@ export class SpatialAudioEngine {
   }
 
   /**
-   * Carrega os 8 stems gapless pré-renderizados pelo Python (`nasa-geo-sonification`).
+   * Loads the 8 gapless stems pre-rendered by Python (`nasa-geo-sonification`).
    */
   public async tryLoadPreRenderedStems(
     countryId: string,
@@ -1257,7 +1257,7 @@ export class SpatialAudioEngine {
   }
 
   /**
-   * Inicia os 8 stems em loop gapless exato, respeitando `barLoop` (`loopStart` / `loopEnd`) idêntico ao `jukebox_studio.py`.
+   * Starts the 8 stems in an exact gapless loop, respecting `barLoop` (`loopStart` / `loopEnd`) identical to `jukebox_studio.py`.
    */
   public startStemPlayback(
     offsetProgress01: number,
@@ -1329,7 +1329,7 @@ export class SpatialAudioEngine {
   }
 
   /**
-   * Interrompe stems, sinais de calibração e suspende contextos/sinks quando o usuário sai da aba ou página.
+   * Stops stems, calibration signals, and suspends contexts/sinks when the user leaves the tab or page.
    */
   public suspendForPageExit(): void {
     this.stopCalibrationSignal();
@@ -1355,7 +1355,7 @@ export class SpatialAudioEngine {
   }
 
   /**
-   * Encerra definitivamente o motor de áudio ao desmontar (ex.: troca para Portal ou fechamento).
+   * Permanently shuts down the audio engine on unmount (e.g., switching to Portal or closing).
    */
   public dispose(): void {
     this.disposed = true;
@@ -1406,7 +1406,7 @@ export class SpatialAudioEngine {
   }
 
   /**
-   * Retorna `progress01` (`0..1`) sample-accurate diretamente do relógio Web Audio (`ctx.currentTime`).
+   * Returns sample-accurate `progress01` (`0..1`) directly from the Web Audio clock (`ctx.currentTime`).
    */
   public getPlayheadProgress01(): number | null {
     if (!this.stemsActivelyPlaying || !this.ctx || this.stemFullDurationSec <= 0.05) {
@@ -1420,7 +1420,7 @@ export class SpatialAudioEngine {
   }
 
   /**
-   * Mistura Dry/Wind, Solo (`melody`, `sparkle`, `chords`, `bass`) e Ganhos idêntica ao `jukebox_studio.py`.
+   * Mixes Dry/Wind, Solo (`melody`, `sparkle`, `chords`, `bass`), and Gains identical to `jukebox_studio.py`.
    */
   public syncStemGains(layers: ExperienceLayersState): void {
     if (!this.ctx || !this.componentBuses) return;
@@ -1489,7 +1489,7 @@ export class SpatialAudioEngine {
   }
 
   /**
-   * Lê os medidores VU reais (0..1) e o pico Master em dBFS diretamente dos `AnalyserNode`s Web Audio.
+   * Reads real VU meters (0..1) and Master peak in dBFS directly from the Web Audio `AnalyserNode`s.
    */
   public readLiveMeters(): { vu: AudioLevelsMap; masterDbFs: number } {
     if (!this.ctx || !this.stemsActivelyPlaying || !this.componentBuses) {
@@ -1526,7 +1526,7 @@ export class SpatialAudioEngine {
     };
   }
 
-  // --- Roteamento Multi-Caixa para Nave / SFX Espacial e Voz Piper TTS ---
+  // --- Multi-Speaker Routing for Spacecraft / Spatial SFX and Piper TTS Voice ---
 
   public createSpatialSfxTarget(
     initialPanX = 0,
@@ -1662,7 +1662,7 @@ export class SpatialAudioEngine {
     const branchNodes: AudioNode[] = [voiceGain];
 
     if (useRoomVbap) {
-      // Distribuição equilibrada nas 3 caixas juntas (C1 + C2 + C3) respeitando calibração e setSinkId
+      // Balanced distribution across all 3 speakers together (C1 + C2 + C3) respecting calibration and setSinkId
       for (const id of SPEAKER_IDS) {
         if (this.calibration.speakers[id].muted) continue;
         const g = ctx.createGain();
@@ -1704,7 +1704,7 @@ export class SpatialAudioEngine {
     return true;
   }
 
-  // --- Ferramentas de Calibração Acústica (Multi-Caixa Independente + Pulso Visual A/V) ---
+  // --- Acoustic Calibration Tools (Independent Multi-Speaker + A/V Visual Pulse) ---
 
   private clearCalibBeatTimers(): void {
     if (typeof window === 'undefined') return;
@@ -1983,10 +1983,10 @@ export class SpatialAudioEngine {
           track.stop();
         }
         this.outputPermissionUnlocked = true;
-        // Aguarda brevemente o Windows restaurar Bluetooth A2DP após liberar o canal de microfone HFP
+        // Briefly wait for Windows to restore Bluetooth A2DP after releasing the HFP microphone channel
         await new Promise<void>((resolve) => window.setTimeout(resolve, 260));
       } catch {
-        // PC sem microfone ou permissão negada -> tenta selectAudioOutput abaixo
+        // PC without microphone or permission denied -> try selectAudioOutput below
       }
       list = await this.listOutputDevices();
     }

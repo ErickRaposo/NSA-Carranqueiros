@@ -7,7 +7,7 @@ interface LiveRoomMonitorProps {
 }
 
 /**
- * Viewport 3D ao vivo exclusivo da Visão Geral (sem duplicar medidores/ruído do Console 8D).
+ * Live 3D viewport exclusive to Overview (without duplicating meters/noise from the 8D Console).
  */
 export const LiveRoomMonitor: React.FC<LiveRoomMonitorProps> = ({
   heightClass = 'h-[400px]',

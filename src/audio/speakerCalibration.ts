@@ -7,23 +7,23 @@ export interface SpeakerSlotConfig {
   labelEn: string;
   shortLabelPt: string;
   shortLabelEn: string;
-  /** Posição normalizada na sala: x (-1 Parede Esq .. +1 Parede Dir), y (-1 Traseira/Visitante .. +1 Canto/Teto) */
+  /** Normalized room position: x (-1 Left Wall .. +1 Right Wall), y (-1 Back/Visitor .. +1 Corner/Ceiling) */
   posX: number;
   posY: number;
-  /** Ganho de calibração acústica por Ruído Rosa: 0.0 a 2.0 (0% a 200%) */
+  /** Pink Noise acoustic calibration gain: 0.0 to 2.0 (0% to 200%) */
   calibrationGain: number;
-  /** Compensação de atraso em milissegundos: -400 a +400 ms (negativo adianta a caixa / atrasa o vídeo) */
+  /** Delay compensation in milliseconds: -400 to +400 ms (negative advances speaker / delays video) */
   delayMs: number;
-  /** Destino físico: 'local' (este PC Mestre via setSinkId) ou 'lan-node' (outro PC/celular em ?view=audio-node&spk=1..3) */
+  /** Physical target: 'local' (this Master PC via setSinkId) or 'lan-node' (another PC/phone on ?view=audio-node&spk=1..3) */
   routeTarget: SpeakerRouteTarget;
-  /** ID do dispositivo físico de saída (AudioContext.setSinkId) — '' usa saída padrão do sistema */
+  /** Physical output device ID (AudioContext.setSinkId) — '' uses system default output */
   sinkDeviceId: string;
   muted: boolean;
 }
 
 export interface AudioCalibrationState {
   referenceSpeakerId: SpeakerSlotId;
-  /** Offset global Imagem × Som (-400 a +400 ms): negativo atrasa o vídeo p/ esperar som BT; positivo atrasa o som p/ esperar projetor */
+  /** Global Image × Sound offset (-400 to +400 ms): negative delays video to wait for BT audio; positive delays audio to wait for projector */
   avOffsetMs: number;
   speakers: Record<SpeakerSlotId, SpeakerSlotConfig>;
 }
@@ -141,13 +141,13 @@ export function saveAudioCalibration(state: AudioCalibrationState): void {
 }
 
 /**
- * Panning por Amplitude Vetorial / Energia Constante (VBAP 2D/3D simplificado e livre de buracos)
- * para as 3 caixas físicas da sala.
+ * Simplified, gap-free 2D/3D Vector Base Amplitude / Constant-Power Panning (VBAP)
+ * for the 3 physical room speakers.
  *
- * `targetX` ∈ [-1, 1] (Oeste/Parede Esq -> Leste/Parede Dir)
- * `targetY` ∈ [-1, 1] (Traseira/Visitante -> Canto Frontal/Teto)
+ * `targetX` ∈ [-1, 1] (West/Left Wall -> East/Right Wall)
+ * `targetY` ∈ [-1, 1] (Back/Visitor -> Front Corner/Ceiling)
  *
- * Retorna ganhos normalizados em potência constante (`g1² + g2² + g3² = 1`).
+ * Returns constant-power normalized gains (`g1² + g2² + g3² = 1`).
  */
 export function computeVbap3Gains(
   targetX: number,
@@ -197,9 +197,9 @@ export interface EffectiveAudioVisualDelays {
 }
 
 /**
- * Converte delays assinados (-400..+400 ms por caixa + avOffsetMs global) em:
- * - atrasos não-negativos reais (`DelayNode`, em segundos) para cada caixa e saída direta (Fone);
- * - `visualDelayMs` (>= 0) para atrasar o vídeo e o pulso visual na tela/projetor quando o som tem latência Bluetooth.
+ * Converts signed delays (-400..+400 ms per speaker + global avOffsetMs) into:
+ * - actual non-negative delays (`DelayNode`, in seconds) for each speaker and direct output (Headphones);
+ * - `visualDelayMs` (>= 0) to delay video and visual pulse on screen/projector when audio has Bluetooth latency.
  */
 export function computeEffectiveAudioVisualDelays(
   calibration: AudioCalibrationState,

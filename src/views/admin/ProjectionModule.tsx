@@ -52,10 +52,10 @@ export type RemoteWarpDragTarget =
     };
 
 const EDGE_CORNER_PAIRS: ReadonlyArray<readonly [0 | 1 | 2 | 3, 0 | 1 | 2 | 3]> = [
-  [0, 1], // Barra Superior: TL + TR
-  [1, 2], // Barra Direita: TR + BR
-  [2, 3], // Barra Inferior: BR + BL
-  [3, 0], // Barra Esquerda: BL + TL
+  [0, 1], // Top Edge: TL + TR
+  [1, 2], // Right Edge: TR + BR
+  [2, 3], // Bottom Edge: BR + BL
+  [3, 0], // Left Edge: BL + TL
 ];
 
 interface ProjectionModuleProps {
@@ -181,7 +181,7 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
 
   return (
     <>
-      {/* 1. Matriz Patchbay: clique na barra inteira para selecionar Corner-Pin */}
+      {/* 1. Patchbay Matrix: click the whole bar to select Corner-Pin */}
       <section className={`p-4 ${ADMIN_PANEL_CLASS}`}>
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
           <div>
@@ -399,7 +399,7 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
         </div>
       </section>
 
-      {/* 2. Corner-Pin Remoto 16:9 + Arraste de Barra e Malha Completa + Dimensões Físicas */}
+      {/* 2. 16:9 Remote Corner-Pin + Edge & Full-Mesh Drag + Physical Dimensions */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <section className={`p-4 lg:col-span-8 ${ADMIN_PANEL_CLASS}`}>
           <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
@@ -540,7 +540,7 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
 
                 return (
                   <g key={qKey}>
-                    {/* Interior da malha arrastável para mover todos os 4 pontos juntos */}
+                    {/* Draggable mesh interior to move all 4 points together */}
                     <polygon
                       points={pts}
                       fill={`${accent}1c`}
@@ -560,7 +560,7 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
                       }}
                     />
 
-                    {/* Prévia visual da máscara de difusão suave nas bordas */}
+                    {/* Visual preview of the soft edge feathering mask */}
                     {featherRegions.map((reg) => (
                       <g key={`${qKey}-feather-${reg.id}`} className="pointer-events-none">
                         <polygon points={reg.poly} fill="rgba(2, 6, 23, 0.58)" />
@@ -577,7 +577,7 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
                       </g>
                     ))}
 
-                    {/* Diagonais visuais */}
+                    {/* Visual diagonals */}
                     <line
                       x1={q[0].x * 1600}
                       y1={q[0].y * 900}
@@ -599,7 +599,7 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
                       className="pointer-events-none"
                     />
 
-                    {/* Rótulo central */}
+                    {/* Center label */}
                     <text
                       x={cx}
                       y={cy - 10}
@@ -625,7 +625,7 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
                       {isPt ? 'Arraste para mover malha' : 'Drag mesh to move'}
                     </text>
 
-                    {/* 4 Barras / Arestas inteiras clicáveis e puxáveis para nivelamento */}
+                    {/* 4 clickable & draggable full bars/edges for leveling */}
                     {EDGE_CORNER_PAIRS.map(([iA, iB], eIdx) => {
                       const pA = q[iA];
                       const pB = q[iB];
@@ -688,7 +688,7 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
               </div>
             )}
 
-            {/* Alças de Canto deduplicadas (pins compartilhados soldados entre paredes formam 1 única alça limpa) */}
+            {/* Deduplicated Corner Handles (shared pins welded between walls form 1 clean handle) */}
             {getUniquePinHandlesForOutput(
               selectedWarpOut,
               activeWarpSurfaces,
@@ -734,7 +734,7 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
             })}
           </div>
 
-          {/* Máscara de Difusão Suave nas 4 Bordas · Separado ou Conjunto */}
+          {/* Soft Feathering Mask on All 4 Edges · Individual or Linked */}
           {activeMaskKey !== null && (
             <div className={`mt-3 p-3 ${ADMIN_WELL_CLASS}`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -912,7 +912,7 @@ export const ProjectionModule: React.FC<ProjectionModuleProps> = ({
         </section>
       </div>
 
-      {/* 3. Controlador de Delay entre Telas */}
+      {/* 3. Inter-Screen Delay Controller */}
       <ScreenDelayControlPanel
         isPt={isPt}
         projectionState={projectionState}

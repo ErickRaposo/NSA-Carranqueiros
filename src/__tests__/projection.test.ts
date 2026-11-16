@@ -121,19 +121,19 @@ describe('geo/projection', () => {
     const qLeft = oneProj.quads[makeSurfaceQuadKey(1, 'leftWall')];
     const qRight = oneProj.quads[makeSurfaceQuadKey(1, 'rightWall')];
 
-    // Junta Tripla Central: leftWall.TR [1] === rightWall.TL [0] === ceiling.BL [3]
+    // Central Triple Joint: leftWall.TR [1] === rightWall.TL [0] === ceiling.BL [3]
     expect(qLeft[1]).toEqual(qRight[0]);
     expect(qLeft[1]).toEqual(qCeil[3]);
-    // Base Central: leftWall.BR [2] === rightWall.BL [3]
+    // Central Base: leftWall.BR [2] === rightWall.BL [3]
     expect(qLeft[2]).toEqual(qRight[3]);
-    // Quina Superior Esquerda: ceiling.TL [0] === leftWall.TL [0]
+    // Top-Left Corner: ceiling.TL [0] === leftWall.TL [0]
     expect(qCeil[0]).toEqual(qLeft[0]);
-    // Quina Superior Direita: ceiling.BR [2] === rightWall.TR [1]
+    // Top-Right Corner: ceiling.BR [2] === rightWall.TR [1]
     expect(qCeil[2]).toEqual(qRight[1]);
-    // Topo do losango do teto acima do centro
+    // Top of the ceiling diamond above center
     expect(qCeil[1].y).toBeLessThan(qCeil[0].y);
 
-    // 12 vértices brutos deduplicados em 7 alças únicas (1 junta 3x + 3 juntas 2x + 3 cantos externos)
+    // 12 raw vertices deduplicated into 7 unique handles (1 3-way joint + 3 2-way joints + 3 outer corners)
     const handles3 = getUniquePinHandlesForOutput(
       1,
       oneProj.outputs[1].surfaces,
@@ -143,7 +143,7 @@ describe('geo/projection', () => {
     expect(handles3.filter((h) => h.memberCount === 3)).toHaveLength(1);
     expect(handles3.filter((h) => h.memberCount === 2)).toHaveLength(3);
 
-    // Arrastar a junta central propaga para as 3 paredes juntas
+    // Dragging the central joint propagates to all 3 walls together
     const movedLeft: QuadCorners = [
       qLeft[0],
       { x: 0.46, y: 0.42 },

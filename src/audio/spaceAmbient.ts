@@ -1,10 +1,10 @@
 import { getActiveUnmutedAudioEngine, SpatialSfxTarget } from './spatialAudioEngine';
 
 /**
- * Motor espacial de ambientação e efeitos mecânicos da nave (Web Audio API).
- * Roteia integralmente pelos 3 barramentos físicos (C1 Esquerda, C2 Direita, C3 Teto/Fundo)
- * do `SpatialAudioEngine` (incluindo `setSinkId`, calibração de ganho/delay e nós `?view=audio-node`),
- * mantendo abas mutadas (Projetor / Celular Controle) 100% silenciosas.
+ * Spatial engine for ambient soundscape and spacecraft mechanical effects (Web Audio API).
+ * Routes entirely through the 3 physical buses (C1 Left, C2 Right, C3 Ceiling/Back)
+ * of `SpatialAudioEngine` (including `setSinkId`, gain/delay calibration, and `?view=audio-node` nodes),
+ * keeping muted tabs (Projector / Mobile Controller) 100% silent.
  */
 
 let ambientTarget: SpatialSfxTarget | null = null;
@@ -208,8 +208,8 @@ export function startSpaceAmbient(): void {
 }
 
 /**
- * Interrompe imediatamente música espacial ambiente, todos os efeitos sonoros ativos/agendados
- * e listeners globais de desbloqueio (ex.: ao sair da página, fechar/ocultar a aba ou trocar de rota).
+ * Immediately stops ambient space music, all active/scheduled sound effects,
+ * and global unlock listeners (e.g., on page leave, tab close/hide, or route change).
  */
 export function stopAllSpaceAudio(): void {
   ambientSessionActive = false;
@@ -279,7 +279,7 @@ export function stopSpaceAmbient(): void {
 }
 
 /**
- * Abaixa suavemente a música espacial enquanto o robô fala e restaura depois.
+ * Smoothly ducks the space music while the robot speaks and restores it afterward.
  */
 export function setSpaceAmbientDucked(ducked: boolean): void {
   if (!ambientTarget || !ambientMaster) return;
@@ -295,8 +295,8 @@ export function setSpaceAmbientDucked(ducked: boolean): void {
 }
 
 /**
- * Efeito sonoro 8D dos motores de propulsão durante a contagem e decolagem (5..1 -> espaço):
- * circula pelas 3 caixas (C1 Parede Esq -> C2 Parede Dir -> C3 Teto/Fundo -> centro).
+ * 8D thruster sound effect during countdown and liftoff (5..1 -> space):
+ * orbits across the 3 speakers (C1 Left Wall -> C2 Right Wall -> C3 Ceiling/Back -> center).
  */
 export function playLaunchThrust8D(durationSec = 10.0): void {
   try {
@@ -362,7 +362,7 @@ export function playLaunchThrust8D(durationSec = 10.0): void {
 }
 
 /**
- * Efeito espacial 3 pontos (C1 -> C3 -> C2) de portas blindadas fechando + vapor pneumático.
+ * 3-point spatial effect (C1 -> C3 -> C2) of armored doors closing + pneumatic steam.
  */
 export function playBlastDoorSlamSfx(): void {
   try {
@@ -401,7 +401,7 @@ export function playBlastDoorSlamSfx(): void {
       0.45 - Math.sin(t01 * Math.PI) * 1.1,
     ]);
 
-    // Travamento metálico nas 3 zonas (C1 Esquerda, C2 Direita e C3 Teto/Fundo)
+    // Metallic latching across the 3 zones (C1 Left, C2 Right, and C3 Ceiling/Back)
     const points: Array<[number, number]> = [
       [-0.8, 0.45],
       [0.8, 0.45],
@@ -434,7 +434,7 @@ export function playBlastDoorSlamSfx(): void {
 }
 
 /**
- * Efeito espacial de abertura/ejeção da escotilha em gravidade zero subindo das paredes para o teto (C1/C2 -> C3).
+ * Spatial hatch opening/ejection effect in zero gravity rising from the walls to the ceiling (C1/C2 -> C3).
  */
 export function playHatchEjectSfx(): void {
   try {
@@ -485,7 +485,7 @@ export function playHatchEjectSfx(): void {
 }
 
 /**
- * Efeito espacial 3 pontos quando a cabine se desfaz revelando a Terra (C1, C2 e C3 simultâneos).
+ * 3-point spatial effect when the cabin dissolves revealing Earth (C1, C2, and C3 simultaneous).
  */
 export function playCabinDissolveSfx(): void {
   try {
@@ -520,7 +520,7 @@ export function playCabinDissolveSfx(): void {
 }
 
 /**
- * Efeito físico de tranco/pouso da nave distribuído nas 3 caixas (`C1 + C2 + C3`).
+ * Physical spacecraft jolt/landing effect distributed across the 3 speakers (`C1 + C2 + C3`).
  */
 export function playLandingThudSfx(): void {
   try {
