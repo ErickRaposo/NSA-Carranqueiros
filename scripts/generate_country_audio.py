@@ -19,9 +19,10 @@ Uso:
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import json
 import math
+import os
 from pathlib import Path
 import struct
 import subprocess
@@ -73,9 +74,14 @@ MARGIN_RATIO = 0.08
 HEADROOM_SCALE = 0.50
 
 COUNTRIES_DIR = BASE_DIR / "public" / "countries"
+REMOTE_STAGING_DIR = BASE_DIR / "outputs" / "supabase-countries" / "countries"
 ATLAS_DIR = BASE_DIR / "outputs" / ".studio_cache" / "global_atlas_96f"
+SPLIT_PLAN_PATH = BASE_DIR / "outputs" / "country_split_plan.json"
 
-DEFAULT_FEATURED_IDS = "076,840,250,392,276,818,156,356,484,036,710,620"
+EXCLUDED_COUNTRY_IDS = {"156"}
+DEFAULT_FEATURED_IDS = "076,840,250,392,276,818,356,484,036,710,620"
+DEFAULT_AUDIO_QUALITY = "2"
+DEFAULT_SHEET_QUALITY = 76
 
 MODE_EN_MAP = {
     "lydian": "Lydian (Clean Air)",
@@ -223,7 +229,7 @@ def extract_layer_from_atlas(layer_id: str, bbox: GeoBoundingBox) -> tuple[str, 
     return layer_id, stream
 
 
-def export_country_video_sheets(country_dir: Path, raw_bbox: list[float]) -> None:
+def export_country_video_sheets(country_dir: Path, raw_bbox: list[float], sheet_quality: int = DEFAULT_SHEET_QUALITY) -> None:
     """
     Gera 5 sprite sheets JPEG (12x8 = 96 quadros, 160x160 px cada) em `video/<layer>_sheet.jpg`
     diretamente dos 5 vídeos originais da NASA SVS (`global_atlas_96f`), alinhados 1:1 com a
@@ -298,13 +304,19 @@ def export_country_video_sheets(country_dir: Path, raw_bbox: list[float]) -> Non
             sheet[r * fsz : (r + 1) * fsz, c * fsz : (c + 1) * fsz] = framed
 
         out_path = video_dir / f"{lid}_sheet.jpg"
-        cv2.imwrite(str(out_path), sheet, [int(cv2.IMWRITE_JPEG_QUALITY), 86])
+        cv2.imwrite(str(out_path), sheet, [int(cv2.IMWRITE_JPEG_QUALITY), int(sheet_quality)])
 
     with ThreadPoolExecutor(max_workers=5) as ex:
         list(ex.map(_build_sheet, ["melody", "chords", "temperature", "bass", "wind"]))
 
 
-def encode_wav_to_ogg(stereo_sig: np.ndarray, out_ogg: Path, tmp_dir: Path, name: str) -> None:
+def encode_wav_to_ogg(
+    stereo_sig: np.ndarray,
+    out_ogg: Path,
+    tmp_dir: Path,
+    name: str,
+    audio_quality: str = DEFAULT_AUDIO_QUALITY,
+) -> None:
     wav_tmp = tmp_dir / f"{name}.wav"
     ogg_tmp = tmp_dir / f"{name}.ogg"
     write_pcm16_wav(stereo_sig, wav_tmp, SAMPLE_RATE)
@@ -319,7 +331,7 @@ def encode_wav_to_ogg(stereo_sig: np.ndarray, out_ogg: Path, tmp_dir: Path, name
             "-c:a",
             "libvorbis",
             "-q:a",
-            "4",
+            str(audio_quality),
             str(ogg_tmp),
         ],
         check=True,
@@ -465,13 +477,22 @@ def extract_beat_events(score: dict) -> list[dict]:
     return events
 
 
-def process_country(country_dir: Path, force: bool = False) -> None:
+def process_country(
+    country_dir: Path,
+    force: bool = False,
+    audio_quality: str = DEFAULT_AUDIO_QUALITY,
+    sheet_quality: int = DEFAULT_SHEET_QUALITY,
+    compact_json: bool = True,
+) -> None:
+    country_id = country_dir.name
+    if country_id in EXCLUDED_COUNTRY_IDS:
+        print(f"[Skip] {country_id} (China excluída conforme regra da instalação).", flush=True)
+        return
     meta_path = country_dir / "meta.json"
     if not meta_path.exists():
         return
 
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    country_id = country_dir.name
 
     required_oggs = [
         country_dir / tun / f"{stem}.ogg"
@@ -503,7 +524,7 @@ def process_country(country_dir: Path, force: bool = False) -> None:
     t0 = time.perf_counter()
 
     if not videos_ready or force:
-        export_country_video_sheets(country_dir, meta["bbox"])
+        export_country_video_sheets(country_dir, meta["bbox"], sheet_quality=sheet_quality)
     ordered = ["melody", "chords", "temperature", "bass", "wind"]
     with ThreadPoolExecutor(max_workers=5) as ex:
         pairs = list(ex.map(lambda lid: extract_layer_from_atlas(lid, bbox), ordered))
@@ -610,8 +631,26 @@ def process_country(country_dir: Path, force: bool = False) -> None:
                 tasks = []
                 with ThreadPoolExecutor(max_workers=4) as ex:
                     for k_dry, s_dry, k_wnd, s_wnd in rendered:
-                        tasks.append(ex.submit(encode_wav_to_ogg, s_dry, tuning_dir / f"{k_dry}.ogg", tmp_dir, k_dry))
-                        tasks.append(ex.submit(encode_wav_to_ogg, s_wnd, tuning_dir / f"{k_wnd}.ogg", tmp_dir, k_wnd))
+                        tasks.append(
+                            ex.submit(
+                                encode_wav_to_ogg,
+                                s_dry,
+                                tuning_dir / f"{k_dry}.ogg",
+                                tmp_dir,
+                                k_dry,
+                                audio_quality,
+                            )
+                        )
+                        tasks.append(
+                            ex.submit(
+                                encode_wav_to_ogg,
+                                s_wnd,
+                                tuning_dir / f"{k_wnd}.ogg",
+                                tmp_dir,
+                                k_wnd,
+                                audio_quality,
+                            )
+                        )
                     for t in tasks:
                         t.result()
 
@@ -668,55 +707,144 @@ def process_country(country_dir: Path, force: bool = False) -> None:
     if region_score is not None:
         meta["beatEvents"] = extract_beat_events(region_score)
 
-    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    if compact_json:
+        meta_path.write_text(json.dumps(meta, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    else:
+        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     elapsed = time.perf_counter() - t0
     mode_tag = "16 OGGs + studio MIDI" if need_synth else "studio MIDI atualizado"
     print(f"[OK] {country_id} ({name_pt}) -> {mode_tag} em {elapsed:.2f}s", flush=True)
+
+
+def _process_country_worker(task: tuple[str, bool, str, int, bool]) -> None:
+    dir_str, force, audio_quality, sheet_quality, compact_json = task
+    process_country(
+        Path(dir_str),
+        force=force,
+        audio_quality=audio_quality,
+        sheet_quality=sheet_quality,
+        compact_json=compact_json,
+    )
+
+
+def _is_complete_country_dir(d: Path) -> bool:
+    if not d.is_dir() or d.name in EXCLUDED_COUNTRY_IDS:
+        return False
+    if not (d / "meta.json").exists():
+        return False
+    if not all((d / png).exists() for png in LAYER_PNG_NAMES):
+        return False
+    if not all((d / "video" / f"{lid}_sheet.jpg").exists() for lid in ALL_LAYERS):
+        return False
+    if not all((d / tun / f"{stem}.ogg").exists() for tun in ("region", "base") for stem in STEM_NAMES):
+        return False
+    return True
 
 
 def write_generated_countries_index() -> list[str]:
     generated: list[str] = []
     if COUNTRIES_DIR.exists():
         for d in sorted(COUNTRIES_DIR.iterdir()):
-            if not d.is_dir():
-                continue
-            meta_p = d / "meta.json"
-            if not meta_p.exists():
-                continue
-            if not all((d / png).exists() for png in LAYER_PNG_NAMES):
-                continue
-            if not all((d / tun / f"{stem}.ogg").exists() for tun in ("region", "base") for stem in STEM_NAMES):
-                continue
-            generated.append(d.name)
+            if _is_complete_country_dir(d):
+                generated.append(d.name)
+
+    local_set = set(generated)
+    remote: list[str] = []
+    if REMOTE_STAGING_DIR.exists():
+        for d in sorted(REMOTE_STAGING_DIR.iterdir()):
+            if d.name not in local_set and _is_complete_country_dir(d):
+                remote.append(d.name)
+
+    payload: dict = {
+        "generatedIds": generated,
+        "remoteIds": remote,
+        "localCount": len(generated),
+        "remoteCount": len(remote),
+        "count": len(generated),
+        "totalCount": len(generated) + len(remote),
+        "excludedIds": sorted(EXCLUDED_COUNTRY_IDS),
+    }
 
     idx_path = COUNTRIES_DIR / "index.json"
+    if idx_path.exists():
+        try:
+            prev = json.loads(idx_path.read_text(encoding="utf-8"))
+            if prev.get("remoteBaseUrl"):
+                payload["remoteBaseUrl"] = prev["remoteBaseUrl"]
+            if prev.get("remoteBucket"):
+                payload["remoteBucket"] = prev["remoteBucket"]
+        except Exception:
+            pass
+
     idx_path.write_text(
-        json.dumps({"generatedIds": generated, "count": len(generated)}, ensure_ascii=False, indent=2),
+        json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    print(f"[Index] public/countries/index.json atualizado com {len(generated)} país(es): {', '.join(generated)}", flush=True)
+    print(
+        f"[Index] public/countries/index.json atualizado: {len(generated)} locais + {len(remote)} Supabase = {len(generated) + len(remote)} países",
+        flush=True,
+    )
     return generated
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Gera stems OGG + studio MIDI do nasa-geo-sonification por país.")
-    parser.add_argument("--all", action="store_true", help="Processa todos os países em public/countries/")
+    parser.add_argument("--all", action="store_true", help="Processa todos os países na pasta alvo")
+    parser.add_argument("--split-hybrid", action="store_true", help="Processa os 100 locais em public/countries/ e o restante em outputs/supabase-countries/countries/")
+    parser.add_argument("--out-dir", type=str, default=str(COUNTRIES_DIR), help="Pasta base de países (padrão: public/countries)")
     parser.add_argument("--ids", type=str, default=DEFAULT_FEATURED_IDS, help="IDs separados por vírgula")
     parser.add_argument("--force", action="store_true", help="Regenera stems OGG mesmo se já existirem")
+    parser.add_argument("--audio-quality", type=str, default=DEFAULT_AUDIO_QUALITY, help="Qualidade libvorbis (-q:a, padrão 2 ~96kbps)")
+    parser.add_argument("--sheet-quality", type=int, default=DEFAULT_SHEET_QUALITY, help="Qualidade JPEG dos sprite sheets (padrão 76)")
+    parser.add_argument("--pretty-json", action="store_true", help="Formata meta.json com indentação ao invés de minificar")
+    parser.add_argument("--workers", type=int, default=max(1, min(4, (os.cpu_count() or 4) // 2)), help="Processos paralelos de país")
     args = parser.parse_args()
 
     print("[1/2] Verificando Atlas Global de 96 quadros (5 vídeos NASA)...", flush=True)
     ensure_all_atlases()
 
-    if args.all:
-        dirs = sorted([d for d in COUNTRIES_DIR.iterdir() if d.is_dir() and (d / "meta.json").exists()])
+    dirs: list[Path] = []
+    if args.split_hybrid:
+        for base in (COUNTRIES_DIR, REMOTE_STAGING_DIR):
+            if base.exists():
+                dirs.extend(
+                    sorted(
+                        [
+                            d
+                            for d in base.iterdir()
+                            if d.is_dir() and d.name not in EXCLUDED_COUNTRY_IDS and (d / "meta.json").exists()
+                        ]
+                    )
+                )
     else:
-        wanted = [s.strip() for s in args.ids.split(",") if s.strip()]
-        dirs = [COUNTRIES_DIR / cid for cid in wanted if (COUNTRIES_DIR / cid / "meta.json").exists()]
+        target_dir = Path(args.out_dir)
+        if not target_dir.is_absolute():
+            target_dir = BASE_DIR / target_dir
+        if args.all:
+            dirs = sorted(
+                [
+                    d
+                    for d in target_dir.iterdir()
+                    if d.is_dir() and d.name not in EXCLUDED_COUNTRY_IDS and (d / "meta.json").exists()
+                ]
+            )
+        else:
+            wanted = [s.strip() for s in args.ids.split(",") if s.strip() and s.strip() not in EXCLUDED_COUNTRY_IDS]
+            dirs = [target_dir / cid for cid in wanted if (target_dir / cid / "meta.json").exists()]
 
-    print(f"[2/2] Processando áudio e partitura MIDI para {len(dirs)} país(es)...", flush=True)
-    for d in dirs:
-        process_country(d, force=args.force)
+    print(
+        f"[2/2] Processando áudio e partitura MIDI para {len(dirs)} país(es) (workers={args.workers}, -q:a {args.audio_quality}, sheet={args.sheet_quality})...",
+        flush=True,
+    )
+    compact_json = not args.pretty_json
+    tasks = [(str(d), args.force, args.audio_quality, args.sheet_quality, compact_json) for d in dirs]
+
+    if args.workers <= 1 or len(tasks) <= 1:
+        for t in tasks:
+            _process_country_worker(t)
+    else:
+        with ProcessPoolExecutor(max_workers=args.workers) as ex:
+            list(ex.map(_process_country_worker, tasks))
 
     write_generated_countries_index()
 

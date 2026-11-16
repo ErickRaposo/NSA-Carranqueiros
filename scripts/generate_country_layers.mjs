@@ -33,17 +33,25 @@ await build({
 const { loadWorldCountries } = await import(pathToFileURL(countriesBundlePath).href);
 const world = loadWorldCountries();
 
-// 2. Determine target country IDs
+import { EXCLUDED_COUNTRY_IDS, loadCountrySplitPlan } from './country_split.mjs';
+
+// 2. Determine target country IDs & output directory
 const args = process.argv.slice(2);
 const runAll = args.includes('--all');
+const runLocal100 = args.includes('--local-100');
+const runRemoteRest = args.includes('--remote-rest');
+const skipExisting = args.includes('--skip-existing');
+const outDirArg = args.find((a) => a.startsWith('--out-dir='));
 const idsArg = args.find((a) => a.startsWith('--ids='));
 const requestedIds = idsArg
   ? idsArg
       .slice('--ids='.length)
       .split(',')
       .map((s) => s.trim())
-      .filter(Boolean)
-  : ['076', '818', '156']; // Default: 3 Pilot Countries requested by Shay (Brasil, Egito, China)
+      .filter((id) => Boolean(id) && !EXCLUDED_COUNTRY_IDS.has(id))
+  : ['076', '818']; // Default: Pilot Countries (Brasil, Egito) — China (156) excluída
+
+const PLAN_LAYERS = ['melody.png', 'chords.png', 'temperature.png', 'bass.png', 'wind.png', 'meta.json'];
 
 function computePrimaryFramingBbox(country) {
   // Compute polygon areas & bboxes so significant islands/archipelagos (Fernando de Noronha, Hainan, Japan, Indonesia)
@@ -122,18 +130,41 @@ function computePrimaryFramingBbox(country) {
   };
 }
 
-const selectedCountries = world.countries.filter((c) =>
-  runAll ? !c.isMinorUninhabited : requestedIds.includes(c.id)
-);
+let selectedCountries;
+if (runLocal100 || runRemoteRest) {
+  const plan = await loadCountrySplitPlan();
+  const idSet = new Set(runLocal100 ? plan.localIds : plan.remoteIds);
+  selectedCountries = world.countries.filter((c) => idSet.has(c.id));
+} else {
+  selectedCountries = world.countries.filter((c) =>
+    runAll ? !c.isMinorUninhabited && !EXCLUDED_COUNTRY_IDS.has(c.id) : requestedIds.includes(c.id)
+  );
+}
+
+const defaultOutBase = runRemoteRest
+  ? path.join(workspaceDir, 'outputs/supabase-countries/countries')
+  : path.join(workspaceDir, 'public/countries');
+const outBaseDir = outDirArg
+  ? path.resolve(workspaceDir, outDirArg.slice('--out-dir='.length))
+  : defaultOutBase;
+
+if (skipExisting) {
+  const before = selectedCountries.length;
+  selectedCountries = selectedCountries.filter((c) => {
+    const dir = path.join(outBaseDir, c.id);
+    return !PLAN_LAYERS.every((file) => fs.existsSync(path.join(dir, file)));
+  });
+  console.log(`⏭️  Skip existing: ${before - selectedCountries.length} já renderizados, ${selectedCountries.length} pendentes em ${outBaseDir}`);
+}
 
 if (selectedCountries.length === 0) {
-  console.error('Nenhum país encontrado para os IDs informados:', requestedIds);
-  process.exit(1);
+  console.log('✅ Todos os países alvo já possuem 5 PNGs + meta.json em', outBaseDir);
+  process.exit(0);
 }
 
 const manifestPath = path.join(tmpDir, 'manifest.json');
 const cacheDir = path.join(tmpDir, 'nasa_equirect_cache');
-const outBaseDir = path.join(workspaceDir, 'public/countries');
+fs.mkdirSync(outBaseDir, { recursive: true });
 
 const manifest = {
   workspaceDir,
